@@ -9,6 +9,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { ImageAddon } from "@xterm/addon-image";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { abrirPty, cerrarPty, escribirPty, redimensionarPty, type ConfigVista } from "./nucleo";
@@ -122,6 +123,8 @@ export function obtener(item: string): Sesion {
   term.loadAddon(ajuste);
   term.loadAddon(busqueda);
   term.loadAddon(new Unicode11Addon());
+  // Imágenes en el terminal: sixel e iTerm (imgcat). Tope de memoria por terminal: 64 MB.
+  term.loadAddon(new ImageAddon({ sixelSupport: true, iipSupport: true, storageLimit: 64, showPlaceholder: true }));
   term.unicode.activeVersion = "11";
   term.loadAddon(new WebLinksAddon((_e, url) => void openUrl(url.replace(/^(https?:\/\/)(0\.0\.0\.0|\[::\])(?=[:/]|$)/i, "$1localhost"))));
   if (import.meta.env.DEV) (window as unknown as { __kyu: XTerm }).__kyu = term;
