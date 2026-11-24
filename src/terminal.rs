@@ -6,6 +6,8 @@ use std::sync::{Arc, mpsc};
 use alacritty_terminal::event::{Event, EventListener, Notify, OnResize, WindowSize};
 use alacritty_terminal::event_loop::{EventLoop, Notifier};
 use alacritty_terminal::grid::Scroll;
+use alacritty_terminal::index::{Point, Side};
+use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{self, Term, TermMode};
@@ -33,6 +35,8 @@ pub struct Terminal {
     lineas: u16,
     cerrada: bool,
     titulo: Option<String>,
+    /// Dónde se pulsó el botón izquierdo, mientras se arrastra para seleccionar.
+    pub arrastrando: Option<egui::Pos2>,
 }
 
 impl Terminal {
@@ -59,7 +63,7 @@ impl Terminal {
         let notificador = Notifier(bucle.channel());
         bucle.spawn();
 
-        Ok(Self { term, notificador, eventos, columnas, lineas, cerrada: false, titulo: None })
+        Ok(Self { term, notificador, eventos, columnas, lineas, cerrada: false, titulo: None, arrastrando: None })
     }
 
     /// Vacía los eventos pendientes del PTY.
@@ -101,6 +105,29 @@ impl Terminal {
         } else {
             self.teclear(texto.into_bytes());
         }
+    }
+
+    pub fn seleccionar_desde(&self, tipo: SelectionType, punto: Point, lado: Side) {
+        self.term.lock().selection = Some(Selection::new(tipo, punto, lado));
+    }
+
+    pub fn seleccionar_hasta(&self, punto: Point, lado: Side) {
+        if let Some(seleccion) = self.term.lock().selection.as_mut() {
+            seleccion.update(punto, lado);
+        }
+    }
+
+    pub fn seleccion_vacia(&self) -> bool {
+        self.term.lock().selection.is_none()
+    }
+
+    pub fn limpiar_seleccion(&self) {
+        self.term.lock().selection = None;
+    }
+
+    /// Texto seleccionado, si hay algo que no sea vacío.
+    pub fn seleccion(&self) -> Option<String> {
+        self.term.lock().selection_to_string().filter(|s| !s.is_empty())
     }
 
     pub fn desplazar(&self, lineas: i32) {

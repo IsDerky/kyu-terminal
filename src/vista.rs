@@ -1,6 +1,8 @@
 //! Dibuja la rejilla del terminal con egui y traduce el teclado a bytes.
 
 use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::index::{Column, Line, Point, Side};
+use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
@@ -13,18 +15,20 @@ pub fn dibujar(ui: &mut egui::Ui, terminal: &mut Terminal, tema: &Tema) {
     let fuente = FontId::monospace(tema.fuente_tamano);
     let celda = tamano_celda(ui, &fuente);
 
-    let (respuesta, pintor) = ui.allocate_painter(ui.available_size(), Sense::click());
+    let (respuesta, pintor) = ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
     let zona = respuesta.rect;
 
     let columnas = (zona.width() / celda.x).floor().max(2.0) as u16;
     let lineas = (zona.height() / celda.y).floor().max(1.0) as u16;
     terminal.redimensionar(columnas, lineas, celda.x as u16, celda.y as u16);
 
+    raton(ui, &respuesta, &mut *terminal, celda, columnas, lineas);
     teclado(ui, terminal);
 
     let term = terminal.term.lock();
     let contenido = term.renderable_content();
     let desplazamiento = contenido.display_offset as i32;
+    let seleccion = contenido.selection;
     let texto_def = tema.texto();
 
     for celda_t in contenido.display_iter {
@@ -45,6 +49,9 @@ pub fn dibujar(ui: &mut egui::Ui, terminal: &mut Terminal, tema: &Tema) {
         }
         if flags.contains(Flags::DIM) {
             fg = fg.gamma_multiply(0.66);
+        }
+        if seleccion.is_some_and(|s| s.contains(celda_t.point)) {
+            bg = tema.seleccion();
         }
 
         let origen = Pos2::new(zona.left() + columna as f32 * celda.x, zona.top() + linea as f32 * celda.y);
@@ -124,6 +131,86 @@ fn indexado(i: u8, tema: &Tema) -> Color32 {
     }
 }
 
+/// Celda bajo el puntero, en coordenadas de la rejilla (con el historial).
+fn punto(pos: Pos2, zona: Rect, celda: Vec2, columnas: u16, lineas: u16, desplazamiento: i32) -> (Point, Side) {
+    let x = ((pos.x - zona.left()) / celda.x).clamp(0.0, columnas as f32 - 0.01);
+    let fila = ((pos.y - zona.top()) / celda.y).floor().clamp(0.0, lineas as f32 - 1.0) as i32;
+    let lado = if x.fract() < 0.5 { Side::Left } else { Side::Right };
+    (Point::new(Line(fila - desplazamiento), Column(x as usize)), lado)
+}
+
+/// Selección con el ratón. El arrastre se sigue a mano (pulsar → mover → soltar) en vez de con
+/// `Response::dragged`, porque con movimientos rápidos egui junta todo en un fotograma y no lo
+/// detecta como arrastre.
+fn raton(ui: &egui::Ui, r: &egui::Response, terminal: &mut Terminal, celda: Vec2, columnas: u16, lineas: u16) {
+    use egui::PointerButton::Primary;
+    let (pulsado, abajo, soltado, origen, actual, doble, triple) = ui.input(|i| {
+        (
+            i.pointer.primary_pressed(),
+            i.pointer.primary_down(),
+            i.pointer.primary_released(),
+            i.pointer.press_origin(),
+            i.pointer.latest_pos(),
+            i.pointer.button_double_clicked(Primary),
+            i.pointer.button_triple_clicked(Primary),
+        )
+    });
+    let desplazamiento = terminal.term.lock().grid().display_offset() as i32;
+    let celda_de = |pos| punto(pos, r.rect, celda, columnas, lineas, desplazamiento);
+
+    if triple || doble {
+        if let Some(pos) = actual.filter(|p| r.rect.expand(10.0).contains(*p)) {
+            let (p, lado) = celda_de(pos);
+            let tipo = if triple { SelectionType::Lines } else { SelectionType::Semantic };
+            terminal.seleccionar_desde(tipo, p, lado);
+            terminal.arrastrando = None;
+        }
+    } else if pulsado {
+        terminal.arrastrando = origen.filter(|p| r.rect.expand(10.0).contains(*p));
+        if terminal.arrastrando.is_some() {
+            terminal.limpiar_seleccion();
+        }
+    }
+
+    if let (Some(inicio), Some(pos)) = (terminal.arrastrando, actual) {
+        if (abajo || soltado) && inicio.distance(pos) > 3.0 {
+            if terminal.seleccion_vacia() {
+                let (p, lado) = celda_de(inicio);
+                terminal.seleccionar_desde(SelectionType::Simple, p, lado);
+            }
+            let (p, lado) = celda_de(pos);
+            terminal.seleccionar_hasta(p, lado);
+        }
+    }
+    if soltado {
+        terminal.arrastrando = None;
+    }
+
+    // Clic derecho como en Windows Terminal: copia si hay selección, si no pega.
+    if r.secondary_clicked() {
+        if let Some(texto) = terminal.seleccion() {
+            ui.ctx().copy_text(texto);
+            terminal.limpiar_seleccion();
+        } else if let Some(texto) = portapapeles() {
+            terminal.pegar(&texto);
+        }
+    }
+}
+
+fn portapapeles() -> Option<String> {
+    arboard::Clipboard::new().ok()?.get_text().ok()
+}
+
+/// Ctrl+C con selección copia; sin selección es la señal de cortar.
+fn copiar_o_cortar(ui: &egui::Ui, terminal: &Terminal) {
+    if let Some(texto) = terminal.seleccion() {
+        ui.ctx().copy_text(texto);
+        terminal.limpiar_seleccion();
+    } else {
+        terminal.teclear(&b"\x03"[..]);
+    }
+}
+
 fn teclado(ui: &egui::Ui, terminal: &Terminal) {
     let modo = terminal.modo();
     let app_cursor = modo.contains(TermMode::APP_CURSOR);
@@ -131,6 +218,16 @@ fn teclado(ui: &egui::Ui, terminal: &Terminal) {
 
     for evento in eventos {
         match evento {
+            egui::Event::Key { key: Key::C, pressed: true, modifiers, .. } if modifiers.ctrl && modifiers.shift => {
+                if let Some(texto) = terminal.seleccion() {
+                    ui.ctx().copy_text(texto);
+                }
+            }
+            egui::Event::Key { key: Key::V, pressed: true, modifiers, .. } if modifiers.ctrl && modifiers.shift => {
+                if let Some(texto) = portapapeles() {
+                    terminal.pegar(&texto);
+                }
+            }
             egui::Event::MouseWheel { unit, delta, .. } if !modo.contains(TermMode::ALT_SCREEN) => {
                 let lineas = match unit {
                     egui::MouseWheelUnit::Point => delta.y / 20.0,
@@ -142,7 +239,7 @@ fn teclado(ui: &egui::Ui, terminal: &Terminal) {
             egui::Event::Text(t) => terminal.teclear(t.into_bytes()),
             egui::Event::Paste(t) => terminal.pegar(&t),
             // egui convierte Ctrl+C / Ctrl+X en Copy / Cut: en un terminal son señales.
-            egui::Event::Copy => terminal.teclear(&b"\x03"[..]),
+            egui::Event::Copy => copiar_o_cortar(ui, terminal),
             egui::Event::Cut => terminal.teclear(&b"\x18"[..]),
             egui::Event::Key { key, pressed: true, modifiers, .. } => {
                 if let Some(bytes) = tecla(key, modifiers, app_cursor) {
