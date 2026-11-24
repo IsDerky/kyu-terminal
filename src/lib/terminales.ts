@@ -160,8 +160,12 @@ export function obtener(item: string): Sesion {
   });
 
   term.onTitleChange((t) => {
-    // El título de PowerShell es la carpeta; si un programa pone otro, también vale.
-    if (t.trim()) useKyu.getState().ponerTitulo(item, t.trim());
+    // El título de PowerShell es la carpeta; si un programa pone otro, también vale. La
+    // ruta del ejecutable que pone ConPTY al arrancar (ssh.exe, cmd.exe…) no dice nada:
+    // se queda el nombre del perfil (en los de ssh, el del servidor).
+    const titulo = t.trim();
+    if (!titulo || /^[a-z]:\\.*\.exe$/i.test(titulo)) return;
+    useKyu.getState().ponerTitulo(item, titulo);
   });
 
   const s: Sesion = { term, elemento, bloques, ajuste, busqueda, auto, ptyId: null, abierta: false };

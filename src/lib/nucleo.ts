@@ -91,6 +91,7 @@ export interface AjustesVista {
   sin_prompt: boolean;
   aviso_segundos: number;
   restaurar_sesion: boolean;
+  perfiles_ssh: boolean;
   fuente: string | null;
   fuente_tamano: number;
   fuentes_conocidas: string[];

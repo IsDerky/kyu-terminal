@@ -126,6 +126,9 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
 
           {seccion === "perfiles" && (
             <>
+              <Campo titulo="Servidores de ~/.ssh/config" detalle="Un perfil «SSH · nombre» por cada Host del archivo (sin comodines). Se abre con ssh y la configuración de ese Host.">
+                <Interruptor valor={a.perfiles_ssh} alCambiar={(v) => void guardar("perfiles_ssh", v ? null : false)} />
+              </Campo>
               <Explicacion>
                 Qué abre cada pestaña nueva. {a.perfiles_propios ? "Salen de kyu.toml." : "Son los que hay en este equipo; para cambiarlos, añade [[perfiles]] en kyu.toml."}
               </Explicacion>

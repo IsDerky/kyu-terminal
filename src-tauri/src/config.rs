@@ -33,6 +33,8 @@ pub struct Config {
     /// Al abrir, volver a los espacios, paneles, pestañas y conversaciones de la última
     /// vez. Sin poner = sí.
     pub restaurar_sesion: Option<bool>,
+    /// Un perfil por cada `Host` de ~/.ssh/config (sin comodines). Sin poner = sí.
+    pub perfiles_ssh: Option<bool>,
     pub tema: Tema,
 }
 
@@ -43,6 +45,10 @@ impl Config {
 
     pub fn restaurar_sesion(&self) -> bool {
         self.restaurar_sesion.unwrap_or(true)
+    }
+
+    pub fn perfiles_ssh(&self) -> bool {
+        self.perfiles_ssh.unwrap_or(true)
     }
 }
 
@@ -199,6 +205,14 @@ impl Config {
         } else {
             lista.extend(detectar_perfiles());
         }
+        if self.perfiles_ssh() {
+            // Los de kyu.toml mandan: un Host con el mismo nombre no se repite.
+            for p in perfiles_ssh() {
+                if !lista.iter().any(|q| q.nombre == p.nombre) {
+                    lista.push(p);
+                }
+            }
+        }
         if let Some(pred) = &self.perfil_predeterminado
             && let Some(i) = lista.iter().position(|p| &p.nombre == pred)
         {
@@ -320,6 +334,68 @@ fn preparar_prompt_bash() -> Option<std::path::PathBuf> {
 }
 
 /// Perfiles que hay en este equipo.
+/// Prefijo del nombre de los perfiles que salen de ~/.ssh/config.
+pub const PREFIJO_SSH: &str = "SSH · ";
+
+/// Un perfil por cada `Host` de ~/.ssh/config que sea un nombre concreto (sin `*`, `?` ni
+/// `!`): lanza `ssh <alias>` y ssh hace el resto con lo que diga ese archivo.
+fn perfiles_ssh() -> Vec<Perfil> {
+    let Some(texto) = dirs::home_dir().and_then(|h| std::fs::read_to_string(h.join(".ssh").join("config")).ok()) else {
+        return Vec::new();
+    };
+    #[cfg(windows)]
+    let ssh = which("ssh.exe").unwrap_or_else(|| "ssh.exe".into());
+    #[cfg(not(windows))]
+    let ssh = "ssh".to_string();
+    alias_ssh(&texto)
+        .into_iter()
+        .map(|alias| Perfil {
+            nombre: format!("{PREFIJO_SSH}{alias}"),
+            shell: ssh.clone(),
+            argumentos: vec![alias],
+            color: Some("#67e8f9".into()),
+            icono: Some("servidor".into()),
+        })
+        .collect()
+}
+
+/// Los alias de las líneas `Host` (puede haber varios por línea), sin repetir y en orden.
+fn alias_ssh(texto: &str) -> Vec<String> {
+    let mut lista: Vec<String> = Vec::new();
+    for linea in texto.lines() {
+        let linea = linea.trim();
+        let mut partes = linea.split_whitespace();
+        let Some(clave) = partes.next() else { continue };
+        // «Host=x» también vale.
+        let (clave, resto): (&str, Vec<&str>) = match clave.split_once('=') {
+            Some((c, v)) => (c, std::iter::once(v).chain(partes).collect()),
+            None => (clave, partes.collect()),
+        };
+        if !clave.eq_ignore_ascii_case("host") {
+            continue;
+        }
+        for alias in resto {
+            let alias = alias.trim_matches('"');
+            if alias.is_empty() || alias.contains(['*', '?', '!']) || lista.iter().any(|a| a == alias) {
+                continue;
+            }
+            lista.push(alias.to_string());
+        }
+    }
+    lista
+}
+
+#[cfg(test)]
+mod pruebas_ssh {
+    use super::alias_ssh;
+
+    #[test]
+    fn lee_los_host_concretos() {
+        let t = "# comentario\nHost servidor n1\n  HostName 10.0.0.1\nHost *\n  User x\nhost=nodo2\nHost !malo *.lan otro \"con\"\nMatch host foo\nHost servidor\n";
+        assert_eq!(alias_ssh(t), vec!["servidor", "n1", "nodo2", "otro", "con"]);
+    }
+}
+
 fn detectar_perfiles() -> Vec<Perfil> {
     let perfil =
         |nombre: &str, shell: String, argumentos: &[&str], color: &str, icono: &str| Perfil {

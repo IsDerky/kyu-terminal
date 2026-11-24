@@ -1,6 +1,9 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import type { Perfil } from "../lib/nucleo";
 import { IconoPerfil } from "./iconos";
+
+/** Así empiezan los perfiles que salen de ~/.ssh/config (config.rs). */
+const PREFIJO_SSH = "SSH · ";
 
 interface Props {
   perfiles: Perfil[];
@@ -34,7 +37,12 @@ export default function MenuPerfiles({ perfiles, alElegir, alCerrar, alinear = "
       }`}
     >
       <div className="px-2 pb-1 pt-1.5 text-[11px] uppercase tracking-wider text-muy">Nueva pestaña</div>
-      {perfiles.map((p, i) => (
+      {perfiles.map((p, i) => {
+        const ssh = p.nombre.startsWith(PREFIJO_SSH);
+        const primeroSsh = ssh && !perfiles[i - 1]?.nombre.startsWith(PREFIJO_SSH);
+        return (
+        <Fragment key={p.nombre}>
+        {primeroSsh && <div className="mt-1 border-t border-borde px-2 pb-1 pt-2 text-[11px] uppercase tracking-wider text-muy">Servidores (ssh)</div>}
         <button
           key={p.nombre}
           type="button"
@@ -42,10 +50,12 @@ export default function MenuPerfiles({ perfiles, alElegir, alCerrar, alinear = "
           className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12.5px] text-texto hover:bg-hover"
         >
           <IconoPerfil perfil={p} />
-          <span className="flex-1">{p.nombre}</span>
+          <span className="flex-1 truncate">{ssh ? p.nombre.slice(PREFIJO_SSH.length) : p.nombre}</span>
           {i === 0 && <span className="text-[11px] text-muy">predeterminado</span>}
         </button>
-      ))}
+        </Fragment>
+        );
+      })}
     </div>
   );
 }
