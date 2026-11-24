@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { Check, GitBranch, MemoryStick, X } from "lucide-react";
-import { duracion, type Bloque, type Bloques } from "../lib/bloques";
+import { duracion, textoRam, type Bloque, type Bloques } from "../lib/bloques";
 
 interface Props {
   term: Terminal;
@@ -138,10 +138,7 @@ function Titulo({ b, style }: { b: Bloque; style: React.CSSProperties }) {
       {b.ram !== null && (
         <Pastilla titulo="RAM del equipo en uso">
           <MemoryStick size={12} strokeWidth={1.9} />
-          {b.ram} %
-          <span className="relative h-1 w-7 overflow-hidden rounded-full bg-hover">
-            <span className="absolute inset-y-0 left-0 rounded-full bg-tenue" style={{ width: `${b.ram}%` }} />
-          </span>
+          <span className="tabular-nums">{textoRam(b.ram)}</span>
         </Pastilla>
       )}
       <span className="ml-auto flex items-center gap-3.5 pr-1 text-tenue">

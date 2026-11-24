@@ -7,7 +7,7 @@
 // Además manda OSC 7701 con un JSON: carpeta, rama y cambios de git.
 // La hora y lo que tarda la orden las mide Kyu; la RAM la da el núcleo.
 import type { IMarker, Terminal } from "@xterm/xterm";
-import { leerRam } from "./nucleo";
+import { leerRam, type Ram } from "./nucleo";
 
 export type Estado = "escribiendo" | "corre" | "ok" | "mal" | "vacio";
 
@@ -21,7 +21,7 @@ export interface Bloque {
   hoja: string;
   rama: string | null;
   cambios: number;
-  ram: number | null;
+  ram: Ram | null;
   hora: string;
   estado: Estado;
   tInicio?: number;
@@ -110,8 +110,8 @@ export class Bloques {
         });
         this.lista.push(bloque);
         void leerRam().then((r) => {
-          if (r === null) return;
-          bloque.ram = Math.round(r);
+          if (!r || r.total === 0) return;
+          bloque.ram = r;
           this.avisar();
         });
         break;
@@ -174,6 +174,12 @@ export class Bloques {
     if (this.reloj !== undefined) window.clearInterval(this.reloj);
     this.oyentes.clear();
   }
+}
+
+/** «56 % 17,9/31,9 GB» */
+export function textoRam({ usada, total }: Ram): string {
+  const gb = (b: number) => (b / 1024 ** 3).toFixed(1).replace(".", ",");
+  return `${Math.round((usada / total) * 100)} % ${gb(usada)}/${gb(total)} GB`;
 }
 
 /** 0,2 s · 1 min 12 s · 1 h 3 min (como el prompt antiguo). */
