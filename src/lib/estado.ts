@@ -36,6 +36,8 @@ interface Estado {
   paleta: boolean;
   /** Pestaña de Ajustes abierta (en lugar del espacio). */
   ajustes: boolean;
+  /** Pestaña de Uso de Claude abierta (en lugar del espacio). */
+  uso: boolean;
 
   iniciar: (perfil: string) => void;
   nuevoEspacio: (perfil: string, carpeta?: string | null) => void;
@@ -56,6 +58,7 @@ interface Estado {
   ponerBuscando: (item: string | null) => void;
   ponerPaleta: (abierta: boolean) => void;
   ponerAjustes: (abierta: boolean) => void;
+  ponerUso: (abierta: boolean) => void;
   siguientePestana: (paso: number) => void;
 }
 
@@ -126,6 +129,7 @@ export const useKyu = create<Estado>((set, get) => {
     buscando: null,
     paleta: false,
     ajustes: false,
+    uso: false,
 
     iniciar: (perfil) => {
       if (get().espacios.length) return;
@@ -307,7 +311,8 @@ export const useKyu = create<Estado>((set, get) => {
 
     ponerBuscando: (item) => set({ buscando: item }),
     ponerPaleta: (paleta) => set({ paleta }),
-    ponerAjustes: (ajustes) => set({ ajustes, paleta: false }),
+    ponerAjustes: (ajustes) => set({ ajustes, uso: false, paleta: false }),
+    ponerUso: (uso) => set({ uso, ajustes: false, paleta: false }),
 
     siguientePestana: (paso) => {
       const esp = espacioActivo();

@@ -6,6 +6,7 @@ import Espacio from "./componentes/Espacio";
 import Paleta from "./componentes/Paleta";
 import PanelClaude, { ID_ENTRADA } from "./componentes/PanelClaude";
 import Ajustes from "./componentes/Ajustes";
+import Uso from "./componentes/Uso";
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
 import { limpiar, useClaude } from "./lib/claude";
 import { escucharMcp } from "./lib/mcp";
@@ -40,6 +41,7 @@ export default function App() {
   const activo = useKyu((s) => s.activo);
   const paleta = useKyu((s) => s.paleta);
   const ajustes = useKyu((s) => s.ajustes);
+  const uso = useKyu((s) => s.uso);
   const claudeVisible = useClaude((s) => s.visible);
   useKyu((s) => s.items); // el título de la ventana sigue al terminal con el foco
 
@@ -143,12 +145,13 @@ export default function App() {
             }
           />
         )}
+        {uso && <Uso />}
         {espacio && (
-          <div className={ajustes ? "hidden" : "flex min-w-0 flex-1"}>
+          <div className={ajustes || uso ? "hidden" : "flex min-w-0 flex-1"}>
             <Espacio key={espacio.id} espacio={espacio} config={config} />
           </div>
         )}
-        {espacio && claudeVisible && <PanelClaude key={`claude-${espacio.id}`} espacio={espacio.id} />}
+        {espacio && claudeVisible && !uso && !ajustes && <PanelClaude key={`claude-${espacio.id}`} espacio={espacio.id} />}
       </div>
       <Avisos />
       {paleta && <Paleta config={config} />}

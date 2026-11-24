@@ -11,6 +11,7 @@ mod grabar;
 mod mcp;
 mod pty;
 mod sistema;
+mod uso;
 
 pub fn run() {
     tauri::Builder::default()
@@ -54,6 +55,7 @@ pub fn run() {
             mcp::mcp_responder,
             grabar::grabar_empezar,
             grabar::grabar_parar,
+            uso::uso_leer,
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar Kyu");

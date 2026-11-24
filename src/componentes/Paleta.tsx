@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Clapperboard, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { BarChart3, Clapperboard, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
 import { textoBloque } from "../lib/bloques";
@@ -66,6 +66,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
         },
       },
       { id: "gif", grupo: "Kyu", titulo: "Grabar el panel a GIF", detalle: "empezar o parar", atajo: "Ctrl+Mayús+G", icono: Clapperboard, hacer: () => void alternarGrabacion() },
+      { id: "uso", grupo: "Kyu", titulo: "Uso de Claude Code", detalle: "tokens por día, proyecto y modelo", icono: BarChart3, hacer: () => k.ponerUso(true) },
       { id: "ajustes", grupo: "Kyu", titulo: "Ajustes", atajo: "Ctrl+,", icono: SlidersHorizontal, hacer: () => k.ponerAjustes(true) },
       { id: "buscar", grupo: "Paneles", titulo: "Buscar en el terminal", atajo: "Ctrl+F", icono: Search, hacer: () => f?.item?.tipo === "terminal" && k.ponerBuscando(f.item.id) },
       ...config.perfiles.map<Orden>((p, i) => ({
