@@ -54,18 +54,45 @@ pub fn dibujar(ui: &mut egui::Ui, terminal: &mut Terminal, tema: &Tema) {
             bg = tema.seleccion();
         }
 
-        let origen = Pos2::new(zona.left() + columna as f32 * celda.x, zona.top() + linea as f32 * celda.y);
-        let ancho = if flags.contains(Flags::WIDE_CHAR) { 2.0 } else { 1.0 };
+        let origen = Pos2::new(
+            zona.left() + columna as f32 * celda.x,
+            zona.top() + linea as f32 * celda.y,
+        );
+        let ancho = if flags.contains(Flags::WIDE_CHAR) {
+            2.0
+        } else {
+            1.0
+        };
         if bg != tema.fondo() {
-            pintor.rect_filled(Rect::from_min_size(origen, Vec2::new(celda.x * ancho, celda.y)), 0.0, bg);
+            pintor.rect_filled(
+                Rect::from_min_size(origen, Vec2::new(celda.x * ancho, celda.y)),
+                0.0,
+                bg,
+            );
         }
         let c = celda_t.c;
         if c != ' ' && c != '\t' && !flags.contains(Flags::HIDDEN) {
-            pintor.text(origen, Align2::LEFT_TOP, c, fuente.clone(), if fg == Color32::TRANSPARENT { texto_def } else { fg });
+            pintor.text(
+                origen,
+                Align2::LEFT_TOP,
+                c,
+                fuente.clone(),
+                if fg == Color32::TRANSPARENT {
+                    texto_def
+                } else {
+                    fg
+                },
+            );
         }
         if flags.intersects(Flags::UNDERLINE | Flags::DOUBLE_UNDERLINE) {
             let y = origen.y + celda.y - 1.5;
-            pintor.line_segment([Pos2::new(origen.x, y), Pos2::new(origen.x + celda.x * ancho, y)], (1.0, fg));
+            pintor.line_segment(
+                [
+                    Pos2::new(origen.x, y),
+                    Pos2::new(origen.x + celda.x * ancho, y),
+                ],
+                (1.0, fg),
+            );
         }
     }
 
@@ -74,7 +101,10 @@ pub fn dibujar(ui: &mut egui::Ui, terminal: &mut Terminal, tema: &Tema) {
         let p = contenido.cursor.point;
         let linea = p.line.0 + desplazamiento;
         if linea >= 0 && linea < term.screen_lines() as i32 {
-            let origen = Pos2::new(zona.left() + p.column.0 as f32 * celda.x, zona.top() + linea as f32 * celda.y);
+            let origen = Pos2::new(
+                zona.left() + p.column.0 as f32 * celda.x,
+                zona.top() + linea as f32 * celda.y,
+            );
             let rect = Rect::from_min_size(origen, celda);
             if ui.ctx().input(|i| i.focused) {
                 pintor.rect_filled(rect, 1.0, tema.cursor().gamma_multiply(0.85));
@@ -86,7 +116,9 @@ pub fn dibujar(ui: &mut egui::Ui, terminal: &mut Terminal, tema: &Tema) {
 }
 
 fn tamano_celda(ui: &egui::Ui, fuente: &FontId) -> Vec2 {
-    let galley = ui.painter().layout_no_wrap("M".into(), fuente.clone(), Color32::WHITE);
+    let galley = ui
+        .painter()
+        .layout_no_wrap("M".into(), fuente.clone(), Color32::WHITE);
     Vec2::new(galley.size().x, galley.size().y).round()
 }
 
@@ -103,8 +135,11 @@ fn color(c: Color, tema: &Tema, es_texto: bool) -> Color32 {
                 let i = otro as usize;
                 if i < 16 {
                     tema.ansi(i)
-                } else if (NamedColor::DimBlack as usize..=NamedColor::DimWhite as usize).contains(&i) {
-                    tema.ansi(i - NamedColor::DimBlack as usize).gamma_multiply(0.66)
+                } else if (NamedColor::DimBlack as usize..=NamedColor::DimWhite as usize)
+                    .contains(&i)
+                {
+                    tema.ansi(i - NamedColor::DimBlack as usize)
+                        .gamma_multiply(0.66)
                 } else if es_texto {
                     tema.texto()
                 } else {
@@ -132,17 +167,40 @@ fn indexado(i: u8, tema: &Tema) -> Color32 {
 }
 
 /// Celda bajo el puntero, en coordenadas de la rejilla (con el historial).
-fn punto(pos: Pos2, zona: Rect, celda: Vec2, columnas: u16, lineas: u16, desplazamiento: i32) -> (Point, Side) {
+fn punto(
+    pos: Pos2,
+    zona: Rect,
+    celda: Vec2,
+    columnas: u16,
+    lineas: u16,
+    desplazamiento: i32,
+) -> (Point, Side) {
     let x = ((pos.x - zona.left()) / celda.x).clamp(0.0, columnas as f32 - 0.01);
-    let fila = ((pos.y - zona.top()) / celda.y).floor().clamp(0.0, lineas as f32 - 1.0) as i32;
-    let lado = if x.fract() < 0.5 { Side::Left } else { Side::Right };
-    (Point::new(Line(fila - desplazamiento), Column(x as usize)), lado)
+    let fila = ((pos.y - zona.top()) / celda.y)
+        .floor()
+        .clamp(0.0, lineas as f32 - 1.0) as i32;
+    let lado = if x.fract() < 0.5 {
+        Side::Left
+    } else {
+        Side::Right
+    };
+    (
+        Point::new(Line(fila - desplazamiento), Column(x as usize)),
+        lado,
+    )
 }
 
 /// Selección con el ratón. El arrastre se sigue a mano (pulsar → mover → soltar) en vez de con
 /// `Response::dragged`, porque con movimientos rápidos egui junta todo en un fotograma y no lo
 /// detecta como arrastre.
-fn raton(ui: &egui::Ui, r: &egui::Response, terminal: &mut Terminal, celda: Vec2, columnas: u16, lineas: u16) {
+fn raton(
+    ui: &egui::Ui,
+    r: &egui::Response,
+    terminal: &mut Terminal,
+    celda: Vec2,
+    columnas: u16,
+    lineas: u16,
+) {
     use egui::PointerButton::Primary;
     let (pulsado, abajo, soltado, origen, actual, doble, triple) = ui.input(|i| {
         (
@@ -161,7 +219,11 @@ fn raton(ui: &egui::Ui, r: &egui::Response, terminal: &mut Terminal, celda: Vec2
     if triple || doble {
         if let Some(pos) = actual.filter(|p| r.rect.expand(10.0).contains(*p)) {
             let (p, lado) = celda_de(pos);
-            let tipo = if triple { SelectionType::Lines } else { SelectionType::Semantic };
+            let tipo = if triple {
+                SelectionType::Lines
+            } else {
+                SelectionType::Semantic
+            };
             terminal.seleccionar_desde(tipo, p, lado);
             terminal.arrastrando = None;
         }
@@ -172,15 +234,16 @@ fn raton(ui: &egui::Ui, r: &egui::Response, terminal: &mut Terminal, celda: Vec2
         }
     }
 
-    if let (Some(inicio), Some(pos)) = (terminal.arrastrando, actual) {
-        if (abajo || soltado) && inicio.distance(pos) > 3.0 {
-            if terminal.seleccion_vacia() {
-                let (p, lado) = celda_de(inicio);
-                terminal.seleccionar_desde(SelectionType::Simple, p, lado);
-            }
-            let (p, lado) = celda_de(pos);
-            terminal.seleccionar_hasta(p, lado);
+    if let (Some(inicio), Some(pos)) = (terminal.arrastrando, actual)
+        && (abajo || soltado)
+        && inicio.distance(pos) > 3.0
+    {
+        if terminal.seleccion_vacia() {
+            let (p, lado) = celda_de(inicio);
+            terminal.seleccionar_desde(SelectionType::Simple, p, lado);
         }
+        let (p, lado) = celda_de(pos);
+        terminal.seleccionar_hasta(p, lado);
     }
     if soltado {
         terminal.arrastrando = None;
@@ -218,12 +281,22 @@ fn teclado(ui: &egui::Ui, terminal: &Terminal) {
 
     for evento in eventos {
         match evento {
-            egui::Event::Key { key: Key::C, pressed: true, modifiers, .. } if modifiers.ctrl && modifiers.shift => {
+            egui::Event::Key {
+                key: Key::C,
+                pressed: true,
+                modifiers,
+                ..
+            } if modifiers.ctrl && modifiers.shift => {
                 if let Some(texto) = terminal.seleccion() {
                     ui.ctx().copy_text(texto);
                 }
             }
-            egui::Event::Key { key: Key::V, pressed: true, modifiers, .. } if modifiers.ctrl && modifiers.shift => {
+            egui::Event::Key {
+                key: Key::V,
+                pressed: true,
+                modifiers,
+                ..
+            } if modifiers.ctrl && modifiers.shift => {
                 if let Some(texto) = portapapeles() {
                     terminal.pegar(&texto);
                 }
@@ -241,7 +314,12 @@ fn teclado(ui: &egui::Ui, terminal: &Terminal) {
             // egui convierte Ctrl+C / Ctrl+X en Copy / Cut: en un terminal son señales.
             egui::Event::Copy => copiar_o_cortar(ui, terminal),
             egui::Event::Cut => terminal.teclear(&b"\x18"[..]),
-            egui::Event::Key { key, pressed: true, modifiers, .. } => {
+            egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } => {
                 if let Some(bytes) = tecla(key, modifiers, app_cursor) {
                     terminal.teclear(bytes);
                 }
@@ -253,7 +331,12 @@ fn teclado(ui: &egui::Ui, terminal: &Terminal) {
 
 fn tecla(key: Key, m: egui::Modifiers, app_cursor: bool) -> Option<Vec<u8>> {
     let flecha = |c: char| {
-        if app_cursor { format!("\x1bO{c}") } else { format!("\x1b[{c}") }.into_bytes()
+        if app_cursor {
+            format!("\x1bO{c}")
+        } else {
+            format!("\x1b[{c}")
+        }
+        .into_bytes()
     };
     let b = |s: &str| Some(s.as_bytes().to_vec());
 
@@ -269,13 +352,37 @@ fn tecla(key: Key, m: egui::Modifiers, app_cursor: bool) -> Option<Vec<u8>> {
 
     match key {
         Key::Enter => b("\r"),
-        Key::Backspace => if m.ctrl { b("\x17") } else { b("\x7f") },
-        Key::Tab => if m.shift { b("\x1b[Z") } else { b("\t") },
+        Key::Backspace => {
+            if m.ctrl {
+                b("\x17")
+            } else {
+                b("\x7f")
+            }
+        }
+        Key::Tab => {
+            if m.shift {
+                b("\x1b[Z")
+            } else {
+                b("\t")
+            }
+        }
         Key::Escape => b("\x1b"),
         Key::ArrowUp => Some(flecha('A')),
         Key::ArrowDown => Some(flecha('B')),
-        Key::ArrowRight => if m.ctrl { b("\x1b[1;5C") } else { Some(flecha('C')) },
-        Key::ArrowLeft => if m.ctrl { b("\x1b[1;5D") } else { Some(flecha('D')) },
+        Key::ArrowRight => {
+            if m.ctrl {
+                b("\x1b[1;5C")
+            } else {
+                Some(flecha('C'))
+            }
+        }
+        Key::ArrowLeft => {
+            if m.ctrl {
+                b("\x1b[1;5D")
+            } else {
+                Some(flecha('D'))
+            }
+        }
         Key::Home => b("\x1b[H"),
         Key::End => b("\x1b[F"),
         Key::Delete => b("\x1b[3~"),

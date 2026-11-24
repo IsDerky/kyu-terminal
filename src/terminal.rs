@@ -40,17 +40,29 @@ pub struct Terminal {
 }
 
 impl Terminal {
-    pub fn nueva(ctx: egui::Context, (shell, argumentos): &(String, Vec<String>)) -> std::io::Result<Self> {
+    pub fn nueva(
+        ctx: egui::Context,
+        (shell, argumentos): &(String, Vec<String>),
+    ) -> std::io::Result<Self> {
         let (columnas, lineas) = (80u16, 24u16);
         let opciones = tty::Options {
             shell: Some(tty::Shell::new(shell.clone(), argumentos.clone())),
             working_directory: dirs::home_dir(),
-            env: [("KYU_TERMINAL".to_string(), env!("CARGO_PKG_VERSION").to_string())].into(),
+            env: [(
+                "KYU_TERMINAL".to_string(),
+                env!("CARGO_PKG_VERSION").to_string(),
+            )]
+            .into(),
             #[cfg(windows)]
             escape_args: true,
             ..Default::default()
         };
-        let tamano = WindowSize { num_lines: lineas, num_cols: columnas, cell_width: 1, cell_height: 1 };
+        let tamano = WindowSize {
+            num_lines: lineas,
+            num_cols: columnas,
+            cell_width: 1,
+            cell_height: 1,
+        };
         let pty = tty::new(&opciones, tamano, 0)?;
 
         let (tx, eventos) = mpsc::channel();
@@ -66,7 +78,16 @@ impl Terminal {
         let notificador = Notifier(bucle.channel());
         bucle.spawn();
 
-        Ok(Self { term, notificador, eventos, columnas, lineas, cerrada: false, titulo: None, arrastrando: None })
+        Ok(Self {
+            term,
+            notificador,
+            eventos,
+            columnas,
+            lineas,
+            cerrada: false,
+            titulo: None,
+            arrastrando: None,
+        })
     }
 
     /// Vacía los eventos pendientes del PTY.
@@ -130,7 +151,10 @@ impl Terminal {
 
     /// Texto seleccionado, si hay algo que no sea vacío.
     pub fn seleccion(&self) -> Option<String> {
-        self.term.lock().selection_to_string().filter(|s| !s.is_empty())
+        self.term
+            .lock()
+            .selection_to_string()
+            .filter(|s| !s.is_empty())
     }
 
     pub fn desplazar(&self, lineas: i32) {
@@ -147,7 +171,9 @@ impl Terminal {
         }
         self.columnas = columnas;
         self.lineas = lineas;
-        self.term.lock().resize(TermSize::new(columnas as usize, lineas as usize));
+        self.term
+            .lock()
+            .resize(TermSize::new(columnas as usize, lineas as usize));
         self.notificador.on_resize(WindowSize {
             num_lines: lineas,
             num_cols: columnas,

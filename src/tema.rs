@@ -51,7 +51,9 @@ impl Config {
             carpetas.push("/usr/share/fonts/truetype".into());
         }
         FUENTES_CONOCIDAS.iter().find_map(|nombre| {
-            carpetas.iter().find_map(|c| std::fs::read(c.join(nombre)).ok())
+            carpetas
+                .iter()
+                .find_map(|c| std::fs::read(c.join(nombre)).ok())
         })
     }
 }
@@ -78,10 +80,22 @@ impl Default for Tema {
             cursor: c("#5cff2e"),
             seleccion: c("#3a2f5c"),
             ansi: [
-                c("#1a1626"), c("#ff4d6d"), c("#5cff2e"), c("#ffb547"),
-                c("#58a6ff"), c("#9a3cff"), c("#4dd8e6"), c("#d9d4ea"),
-                c("#4a4360"), c("#ff7a92"), c("#8dff6b"), c("#ffd08a"),
-                c("#8cc4ff"), c("#c48bff"), c("#8aeef7"), c("#ffffff"),
+                c("#1a1626"),
+                c("#ff4d6d"),
+                c("#5cff2e"),
+                c("#ffb547"),
+                c("#58a6ff"),
+                c("#9a3cff"),
+                c("#4dd8e6"),
+                c("#d9d4ea"),
+                c("#4a4360"),
+                c("#ff7a92"),
+                c("#8dff6b"),
+                c("#ffd08a"),
+                c("#8cc4ff"),
+                c("#c48bff"),
+                c("#8aeef7"),
+                c("#ffffff"),
             ],
         }
     }
@@ -110,16 +124,25 @@ impl Config {
         {
             let pwsh = which("pwsh.exe").unwrap_or_else(|| "powershell.exe".into());
             let mut args = vec!["-NoLogo".to_string()];
-            if !self.sin_prompt {
-                if let Some(script) = preparar_prompt_pwsh() {
-                    args.extend(["-NoExit".into(), "-Command".into(), format!(". '{}'", script.display())]);
-                }
+            if !self.sin_prompt
+                && let Some(script) = preparar_prompt_pwsh()
+            {
+                args.extend([
+                    "-NoExit".into(),
+                    "-Command".into(),
+                    format!(". '{}'", script.display()),
+                ]);
             }
             (pwsh, args)
         }
         #[cfg(not(windows))]
         {
-            (std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()), vec![])
+            // El prompt de bash todavía no existe; `sin_prompt` solo cuenta en Windows.
+            let _ = self.sin_prompt;
+            (
+                std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()),
+                vec![],
+            )
         }
     }
 }

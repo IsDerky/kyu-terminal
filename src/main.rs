@@ -17,7 +17,9 @@ impl Kyu {
         let config = Config::cargar();
         if let Some(bytes) = config.fuente_bytes() {
             let mut fuentes = egui::FontDefinitions::default();
-            fuentes.font_data.insert("kyu".into(), egui::FontData::from_owned(bytes).into());
+            fuentes
+                .font_data
+                .insert("kyu".into(), egui::FontData::from_owned(bytes).into());
             // Primera en monoespaciada; las de egui quedan detrás para lo que no tenga.
             if let Some(mono) = fuentes.families.get_mut(&egui::FontFamily::Monospace) {
                 mono.insert(0, "kyu".into());
@@ -43,7 +45,11 @@ impl eframe::App for Kyu {
         }
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(self.config.tema.fondo()).inner_margin(8.0))
+            .frame(
+                egui::Frame::NONE
+                    .fill(self.config.tema.fondo())
+                    .inner_margin(8.0),
+            )
             .show(ui, |ui| {
                 vista::dibujar(ui, &mut self.terminal, &self.config.tema);
             });
@@ -59,5 +65,9 @@ fn main() -> eframe::Result<()> {
             .with_min_inner_size([400.0, 240.0]),
         ..Default::default()
     };
-    eframe::run_native("Kyu Terminal", opciones, Box::new(|cc| Ok(Box::new(Kyu::new(cc)))))
+    eframe::run_native(
+        "Kyu Terminal",
+        opciones,
+        Box::new(|cc| Ok(Box::new(Kyu::new(cc)))),
+    )
 }
