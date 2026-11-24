@@ -22,7 +22,16 @@ pub struct Config {
     pub sin_prompt: bool,
     /// Ruta de Claude Code; vacío = el `claude` del PATH.
     pub claude: Option<String>,
+    /// Sugerencia en gris mientras escribes (historial de Kyu, carpetas, ramas,
+    /// scripts). Sin poner = sí.
+    pub autocompletado: Option<bool>,
     pub tema: Tema,
+}
+
+impl Config {
+    pub fn autocompletado(&self) -> bool {
+        self.autocompletado.unwrap_or(true)
+    }
 }
 
 /// Lo que abre una pestaña de terminal.
@@ -98,6 +107,7 @@ impl Default for Tema {
 #[derive(Serialize)]
 pub struct ConfigVista {
     fuente: String,
+    autocompletado: bool,
     tema: Tema,
     perfiles: Vec<PerfilVista>,
 }
@@ -136,6 +146,7 @@ pub fn config() -> ConfigVista {
         .collect();
     ConfigVista {
         fuente,
+        autocompletado: config.autocompletado(),
         perfiles,
         tema: config.tema,
     }
@@ -185,6 +196,10 @@ impl Config {
             .or(perfiles.first())?;
         let mut argumentos = perfil.argumentos.clone();
         let mut entorno = Vec::new();
+        if self.autocompletado() {
+            // kyu.ps1 apaga entonces la sugerencia de PSReadLine (no dos fantasmas).
+            entorno.push(("KYU_AUTOCOMPLETADO".into(), "1".into()));
+        }
         if !self.sin_prompt {
             prompt_bash(&perfil.shell, &mut argumentos, &mut entorno);
         }

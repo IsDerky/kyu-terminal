@@ -17,6 +17,10 @@ export interface Bloque {
   inicio: IMarker;
   /** Línea donde quedó el cursor al terminar (la salida acaba en la anterior). */
   fin?: IMarker;
+  /** Dónde empieza lo que escribes (marca B): línea y columna. */
+  entrada?: { marca: IMarker; x: number };
+  /** La orden tal como se ejecutó (se lee al llegar C). */
+  orden?: string;
   /** Carpeta completa donde se ejecutó (si la shell la manda). */
   ruta: string | null;
   padre: string;
@@ -51,6 +55,8 @@ export class Bloques {
 
   /** Se llama en cada prompt con la carpeta actual de la shell. */
   alCambiarCarpeta: ((ruta: string, hoja: string) => void) | null = null;
+  /** Se llama cuando termina una orden (para el historial de Kyu). */
+  alTerminarOrden: ((b: Bloque) => void) | null = null;
 
   constructor(private term: Terminal) {
     term.parser.registerOscHandler(133, (d) => this.marca(d));
@@ -124,8 +130,15 @@ export class Bloques {
         });
         break;
       }
+      case "B":
+        if (ultimo?.estado === "escribiendo" && !ultimo.entrada) {
+          const marca = this.term.registerMarker(0);
+          if (marca) ultimo.entrada = { marca, x: this.term.buffer.active.cursorX };
+        }
+        break;
       case "C":
         if (ultimo?.estado === "escribiendo") {
+          ultimo.orden = this.leerEntrada(ultimo)?.trim() || undefined;
           ultimo.estado = "corre";
           ultimo.tInicio = performance.now();
           this.arrancarReloj();
@@ -143,11 +156,55 @@ export class Bloques {
             ? Number(dur.slice(8))
             : performance.now() - (ultimo.tInicio ?? performance.now());
           ultimo.fin = this.term.registerMarker(0);
+          if (ultimo.orden) this.alTerminarOrden?.(ultimo);
         }
         break;
     }
     this.avisar();
     return true;
+  }
+
+  /**
+   * Lo escrito desde la marca B: hasta el cursor (`hastaCursor`) o, si no, la línea
+   * entera con sus continuaciones. null si no hay marca.
+   */
+  private leerEntrada(b: Bloque, hastaCursor = false): string | null {
+    if (!b.entrada || b.entrada.marca.line < 0) return null;
+    const buf = this.term.buffer.active;
+    const y0 = b.entrada.marca.line;
+    const yC = buf.baseY + buf.cursorY;
+    let texto = "";
+    for (let y = y0; ; y++) {
+      const l = buf.getLine(y);
+      if (!l) break;
+      if (y > y0 && !l.isWrapped && !(hastaCursor && y <= yC)) break;
+      const desde = y === y0 ? b.entrada.x : 0;
+      const hasta = hastaCursor && y === yC ? buf.cursorX : undefined;
+      texto += l.translateToString(!hastaCursor || y !== yC, desde, hasta);
+      if (hastaCursor && y >= yC) break;
+    }
+    return texto;
+  }
+
+  /**
+   * Lo que se está escribiendo ahora, si el cursor está al final (sin nada escrito
+   * detrás). null si no hay prompt esperando o se está editando por en medio.
+   */
+  entradaActual(): string | null {
+    const b = this.ultimo;
+    if (!b || b.estado !== "escribiendo" || !b.entrada) return null;
+    const buf = this.term.buffer.active;
+    if (buf.type !== "normal") return null;
+    const yC = buf.baseY + buf.cursorY;
+    if (yC < b.entrada.marca.line) return null;
+    // Detrás del cursor no puede haber texto (en esa línea ni en continuaciones).
+    const linea = buf.getLine(yC);
+    // (Espacios sí: PSReadLine los escribe de verdad para borrar, y xterm solo recorta
+    // las celdas vacías.)
+    if (linea && linea.translateToString(true, buf.cursorX).trim().length > 0) return null;
+    const sig = buf.getLine(yC + 1);
+    if (sig?.isWrapped && sig.translateToString(true).trim().length > 0) return null;
+    return this.leerEntrada(b, true);
   }
 
   private datos(json: string): boolean {

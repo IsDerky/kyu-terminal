@@ -88,8 +88,12 @@ if (Get-Module PSReadLine) {
 
     # Sugerencia en gris mientras escribes, sacada del historial (→ o Fin la acepta).
     # PSReadLine la trae desde la 2.1; Windows PowerShell 5.1 viene con la 2.0, que no sabe.
+    # Con el autocompletado de Kyu encendido, la sugerencia la pinta Kyu: se apaga la de
+    # PSReadLine para no tener dos.
     $psrl = (Get-Module PSReadLine).Version
-    if ($psrl -ge [Version]'2.1.0') {
+    if ($env:KYU_AUTOCOMPLETADO) {
+        if ($psrl -ge [Version]'2.1.0') { Set-PSReadLineOption -PredictionSource None }
+    } elseif ($psrl -ge [Version]'2.1.0') {
         Set-PSReadLineOption -PredictionSource History
         if ($psrl -ge [Version]'2.2.0') { Set-PSReadLineOption -PredictionViewStyle InlineView }
         Set-PSReadLineOption -Colors @{ InlinePrediction = "$([char]27)[38;2;85;85;94m" }

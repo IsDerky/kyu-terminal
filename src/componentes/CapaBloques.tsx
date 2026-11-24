@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { Check, GitBranch, MemoryStick, X } from "lucide-react";
 import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
+import type { Autocompletado } from "../lib/autocompletado";
 import { adjuntar } from "../lib/claude";
 import { useKyu } from "../lib/estado";
 import { Mascota } from "./iconos";
@@ -18,6 +19,7 @@ function preguntarAClaude(term: Terminal, b: Bloque) {
 interface Props {
   term: Terminal;
   bloques: Bloques;
+  auto: Autocompletado | null;
   fuente: string;
   tamano: number;
 }
@@ -45,8 +47,9 @@ const COLOR_FLECHA: Record<Bloque["estado"], string> = {
  * Capa por encima de xterm: el título de cada bloque (en la línea vacía que deja el
  * prompt), la franja de color del lateral y la flecha «›». No recibe clics.
  */
-export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
+export default function CapaBloques({ term, bloques, auto, fuente, tamano }: Props) {
   useSyncExternalStore(bloques.suscribir, bloques.version);
+  useSyncExternalStore(auto?.suscribir ?? sinCambios, auto?.version ?? cero);
   const [, setCuadro] = useState(0);
 
   // Redibujar cuando xterm pinta, se desplaza o cambia de tamaño (una vez por cuadro).
@@ -132,6 +135,59 @@ export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
           </span>
         </Fragment>
       ))}
+      {auto && <Fantasma term={term} auto={auto} alto={alto} ancho={ancho} fuente={fuente} tamano={tamano} />}
+    </div>
+  );
+}
+
+const sinCambios = () => () => {};
+const cero = () => 0;
+
+/** La sugerencia en gris, en las celdas que siguen al cursor (cortada al final de la línea). */
+function Fantasma({
+  term,
+  auto,
+  alto,
+  ancho,
+  fuente,
+  tamano,
+}: {
+  term: Terminal;
+  auto: Autocompletado;
+  alto: number;
+  ancho: number;
+  fuente: string;
+  tamano: number;
+}) {
+  const f = auto.fantasma();
+  const buf = term.buffer.active;
+  // Solo con el historial abajo del todo (si has subido a leer, el cursor no se ve).
+  if (!f || buf.viewportY !== buf.baseY) return null;
+  const celda = ancho / term.cols;
+  const caben = term.cols - buf.cursorX;
+  const letras = [...f.resto].slice(0, Math.max(0, caben));
+  if (!letras.length) return null;
+  return (
+    <div
+      className="absolute flex items-center whitespace-pre text-muy"
+      style={{
+        left: MARGEN + buf.cursorX * celda,
+        top: buf.cursorY * alto,
+        height: alto,
+        fontFamily: fuente,
+        fontSize: tamano,
+      }}
+    >
+      {letras.map((l, i) => (
+        <span key={i} className="inline-block text-center" style={{ width: celda }}>
+          {l}
+        </span>
+      ))}
+      {f.total > 1 && caben - letras.length > 6 && (
+        <span className="ml-3 font-ui text-[10.5px] tabular-nums text-muy/70">
+          {f.indice + 1}/{f.total}
+        </span>
+      )}
     </div>
   );
 }

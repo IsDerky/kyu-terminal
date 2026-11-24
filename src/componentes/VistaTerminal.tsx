@@ -51,6 +51,7 @@ export default function VistaTerminal({ item, conFoco, config }: Props) {
           <CapaBloques
             term={sesion.term}
             bloques={sesion.bloques}
+            auto={sesion.auto}
             fuente={config.fuente}
             tamano={config.tema.fuente_tamano}
           />

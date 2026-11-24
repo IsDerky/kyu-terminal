@@ -13,6 +13,8 @@ import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { abrirPty, cerrarPty, escribirPty, redimensionarPty, type ConfigVista } from "./nucleo";
 import { Bloques } from "./bloques";
+import { Autocompletado } from "./autocompletado";
+import { apuntar, cargarHistorial } from "./historial";
 import { registrarEnlaces } from "./enlaces";
 import { useKyu } from "./estado";
 
@@ -22,6 +24,8 @@ export interface Sesion {
   bloques: Bloques;
   ajuste: FitAddon;
   busqueda: SearchAddon;
+  /** null si está apagado en kyu.toml. */
+  auto: Autocompletado | null;
   ptyId: number | null;
   abierta: boolean;
 }
@@ -34,6 +38,7 @@ let fuenteLista: Promise<void> | null = null;
 
 export function configurar(config: ConfigVista) {
   configuracion = config;
+  void cargarHistorial();
   const primera = config.fuente.split(",")[0].trim();
   fuenteLista = document.fonts
     .load(`${config.tema.fuente_tamano}px ${primera}`)
@@ -88,6 +93,26 @@ export function obtener(item: string): Sesion {
   // Las marcas de bloque llegan desde el primer prompt: registrar antes de abrir la shell.
   const bloques = new Bloques(term);
   bloques.alCambiarCarpeta = (ruta, hoja) => useKyu.getState().ponerTitulo(item, hoja || ruta, ruta);
+  bloques.alTerminarOrden = (b) => apuntar(b.orden ?? "", b.ruta, b.codigo ?? 0);
+  const datosItem = () => {
+    const it = useKyu.getState().items[item];
+    return it?.tipo === "terminal" ? it : null;
+  };
+  const auto = config.autocompletado
+    ? new Autocompletado(
+        term,
+        bloques,
+        () => datosItem()?.carpeta ?? null,
+        () => {
+          const icono = config.perfiles.find((p) => p.nombre === datosItem()?.perfil)?.icono;
+          return icono === "bash" || icono === "linux";
+        },
+        (d) => {
+          const id = sesiones.get(item)?.ptyId;
+          if (id !== null && id !== undefined) void escribirPty(id, d);
+        },
+      )
+    : null;
   const ajuste = new FitAddon();
   const busqueda = new SearchAddon();
   term.loadAddon(ajuste);
@@ -99,6 +124,11 @@ export function obtener(item: string): Sesion {
 
   // Ctrl+C copia si hay selección (si no, va a la shell); Ctrl+V pega.
   term.attachCustomKeyEventHandler((e) => {
+    // →, Ctrl+→, ↓, ↑ y Esc son del autocompletado mientras hay sugerencia.
+    if (auto?.tecla(e)) {
+      e.preventDefault();
+      return false;
+    }
     if (e.type !== "keydown" || !e.ctrlKey || e.shiftKey || e.altKey) return true;
     const tecla = e.key.toLowerCase();
     if (tecla === "c" && term.hasSelection()) {
@@ -130,7 +160,7 @@ export function obtener(item: string): Sesion {
     if (t.trim()) useKyu.getState().ponerTitulo(item, t.trim());
   });
 
-  const s: Sesion = { term, elemento, bloques, ajuste, busqueda, ptyId: null, abierta: false };
+  const s: Sesion = { term, elemento, bloques, ajuste, busqueda, auto, ptyId: null, abierta: false };
   sesiones.set(item, s);
   return s;
 }
@@ -213,6 +243,7 @@ export function destruir(item: string) {
   sesiones.delete(item);
   if (s.ptyId !== null) void cerrarPty(s.ptyId);
   s.bloques.dispose();
+  s.auto?.dispose();
   s.term.dispose();
   s.elemento.remove();
 }

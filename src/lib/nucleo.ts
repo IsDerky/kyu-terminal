@@ -23,6 +23,8 @@ export interface Perfil {
 export interface ConfigVista {
   /** Lista de familias para CSS, la primera que esté instalada gana. */
   fuente: string;
+  /** Sugerencia en gris mientras escribes. */
+  autocompletado: boolean;
   tema: Tema;
   /** El primero es el predeterminado. */
   perfiles: Perfil[];
@@ -77,6 +79,18 @@ export const leerArchivo = (ruta: string) => invoke<string>("archivo_leer", { ru
 
 export const guardarArchivo = (ruta: string, contenido: string) =>
   invoke("archivo_guardar", { ruta, contenido });
+
+export interface EntradaCarpeta {
+  nombre: string;
+  carpeta: boolean;
+}
+
+/** Lo que hay en `carpeta` empezando por `prefijo` (carpetas primero). */
+export const listarCarpeta = (carpeta: string, prefijo: string) =>
+  invoke<EntradaCarpeta[]>("carpeta_listar", { carpeta, prefijo });
+
+/** Ramas locales y remotas, las de commits más recientes primero. */
+export const ramasGit = (carpeta: string) => invoke<string[]>("git_ramas", { carpeta });
 
 // ---------- Claude Code ----------
 
