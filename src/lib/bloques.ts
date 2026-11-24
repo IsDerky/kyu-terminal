@@ -17,6 +17,8 @@ export interface Bloque {
   inicio: IMarker;
   /** Línea donde quedó el cursor al terminar (la salida acaba en la anterior). */
   fin?: IMarker;
+  /** Carpeta completa donde se ejecutó (si la shell la manda). */
+  ruta: string | null;
   padre: string;
   hoja: string;
   rama: string | null;
@@ -101,6 +103,7 @@ export class Bloques {
         const bloque: Bloque = {
           id: this.siguiente++,
           inicio,
+          ruta: null,
           padre: "",
           hoja: "",
           rama: null,
@@ -152,6 +155,7 @@ export class Bloques {
     if (!ultimo) return true;
     try {
       const d = JSON.parse(json) as DatosShell;
+      ultimo.ruta = d.ruta ?? null;
       ultimo.padre = d.padre ?? "";
       ultimo.hoja = d.hoja ?? "";
       ultimo.rama = d.rama || null;
@@ -180,6 +184,55 @@ export class Bloques {
     if (this.reloj !== undefined) window.clearInterval(this.reloj);
     this.oyentes.clear();
   }
+}
+
+/** Lo que se le manda a Claude de un bloque terminado. */
+export interface TextoBloque {
+  orden: string;
+  salida: string;
+  /** Líneas de salida que había (aunque se recorte). */
+  lineas: number;
+  recortada: boolean;
+  codigo: number;
+  ruta: string | null;
+}
+
+const MAX_LINEAS = 300;
+const MAX_CARACTERES = 24_000;
+
+/**
+ * La orden y su salida, leídas del buffer de xterm. Debajo del título va la línea de la
+ * orden (dos espacios + lo que escribiste, que puede ocupar varias filas) y luego la
+ * salida hasta donde quedó el cursor al terminar. null si el bloque no ha terminado o
+ * ya no está en el historial.
+ */
+export function textoBloque(term: Terminal, b: Bloque): TextoBloque | null {
+  if ((b.estado !== "ok" && b.estado !== "mal") || !b.fin || b.inicio.line < 0 || b.fin.line < 0) return null;
+  const buf = term.buffer.normal;
+  const filas: { texto: string; seguida: boolean }[] = [];
+  for (let y = b.inicio.line + 1; y < b.fin.line; y++) {
+    const l = buf.getLine(y);
+    if (l) filas.push({ texto: l.translateToString(true), seguida: l.isWrapped });
+  }
+  // Une las filas partidas por el ancho del terminal en líneas lógicas.
+  const lineas: string[] = [];
+  for (const f of filas) {
+    if (f.seguida && lineas.length) lineas[lineas.length - 1] += f.texto;
+    else lineas.push(f.texto);
+  }
+  const orden = (lineas.shift() ?? "").trim();
+  while (lineas.length && !lineas[lineas.length - 1].trim()) lineas.pop();
+  const total = lineas.length;
+  let salida = lineas.slice(-MAX_LINEAS).join("\n");
+  if (salida.length > MAX_CARACTERES) salida = salida.slice(-MAX_CARACTERES);
+  return {
+    orden,
+    salida,
+    lineas: total,
+    recortada: total > MAX_LINEAS || salida.length >= MAX_CARACTERES,
+    codigo: b.codigo ?? 0,
+    ruta: b.ruta,
+  };
 }
 
 /** «56 % 17,9/31,9 GB» */

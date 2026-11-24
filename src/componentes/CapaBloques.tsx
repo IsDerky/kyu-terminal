@@ -1,7 +1,19 @@
-import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { Check, GitBranch, MemoryStick, X } from "lucide-react";
-import { duracion, textoRam, type Bloque, type Bloques } from "../lib/bloques";
+import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
+import { adjuntar } from "../lib/claude";
+import { useKyu } from "../lib/estado";
+import { Mascota } from "./iconos";
+import { ID_ENTRADA } from "./PanelClaude";
+
+/** Abre el panel de Claude con la orden y su salida adjuntas, listo para preguntar. */
+function preguntarAClaude(term: Terminal, b: Bloque) {
+  const t = textoBloque(term, b);
+  if (!t) return;
+  adjuntar(useKyu.getState().activo, t);
+  requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
+}
 
 interface Props {
   term: Terminal;
@@ -36,6 +48,29 @@ const COLOR_FLECHA: Record<Bloque["estado"], string> = {
 export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
   useSyncExternalStore(bloques.suscribir, bloques.version);
   const [, setCuadro] = useState(0);
+  // Bloque con el ratón encima (para enseñar «Preguntar a Claude»). La capa no recibe
+  // clics, así que se mira el ratón en el contenedor del terminal.
+  const [encima, setEncima] = useState<number | null>(null);
+  const filas = useRef<{ id: number; fila: number; filaFin: number }[]>([]);
+  useEffect(() => {
+    const contenedor = term.element?.closest<HTMLElement>("[data-kyu-terminal]");
+    if (!contenedor) return;
+    const mover = (e: MouseEvent) => {
+      const pantalla = term.element?.querySelector<HTMLElement>(".xterm-screen");
+      if (!pantalla || term.rows === 0) return;
+      const r = pantalla.getBoundingClientRect();
+      const fila = Math.floor((e.clientY - r.top) / (r.height / term.rows));
+      const v = filas.current.find((x) => fila >= x.fila && fila <= x.filaFin);
+      setEncima(v ? v.id : null);
+    };
+    const salir = () => setEncima(null);
+    contenedor.addEventListener("mousemove", mover);
+    contenedor.addEventListener("mouseleave", salir);
+    return () => {
+      contenedor.removeEventListener("mousemove", mover);
+      contenedor.removeEventListener("mouseleave", salir);
+    };
+  }, [term]);
 
   // Redibujar cuando xterm pinta, se desplaza o cambia de tamaño (una vez por cuadro).
   useEffect(() => {
@@ -82,10 +117,11 @@ export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
     if (filaFin < 0 || fila >= term.rows) return [];
     return [{ b, fila, filaFin }];
   });
+  filas.current = visibles.map(({ b, fila, filaFin }) => ({ id: b.id, fila, filaFin }));
 
   return (
     <div
-      className="pointer-events-none absolute top-0 overflow-hidden"
+      className="pointer-events-none absolute top-0 z-20 overflow-hidden"
       style={{ left: -MARGEN, width: ancho + MARGEN, height: pantalla.offsetHeight }}
     >
       {visibles.map(({ b, fila, filaFin }) => (
@@ -100,7 +136,12 @@ export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
               background: COLOR[b.estado],
             }}
           />
-          <Titulo b={b} style={{ left: MARGEN, width: ancho, top: fila * alto, height: alto }} />
+          <Titulo
+            b={b}
+            encima={encima === b.id}
+            onPreguntar={() => preguntarAClaude(term, b)}
+            style={{ left: MARGEN, width: ancho, top: fila * alto, height: alto }}
+          />
           <span
             className="absolute"
             style={{
@@ -120,7 +161,18 @@ export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
   );
 }
 
-function Titulo({ b, style }: { b: Bloque; style: React.CSSProperties }) {
+function Titulo({
+  b,
+  encima,
+  onPreguntar,
+  style,
+}: {
+  b: Bloque;
+  encima: boolean;
+  onPreguntar: () => void;
+  style: React.CSSProperties;
+}) {
+  const terminado = (b.estado === "ok" || b.estado === "mal") && !!b.fin;
   const padre = b.padre.replace(/[\\/]$/, "");
   return (
     <div className="absolute flex items-center gap-2 whitespace-nowrap text-[12px]" style={style}>
@@ -142,6 +194,22 @@ function Titulo({ b, style }: { b: Bloque; style: React.CSSProperties }) {
         </Pastilla>
       )}
       <span className="ml-auto flex items-center gap-3.5 pr-1 text-tenue">
+        {terminado && (encima || b.estado === "mal") && (
+          <button
+            type="button"
+            title="Preguntar a Claude por esta orden"
+            onClick={onPreguntar}
+            onMouseDown={(e) => e.preventDefault()}
+            className={`pointer-events-auto flex h-[19px] items-center gap-1.5 rounded-full border px-2 text-[11.5px] transition-colors ${
+              encima
+                ? "border-claude/40 text-claude2 hover:border-claude/70 hover:bg-claude/10"
+                : "border-transparent opacity-50"
+            }`}
+          >
+            <Mascota alto={10} />
+            {encima && "Preguntar a Claude"}
+          </button>
+        )}
         <Resultado b={b} />
         <span className="tabular-nums text-muy">{b.hora}</span>
       </span>

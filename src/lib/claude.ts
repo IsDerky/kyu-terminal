@@ -11,9 +11,10 @@ import {
   type EventoClaude,
 } from "./nucleo";
 import { paneles, useKyu } from "./estado";
+import type { TextoBloque } from "./bloques";
 
 export type Entrada =
-  | { id: number; tipo: "tu"; texto: string }
+  | { id: number; tipo: "tu"; texto: string; adjunto?: TextoBloque }
   | { id: number; tipo: "claude"; texto: string; enCurso: boolean }
   | { id: number; tipo: "herramienta"; idHerramienta: string; nombre: string; resumen: string; estado: "ejecutando" | "ok" | "error" }
   | {
@@ -66,6 +67,8 @@ interface EstadoClaude {
   visible: boolean;
   conversaciones: Record<string, Conversacion>;
   avisos: AvisoFin[];
+  /** Orden del terminal adjunta a lo próximo que se escriba, por espacio. */
+  adjuntos: Record<string, TextoBloque>;
   mostrar: (visible: boolean) => void;
   quitarAviso: (id: number) => void;
 }
@@ -87,6 +90,7 @@ export const useClaude = create<EstadoClaude>((set) => ({
   visible: false,
   conversaciones: {},
   avisos: [],
+  adjuntos: {},
   mostrar: (visible) => set({ visible }),
   quitarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));
@@ -208,10 +212,44 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
   }
 }
 
+/** Adjunta una orden del terminal a lo próximo que se le escriba a Claude. */
+export function adjuntar(espacio: string, bloque: TextoBloque) {
+  useClaude.setState((s) => ({ adjuntos: { ...s.adjuntos, [espacio]: bloque }, visible: true }));
+}
+
+export function quitarAdjunto(espacio: string) {
+  useClaude.setState((s) => {
+    const { [espacio]: _, ...resto } = s.adjuntos;
+    return { adjuntos: resto };
+  });
+}
+
+const PREGUNTA_POR_DEFECTO = "Mira esta orden y su salida. Si ha fallado, dime por qué y cómo arreglarlo.";
+
+/** El mensaje que recibe Claude: lo escrito y, debajo, la orden con su salida. */
+function conAdjunto(texto: string, a: TextoBloque) {
+  const valla = "`".repeat(Math.max(3, ...[...a.salida.matchAll(/`+/g)].map((m) => m[0].length + 1)));
+  const datos = [a.ruta && `carpeta ${a.ruta}`, `código de salida ${a.codigo}`].filter(Boolean).join(", ");
+  const aviso = a.recortada ? ` (solo el final: eran ${a.lineas} líneas)` : "";
+  return `${texto || PREGUNTA_POR_DEFECTO}
+
+Orden ejecutada en el terminal (${datos}):
+${valla}
+> ${a.orden}
+${valla}
+Salida${aviso}:
+${valla}
+${a.salida || "(sin salida)"}
+${valla}`;
+}
+
 export async function enviar(espacio: string, texto: string) {
   let c = conversacion(espacio);
   if (c.estado === "arrancando" || c.estado === "pensando") return;
-  añadir(espacio, { tipo: "tu", texto });
+  const adjunto = useClaude.getState().adjuntos[espacio];
+  if (adjunto) quitarAdjunto(espacio);
+  const mensaje = adjunto ? conAdjunto(texto, adjunto) : texto;
+  añadir(espacio, { tipo: "tu", texto: texto || (adjunto ? PREGUNTA_POR_DEFECTO : ""), adjunto });
   cambiar(espacio, () => ({ estado: "arrancando", desde: Date.now() }));
   try {
     if (c.claudeId === null) {
@@ -222,7 +260,7 @@ export async function enviar(espacio: string, texto: string) {
       cambiar(espacio, () => ({ claudeId: id, carpeta }));
       c = conversacion(espacio);
     }
-    await enviarClaude(c.claudeId!, texto);
+    await enviarClaude(c.claudeId!, mensaje);
     cambiar(espacio, (c) => (c.estado === "arrancando" ? { estado: "pensando" } : {}));
   } catch (e) {
     añadir(espacio, { tipo: "error", texto: String(e) });

@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Columns2, Layers, Search, Rows2, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { Columns2, Layers, Search, Rows2, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
+import { textoBloque } from "../lib/bloques";
+import { adjuntar } from "../lib/claude";
+import { sesion } from "../lib/terminales";
+import { ID_ENTRADA } from "./PanelClaude";
 import type { ConfigVista, Perfil } from "../lib/nucleo";
 import { nombreEspacio } from "./BarraTitulo";
 import { IconoPerfil } from "./iconos";
@@ -44,6 +48,22 @@ export default function Paleta({ config }: { config: ConfigVista }) {
       { id: "div-d", grupo: "Paneles", titulo: "Dividir a la derecha", atajo: "Ctrl+Mayús+D", icono: Columns2, hacer: () => k.dividir("horizontal", perfilFoco) },
       { id: "div-a", grupo: "Paneles", titulo: "Dividir abajo", atajo: "Ctrl+Mayús+E", icono: Rows2, hacer: () => k.dividir("vertical", perfilFoco) },
       { id: "cerrar", grupo: "Paneles", titulo: "Cerrar pestaña", atajo: "Ctrl+Mayús+W", icono: X, hacer: cerrarActual },
+      {
+        id: "claude-orden",
+        grupo: "Claude",
+        titulo: "Enviar la última orden a Claude",
+        detalle: "con su salida",
+        icono: SquareTerminal,
+        hacer: () => {
+          const it = f?.item;
+          const s = it?.tipo === "terminal" ? sesion(it.id) : undefined;
+          if (!s) return;
+          const t = [...s.bloques.lista].reverse().map((b) => textoBloque(s.term, b)).find((x) => x !== null);
+          if (!t) return;
+          adjuntar(k.activo, t);
+          requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
+        },
+      },
       { id: "buscar", grupo: "Paneles", titulo: "Buscar en el terminal", atajo: "Ctrl+F", icono: Search, hacer: () => f?.item?.tipo === "terminal" && k.ponerBuscando(f.item.id) },
       ...config.perfiles.map<Orden>((p, i) => ({
         id: `pest-${p.nombre}`,

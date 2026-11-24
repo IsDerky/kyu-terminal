@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Check, FolderOpen, Loader2, Square, SquarePen, X } from "lucide-react";
+import { ArrowUp, Check, FolderOpen, Loader2, Square, SquarePen, SquareTerminal, X } from "lucide-react";
 import {
   carpetaDelEspacio,
   enviar,
@@ -7,11 +7,13 @@ import {
   nueva,
   parar,
   pendiente,
+  quitarAdjunto,
   responder,
   useClaude,
   type Conversacion,
   type Entrada,
 } from "../lib/claude";
+import type { TextoBloque } from "../lib/bloques";
 import { useKyu } from "../lib/estado";
 import { herramienta, relativa } from "../lib/herramientas";
 import Markdown from "./Markdown";
@@ -175,8 +177,11 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
   switch (e.tipo) {
     case "tu":
       return (
-        <div className="max-w-[88%] select-text self-end whitespace-pre-wrap break-words rounded-[12px_12px_4px_12px] border border-borde bg-tarjeta px-[11px] py-2">
-          {e.texto}
+        <div className="flex max-w-[88%] flex-col items-end gap-1.5 self-end">
+          {e.adjunto && <RecuadroOrden a={e.adjunto} />}
+          <div className="select-text whitespace-pre-wrap break-words rounded-[12px_12px_4px_12px] border border-borde bg-tarjeta px-[11px] py-2">
+            {e.texto}
+          </div>
         </div>
       );
     case "claude":
@@ -217,8 +222,38 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
   }
 }
 
+/** La orden del terminal adjunta: «› npm run build · código 1 · 42 líneas». */
+function RecuadroOrden({ a, onQuitar }: { a: TextoBloque; onQuitar?: () => void }) {
+  const mal = a.codigo !== 0;
+  return (
+    <div
+      title={a.salida ? a.salida.split("\n").slice(-12).join("\n") : undefined}
+      className="flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-borde bg-tarjeta py-1 pl-2 pr-1 text-[11.5px] text-tenue"
+    >
+      <SquareTerminal size={13} strokeWidth={1.8} className={`flex-none ${mal ? "text-mal" : "text-ok"}`} />
+      <span className="min-w-0 truncate font-mono text-texto">{a.orden || "(orden vacía)"}</span>
+      <span className="flex-none text-muy">
+        · {mal ? `código ${a.codigo}` : "bien"} · {a.lineas} {a.lineas === 1 ? "línea" : "líneas"}
+      </span>
+      {onQuitar ? (
+        <button
+          type="button"
+          title="Quitar"
+          onClick={onQuitar}
+          className="grid size-5 flex-none place-items-center rounded text-muy hover:bg-hover hover:text-texto"
+        >
+          <X size={12} />
+        </button>
+      ) : (
+        <span className="w-1" />
+      )}
+    </div>
+  );
+}
+
 function CajaEntrada({ espacio, ocupado, permiso }: { espacio: string; ocupado: boolean; permiso: number | null }) {
   const [texto, setTexto] = useState("");
+  const adjunto = useClaude((s) => s.adjuntos[espacio]);
   const area = useRef<HTMLTextAreaElement>(null);
 
   // Crece con el texto hasta unas 8 líneas.
@@ -231,7 +266,7 @@ function CajaEntrada({ espacio, ocupado, permiso }: { espacio: string; ocupado: 
 
   const mandar = () => {
     const t = texto.trim();
-    if (!t || ocupado) return;
+    if ((!t && !adjunto) || ocupado) return;
     setTexto("");
     void enviar(espacio, t);
   };
@@ -239,13 +274,24 @@ function CajaEntrada({ espacio, ocupado, permiso }: { espacio: string; ocupado: 
   return (
     <div className="flex-none border-t border-borde px-3 pb-3 pt-2.5">
       <div className="relative rounded-[10px] border border-borde2 bg-fondo focus-within:border-[#3a3a42]">
+        {adjunto && (
+          <div className="flex px-2 pt-2">
+            <RecuadroOrden a={adjunto} onQuitar={() => quitarAdjunto(espacio)} />
+          </div>
+        )}
         <textarea
           id={ID_ENTRADA}
           ref={area}
           rows={2}
           value={texto}
           spellCheck={false}
-          placeholder={permiso !== null ? "Intro permite · Esc deniega · o escribe qué hacer en su lugar" : "Escribe a Claude"}
+          placeholder={
+            permiso !== null
+              ? "Intro permite · Esc deniega · o escribe qué hacer en su lugar"
+              : adjunto
+                ? "Pregunta sobre esta orden, o Intro para que la revise"
+                : "Escribe a Claude"
+          }
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
             if (permiso !== null) {
@@ -283,7 +329,7 @@ function CajaEntrada({ espacio, ocupado, permiso }: { espacio: string; ocupado: 
             type="button"
             title="Enviar (Intro)"
             onClick={mandar}
-            disabled={!texto.trim()}
+            disabled={!texto.trim() && !adjunto}
             className="absolute bottom-2 right-2 grid size-7 place-items-center rounded-lg bg-texto text-fondo disabled:bg-hover disabled:text-muy"
           >
             <ArrowUp size={15} strokeWidth={2.2} />
