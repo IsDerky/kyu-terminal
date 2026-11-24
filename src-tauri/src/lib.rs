@@ -2,6 +2,7 @@
 //! Abre las shells en un PTY, lee `kyu.toml`, abre y guarda archivos y da datos
 //! del equipo (RAM) y habla con Claude Code.
 
+mod ajustes;
 mod archivos;
 mod autocompletar;
 mod claude;
@@ -28,6 +29,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             config::config,
+            ajustes::ajustes_leer,
+            ajustes::ajustes_guardar,
             pty::pty_abrir,
             pty::pty_escribir,
             pty::pty_redimensionar,

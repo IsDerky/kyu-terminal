@@ -385,7 +385,7 @@ fn resumen(herramienta: &str, input: &Value) -> String {
 
 /// Busca el ejecutable de Claude Code. En Windows, si solo está `claude.cmd` de npm, usa el
 /// `claude.exe` que hay dentro del paquete.
-fn buscar_programa(configurado: Option<&str>) -> Option<PathBuf> {
+pub(crate) fn buscar_programa(configurado: Option<&str>) -> Option<PathBuf> {
     if let Some(p) = configurado {
         return Some(PathBuf::from(p));
     }

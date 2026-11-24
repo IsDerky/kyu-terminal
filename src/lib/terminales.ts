@@ -96,7 +96,7 @@ export function obtener(item: string): Sesion {
   bloques.alCambiarCarpeta = (ruta, hoja) => useKyu.getState().ponerTitulo(item, hoja || ruta, ruta);
   bloques.alTerminarOrden = (b) => {
     apuntar(b.orden ?? "", b.ruta, b.codigo ?? 0);
-    void avisarSiToca(b, config.aviso_segundos);
+    void avisarSiToca(b, configuracion?.aviso_segundos ?? 10);
   };
   const datosItem = () => {
     const it = useKyu.getState().items[item];
@@ -167,6 +167,15 @@ export function obtener(item: string): Sesion {
   const s: Sesion = { term, elemento, bloques, ajuste, busqueda, auto, ptyId: null, abierta: false };
   sesiones.set(item, s);
   return s;
+}
+
+/** Cambia la fuente de todos los terminales abiertos (desde Ajustes). */
+export function aplicarFuente(fuente: string, tamano: number) {
+  for (const s of sesiones.values()) {
+    s.term.options.fontFamily = fuente;
+    s.term.options.fontSize = tamano;
+    if (s.term.element?.offsetWidth) s.ajuste.fit();
+  }
 }
 
 /** Pone el terminal dentro de `contenedor` (y la primera vez, arranca la shell). */

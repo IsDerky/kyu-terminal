@@ -28,6 +28,8 @@ pub struct Config {
     /// Aviso de Windows cuando termina una orden que ha tardado al menos estos
     /// segundos y Kyu no está delante. Sin poner = 10; 0 = nunca.
     pub aviso_segundos: Option<u32>,
+    /// Perfil de las pestañas nuevas (por nombre); sin poner = el primero.
+    pub perfil_predeterminado: Option<String>,
     pub tema: Tema,
 }
 
@@ -53,7 +55,7 @@ pub struct Perfil {
 }
 
 /// Se prueban por orden si `kyu.toml` no dice ninguna; el navegador usa la primera instalada.
-const FUENTES_CONOCIDAS: &[&str] = &[
+pub(crate) const FUENTES_CONOCIDAS: &[&str] = &[
     "FiraCode Nerd Font Mono",
     "JetBrainsMono Nerd Font Mono",
     "CaskaydiaCove Nerd Font Mono",
@@ -187,6 +189,12 @@ impl Config {
             lista.extend(self.perfiles.iter().cloned());
         } else {
             lista.extend(detectar_perfiles());
+        }
+        if let Some(pred) = &self.perfil_predeterminado
+            && let Some(i) = lista.iter().position(|p| &p.nombre == pred)
+        {
+            let p = lista.remove(i);
+            lista.insert(0, p);
         }
         lista
     }

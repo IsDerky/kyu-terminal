@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Columns2, Layers, Search, Rows2, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
 import { textoBloque } from "../lib/bloques";
@@ -64,6 +64,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
           requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
         },
       },
+      { id: "ajustes", grupo: "Kyu", titulo: "Ajustes", atajo: "Ctrl+,", icono: SlidersHorizontal, hacer: () => k.ponerAjustes(true) },
       { id: "buscar", grupo: "Paneles", titulo: "Buscar en el terminal", atajo: "Ctrl+F", icono: Search, hacer: () => f?.item?.tipo === "terminal" && k.ponerBuscando(f.item.id) },
       ...config.perfiles.map<Orden>((p, i) => ({
         id: `pest-${p.nombre}`,

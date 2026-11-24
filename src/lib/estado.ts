@@ -34,6 +34,8 @@ interface Estado {
   /** Terminal con la barra de búsqueda abierta. */
   buscando: string | null;
   paleta: boolean;
+  /** Pestaña de Ajustes abierta (en lugar del espacio). */
+  ajustes: boolean;
 
   iniciar: (perfil: string) => void;
   nuevoEspacio: (perfil: string, carpeta?: string | null) => void;
@@ -53,6 +55,7 @@ interface Estado {
   marcarSucio: (item: string, sucio: boolean) => void;
   ponerBuscando: (item: string | null) => void;
   ponerPaleta: (abierta: boolean) => void;
+  ponerAjustes: (abierta: boolean) => void;
   siguientePestana: (paso: number) => void;
 }
 
@@ -122,6 +125,7 @@ export const useKyu = create<Estado>((set, get) => {
     items: {},
     buscando: null,
     paleta: false,
+    ajustes: false,
 
     iniciar: (perfil) => {
       if (get().espacios.length) return;
@@ -303,6 +307,7 @@ export const useKyu = create<Estado>((set, get) => {
 
     ponerBuscando: (item) => set({ buscando: item }),
     ponerPaleta: (paleta) => set({ paleta }),
+    ponerAjustes: (ajustes) => set({ ajustes, paleta: false }),
 
     siguientePestana: (paso) => {
       const esp = espacioActivo();

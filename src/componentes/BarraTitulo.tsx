@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronDown, Layers, Minus, Plus, Square, X } from "lucide-react";
+import { ChevronDown, Layers, Minus, Plus, SlidersHorizontal, Square, X } from "lucide-react";
 import { paneles, useKyu, type Espacio } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
@@ -38,6 +38,7 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
   const [editando, setEditando] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const claude = useClaude((s) => s.visible);
+  const ajustes = useKyu((s) => s.ajustes);
 
   const cerrarEspacio = async (e: Espacio) => {
     for (const p of paneles(e.raiz)) for (const item of p.items) await cerrarItem(item);
@@ -52,11 +53,14 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
 
       <div className="flex min-w-0 items-center gap-1">
         {espacios.map((e, i) => {
-          const esActivo = e.id === activo;
+          const esActivo = e.id === activo && !ajustes;
           return (
             <div
               key={e.id}
-              onMouseDown={() => cambiarEspacio(e.id)}
+              onMouseDown={() => {
+                cambiarEspacio(e.id);
+                useKyu.getState().ponerAjustes(false);
+              }}
               onDoubleClick={() => setEditando(e.id)}
               onAuxClick={(ev) => ev.button === 1 && void cerrarEspacio(e)}
               title={`Espacio ${i + 1} (Ctrl+${i + 1}) · doble clic para renombrar`}
@@ -96,6 +100,20 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
             </div>
           );
         })}
+        {ajustes && (
+          <div className="flex h-7 items-center gap-2 rounded-[7px] border border-[#26262c] bg-hover pl-2.5 pr-1 text-[12.5px] text-texto">
+            <SlidersHorizontal size={13} strokeWidth={1.8} className="flex-none" />
+            Ajustes
+            <button
+              type="button"
+              title="Cerrar ajustes (Ctrl+,)"
+              onClick={() => useKyu.getState().ponerAjustes(false)}
+              className="grid size-4 flex-none place-items-center rounded text-muy hover:bg-borde2 hover:text-texto"
+            >
+              <X size={11} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="relative flex items-center pl-1 text-muy">
@@ -129,6 +147,14 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
 
       <div data-tauri-drag-region className="h-full flex-1" />
 
+      <button
+        type="button"
+        title="Ajustes (Ctrl+,)"
+        onClick={() => useKyu.getState().ponerAjustes(!ajustes)}
+        className={`mr-1 grid size-7 place-items-center rounded-md ${ajustes ? "bg-hover text-texto" : "text-tenue hover:bg-hover hover:text-texto"}`}
+      >
+        <SlidersHorizontal size={14} strokeWidth={1.8} />
+      </button>
       <button
         type="button"
         title="Panel de Claude (Ctrl+Mayús+C)"

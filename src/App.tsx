@@ -5,11 +5,12 @@ import BarraTitulo, { nombreEspacio } from "./componentes/BarraTitulo";
 import Espacio from "./componentes/Espacio";
 import Paleta from "./componentes/Paleta";
 import PanelClaude, { ID_ENTRADA } from "./componentes/PanelClaude";
+import Ajustes from "./componentes/Ajustes";
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
 import { limpiar, useClaude } from "./lib/claude";
 import { escucharMcp } from "./lib/mcp";
 import { focoActual, useKyu } from "./lib/estado";
-import { configurar, itemDePty, sesion } from "./lib/terminales";
+import { aplicarFuente, configurar, itemDePty, sesion } from "./lib/terminales";
 import { configurarEditores, editor } from "./lib/editores";
 import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
 
@@ -37,6 +38,7 @@ export default function App() {
   const espacios = useKyu((s) => s.espacios);
   const activo = useKyu((s) => s.activo);
   const paleta = useKyu((s) => s.paleta);
+  const ajustes = useKyu((s) => s.ajustes);
   const claudeVisible = useClaude((s) => s.visible);
   useKyu((s) => s.items); // el título de la ventana sigue al terminal con el foco
 
@@ -95,6 +97,7 @@ export default function App() {
         }
       }
       if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+        if (e.code === "Comma") return (hecho(), k.ponerAjustes(!k.ajustes));
         if (e.code === "Tab") return (hecho(), k.siguientePestana(1));
         if (/^Digit[1-9]$/.test(e.code)) {
           const esp = k.espacios[Number(e.code.slice(5)) - 1];
@@ -124,7 +127,25 @@ export default function App() {
     <div className="relative flex h-full flex-col">
       <BarraTitulo config={config} />
       <div className="flex min-h-0 flex-1">
-        {espacio && <Espacio key={espacio.id} espacio={espacio} config={config} />}
+        {ajustes && (
+          <Ajustes
+            config={config}
+            alCambiar={() =>
+              void leerConfig().then((c) => {
+                document.documentElement.style.setProperty("--font-mono", c.fuente);
+                configurar(c);
+                configurarEditores(c.fuente, c.tema.fuente_tamano);
+                aplicarFuente(c.fuente, c.tema.fuente_tamano);
+                setConfig(c);
+              })
+            }
+          />
+        )}
+        {espacio && (
+          <div className={ajustes ? "hidden" : "flex min-w-0 flex-1"}>
+            <Espacio key={espacio.id} espacio={espacio} config={config} />
+          </div>
+        )}
         {espacio && claudeVisible && <PanelClaude key={`claude-${espacio.id}`} espacio={espacio.id} />}
       </div>
       <Avisos />

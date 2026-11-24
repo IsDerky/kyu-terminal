@@ -82,6 +82,27 @@ export const leerArchivo = (ruta: string) => invoke<string>("archivo_leer", { ru
 export const guardarArchivo = (ruta: string, contenido: string) =>
   invoke("archivo_guardar", { ruta, contenido });
 
+export interface AjustesVista {
+  ruta: string;
+  existe: boolean;
+  autocompletado: boolean;
+  sin_prompt: boolean;
+  aviso_segundos: number;
+  fuente: string | null;
+  fuente_tamano: number;
+  fuentes_conocidas: string[];
+  claude: string | null;
+  claude_encontrado: string | null;
+  perfil_predeterminado: string | null;
+  perfiles: { nombre: string; orden: string; color: string | null; icono: string | null }[];
+  perfiles_propios: boolean;
+}
+
+export const leerAjustes = () => invoke<AjustesVista>("ajustes_leer");
+
+/** Cambia una clave de kyu.toml; null la quita (valor por defecto). */
+export const guardarAjuste = (clave: string, valor: unknown) => invoke("ajustes_guardar", { clave, valor: valor ?? null });
+
 export interface EntradaCarpeta {
   nombre: string;
   carpeta: boolean;
