@@ -1,0 +1,33 @@
+[package]
+name = "kyu-terminal"
+version = "0.2.0"
+edition = "2024"
+description = "Terminal con Claude Code integrado"
+license = "MIT"
+repository = "https://github.com/IsDerky/kyu-terminal"
+
+[lib]
+name = "kyu_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "kyu"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-opener = "2"
+portable-pty = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+dirs = "6"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -1,0 +1,46 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+/* Aspecto C «Sobrio»: grises neutros, el color solo en lo que importa. */
+@theme {
+  --color-fondo: #0b0b0d;
+  --color-barra: #0b0b0d;
+  --color-panel: #0f0f12;
+  --color-tarjeta: #151518;
+  --color-hover: #18181c;
+  --color-borde: #1f1f24;
+  --color-borde2: #2a2a30;
+  --color-texto: #ececf1;
+  --color-tenue: #8b8b96;
+  --color-muy: #55555e;
+  --color-acento: #a78bfa;
+  --color-acento2: #c4b5fd;
+  --color-ok: #4ade80;
+  --color-mal: #f87171;
+  --color-aviso: #fbbf24;
+
+  --font-ui: "Geist Variable", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-fondo);
+  color: var(--color-texto);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* La barra de desplazamiento de xterm, discreta. */
+.xterm .xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-borde2) transparent;
+}

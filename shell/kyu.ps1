@@ -53,8 +53,8 @@ function global:prompt {
     $codigo = $global:LASTEXITCODE
     $e = [char]27
     $fin = "$e[0m"
-    $morado = __KyuColor 'c48bff'; $tenue = __KyuColor '8a83a3'; $muy = __KyuColor '5a5373'
-    $cian = __KyuColor '4dd8e6'; $ambar = __KyuColor 'ffb547'; $verde = __KyuColor '5cff2e'; $rojo = __KyuColor 'ff4d6d'
+    $morado = __KyuColor 'c4b5fd'; $tenue = __KyuColor '8b8b96'; $muy = __KyuColor '55555e'
+    $cian = __KyuColor '67e8f9'; $ambar = __KyuColor 'fbbf24'; $verde = __KyuColor '4ade80'; $rojo = __KyuColor 'f87171'
 
     # Al pulsar Enter, PSReadLine solo redibuja la última línea del prompt.
     if ($global:__kyu.Transitorio) {
