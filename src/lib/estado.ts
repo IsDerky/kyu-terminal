@@ -7,7 +7,7 @@
 import { create } from "zustand";
 
 export type Item =
-  | { id: string; tipo: "terminal"; perfil: string; titulo: string; carpeta: string | null }
+  | { id: string; tipo: "terminal"; perfil: string; titulo: string; carpeta: string | null; deClaude?: boolean }
   | { id: string; tipo: "archivo"; ruta: string; sucio: boolean; linea: number; columna: number; salto: number };
 
 export type Direccion = "horizontal" | "vertical";
@@ -41,6 +41,8 @@ interface Estado {
   renombrarEspacio: (id: string, nombre: string | null) => void;
   nuevaPestana: (perfil: string, panel?: string) => void;
   dividir: (dir: Direccion, perfil: string, panel?: string) => void;
+  /** Abre un terminal en un panel nuevo a la derecha de `espacio` sin quitar el foco; devuelve su id. */
+  terminalAlLado: (espacio: string, perfil: string, carpeta: string | null, titulo: string) => string | null;
   activar: (panel: string, item: string) => void;
   enfocar: (panel: string) => void;
   /** Quita la pestaña de su panel (y el panel o el espacio si se quedan vacíos). */
@@ -165,6 +167,20 @@ export const useKyu = create<Estado>((set, get) => {
         foco: nuevo.id,
         raiz: ponerAlLado(esp.raiz, origen, nuevo, dir === "horizontal" ? "derecha" : "abajo"),
       }));
+    },
+
+    terminalAlLado: (espacio, perfil, carpeta, titulo) => {
+      const esp = get().espacios.find((e) => e.id === espacio);
+      if (!esp) return null;
+      const t = { ...terminal(perfil, carpeta), titulo, deClaude: true } as Item;
+      const nuevo = nuevoPanel([t.id]);
+      set((s) => ({
+        items: { ...s.items, [t.id]: t },
+        espacios: s.espacios.map((e) =>
+          e.id === espacio ? { ...e, raiz: ponerAlLado(e.raiz, e.foco, nuevo, "derecha") } : e,
+        ),
+      }));
+      return t.id;
     },
 
     activar: (panel, item) =>

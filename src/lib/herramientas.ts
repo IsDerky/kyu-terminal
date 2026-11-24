@@ -16,6 +16,10 @@ const HERRAMIENTAS: Record<string, [string, LucideIcon]> = {
   Agent: ["Agente", Bot],
   Task: ["Agente", Bot],
   TodoWrite: ["Tareas", ListTodo],
+  ToolSearch: ["Cargar herramientas", Wrench],
+  mcp__kyu__ejecutar_en_panel: ["Ejecutar en Kyu", Terminal],
+  mcp__kyu__leer_panel: ["Leer panel", FileText],
+  mcp__kyu__listar_paneles: ["Ver paneles", Terminal],
 };
 
 export const herramienta = (nombre: string): [string, LucideIcon] => HERRAMIENTAS[nombre] ?? [nombre, Wrench];

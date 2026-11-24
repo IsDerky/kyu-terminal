@@ -67,7 +67,7 @@ function Que({ nombre, herramienta: h, resumen }: { nombre: string; herramienta:
   return (
     <span className="min-w-0">
       Claude quiere usar <b className="font-semibold">{nombre}</b>{" "}
-      {h !== "Bash" && h !== "PowerShell" && <span className="break-all font-mono text-[12px] text-tenue">{resumen}</span>}
+      {h !== "Bash" && h !== "PowerShell" && h !== "mcp__kyu__ejecutar_en_panel" && <span className="break-all font-mono text-[12px] text-tenue">{resumen}</span>}
     </span>
   );
 }
@@ -129,6 +129,13 @@ function Detalle({ herramienta: h, input }: { herramienta: string; input: Datos 
         <Caja>
           {texto(input.description) && <p className="mb-1.5 font-ui text-[11.5px] text-tenue">{texto(input.description)}</p>}
           <pre className="select-text whitespace-pre-wrap break-all font-mono text-[11.5px] text-texto">{texto(input.command)}</pre>
+        </Caja>
+      );
+    case "mcp__kyu__ejecutar_en_panel":
+      return (
+        <Caja>
+          <p className="mb-1.5 font-ui text-[11.5px] text-tenue">En el panel «Claude» de Kyu, a la vista</p>
+          <pre className="select-text whitespace-pre-wrap break-all font-mono text-[11.5px] text-texto">{texto(input.orden)}</pre>
         </Caja>
       );
     case "WebFetch":

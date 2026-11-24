@@ -7,6 +7,7 @@ import Paleta from "./componentes/Paleta";
 import PanelClaude, { ID_ENTRADA } from "./componentes/PanelClaude";
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
 import { limpiar, useClaude } from "./lib/claude";
+import { escucharMcp } from "./lib/mcp";
 import { focoActual, useKyu } from "./lib/estado";
 import { configurar, itemDePty, sesion } from "./lib/terminales";
 import { configurarEditores, editor } from "./lib/editores";
@@ -57,6 +58,12 @@ export default function App() {
       const item = itemDePty(ptyId);
       if (item) void cerrarItem(item, false);
     });
+    return () => void quitar.then((f) => f());
+  }, []);
+
+  // Herramientas MCP de Kyu para el Claude del panel.
+  useEffect(() => {
+    const quitar = escucharMcp();
     return () => void quitar.then((f) => f());
   }, []);
 

@@ -78,6 +78,7 @@ pub struct Claudes {
 #[tauri::command]
 pub fn claude_abrir(
     claudes: State<'_, Claudes>,
+    mcp: State<'_, Option<Arc<crate::mcp::Mcp>>>,
     carpeta: Option<String>,
     eventos: Channel<Evento>,
 ) -> Result<u32, String> {
@@ -90,6 +91,7 @@ pub fn claude_abrir(
         .or_else(dirs::home_dir)
         .ok_or("no hay carpeta donde arrancar Claude")?;
 
+    let id = claudes.siguiente.fetch_add(1, Ordering::Relaxed);
     let mut cmd = Command::new(&programa);
     cmd.args([
         "-p",
@@ -103,7 +105,22 @@ pub fn claude_abrir(
         "stdio",
     ])
     .current_dir(&carpeta)
-    .env("KYU_TERMINAL", env!("CARGO_PKG_VERSION"))
+    .env("KYU_TERMINAL", env!("CARGO_PKG_VERSION"));
+    // Herramientas de Kyu (MCP propio). Leer y listar no piden permiso; ejecutar sí.
+    if let Some(mcp) = mcp.inner() {
+        let ruta = std::env::temp_dir()
+            .join("kyu")
+            .join(format!("mcp-{}-{id}.json", std::process::id()));
+        let escrito = std::fs::create_dir_all(ruta.parent().expect("tiene carpeta"))
+            .and_then(|_| std::fs::write(&ruta, crate::mcp::config_para(mcp, id).to_string()));
+        if escrito.is_ok() {
+            cmd.arg("--mcp-config").arg(&ruta).args([
+                "--allowedTools",
+                "mcp__kyu__leer_panel,mcp__kyu__listar_paneles",
+            ]);
+        }
+    }
+    cmd
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
@@ -154,7 +171,6 @@ pub fn claude_abrir(
         let _ = eventos.send(Evento::Cerrado);
     });
 
-    let id = claudes.siguiente.fetch_add(1, Ordering::Relaxed);
     claudes.sesiones.lock().map_err(|_| "estado roto")?.insert(
         id,
         Sesion {
@@ -340,17 +356,23 @@ fn traducir(v: &Value) -> Vec<Evento> {
 fn resumen(herramienta: &str, input: &Value) -> String {
     let campo = match herramienta {
         "Bash" | "PowerShell" => "command",
+        "mcp__kyu__ejecutar_en_panel" => "orden",
+        "mcp__kyu__leer_panel" => "panel",
         "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => "file_path",
         "Grep" | "Glob" => "pattern",
         "WebFetch" => "url",
         "WebSearch" => "query",
         "Agent" | "Task" => "description",
         "Skill" => "skill",
+        "ToolSearch" => "query",
         _ => "",
     };
+    if input.as_object().is_some_and(|o| o.is_empty()) {
+        return String::new();
+    }
     input[campo]
         .as_str()
-        .map(str::to_string)
+        .map(|s| s.trim_start_matches("select:").replace("mcp__kyu__", "kyu: "))
         .unwrap_or_else(|| {
             let s = input.to_string();
             if s.len() > 80 {

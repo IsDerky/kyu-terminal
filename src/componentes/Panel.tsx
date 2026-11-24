@@ -5,7 +5,7 @@ import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
 import VistaTerminal from "./VistaTerminal";
 import VistaArchivo from "./VistaArchivo";
-import { IconoArchivo, IconoPerfil } from "./iconos";
+import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
 
 type PanelNodo = Extract<Nodo, { tipo: "panel" }>;
@@ -86,7 +86,17 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
                   esActivo ? "bg-hover text-texto" : "text-tenue hover:text-texto"
                 }`}
               >
-                {it.tipo === "terminal" ? <IconoPerfil perfil={perfilDe(it.perfil)} size={12} /> : <IconoArchivo size={12} />}
+                {it.tipo === "terminal" ? (
+                  it.deClaude ? (
+                    <span title="Panel donde ejecuta Claude">
+                      <Mascota alto={9} />
+                    </span>
+                  ) : (
+                    <IconoPerfil perfil={perfilDe(it.perfil)} size={12} />
+                  )
+                ) : (
+                  <IconoArchivo size={12} />
+                )}
                 <span className="truncate">{nombre}</span>
                 {it.tipo === "archivo" && it.sucio ? (
                   <span className="mx-1 size-1.5 flex-none rounded-full bg-tenue group-hover:hidden" title="Sin guardar" />
