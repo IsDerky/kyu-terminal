@@ -111,4 +111,13 @@ if (Get-Module PSReadLine) {
         }
         [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
     }
+
+    # Sugerencia en gris mientras escribes, sacada del historial (→ o Fin la acepta).
+    # PSReadLine la trae desde la 2.1; Windows PowerShell 5.1 viene con la 2.0, que no sabe.
+    $psrl = (Get-Module PSReadLine).Version
+    if ($psrl -ge [Version]'2.1.0') {
+        Set-PSReadLineOption -PredictionSource History
+        if ($psrl -ge [Version]'2.2.0') { Set-PSReadLineOption -PredictionViewStyle InlineView }
+        Set-PSReadLineOption -Colors @{ InlinePrediction = "$([char]27)[38;2;85;85;94m" }
+    }
 }
