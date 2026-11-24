@@ -27,6 +27,8 @@ export interface ConfigVista {
   autocompletado: boolean;
   /** Aviso de Windows al terminar una orden de al menos estos segundos (0 = nunca). */
   aviso_segundos: number;
+  /** Al abrir, volver a lo que había la última vez. */
+  restaurar_sesion: boolean;
   tema: Tema;
   /** El primero es el predeterminado. */
   perfiles: Perfil[];
@@ -88,6 +90,7 @@ export interface AjustesVista {
   autocompletado: boolean;
   sin_prompt: boolean;
   aviso_segundos: number;
+  restaurar_sesion: boolean;
   fuente: string | null;
   fuente_tamano: number;
   fuentes_conocidas: string[];

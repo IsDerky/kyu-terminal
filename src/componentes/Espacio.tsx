@@ -3,6 +3,7 @@ import { Group, Panel as Hueco, Separator } from "react-resizable-panels";
 import { paneles, type Espacio as EspacioT, type Nodo } from "../lib/estado";
 import type { ConfigVista } from "../lib/nucleo";
 import Panel from "./Panel";
+import { alCambiarTamano } from "../lib/restaurar";
 
 interface Props {
   espacio: EspacioT;
@@ -24,8 +25,10 @@ function Arbol({ nodo, foco, varios, config }: { nodo: Nodo; foco: string; vario
     return <Panel panel={nodo} conFoco={nodo.id === foco} varios={varios} config={config} />;
   }
   const horizontal = nodo.dir === "horizontal";
+  // Tamaños guardados (al restaurar) si siguen encajando con los hijos; si no, a partes iguales.
+  const guardados = nodo.tamanos?.length === nodo.hijos.length ? nodo.tamanos : null;
   return (
-    <Group key={nodo.id} orientation={nodo.dir} className="h-full w-full">
+    <Group key={nodo.id} orientation={nodo.dir} className="h-full w-full" onLayoutChanged={(l) => alCambiarTamano(nodo.id, l)}>
       {nodo.hijos.map((hijo, i) => (
         <Fragment key={hijo.id}>
           {i > 0 && (
@@ -35,7 +38,7 @@ function Arbol({ nodo, foco, varios, config }: { nodo: Nodo; foco: string; vario
               }`}
             />
           )}
-          <Hueco id={hijo.id} defaultSize={`${100 / nodo.hijos.length}`} minSize={horizontal ? 180 : 90}>
+          <Hueco id={hijo.id} defaultSize={`${guardados ? guardados[i] : 100 / nodo.hijos.length}`} minSize={horizontal ? 180 : 90}>
             <Arbol nodo={hijo} foco={foco} varios={varios} config={config} />
           </Hueco>
         </Fragment>

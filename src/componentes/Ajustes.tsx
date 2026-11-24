@@ -118,6 +118,9 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
               <Campo titulo="Prompt de Kyu" detalle="Los bloques con título y la flecha. Apágalo para usar el de tu perfil (oh-my-posh…). Pestañas nuevas.">
                 <Interruptor valor={!a.sin_prompt} alCambiar={(v) => void guardar("sin_prompt", v ? null : true)} />
               </Campo>
+              <Campo titulo="Restaurar la sesión" detalle="Al abrir Kyu, vuelven los espacios, paneles, pestañas (en su carpeta), archivos y conversaciones de Claude de la última vez.">
+                <Interruptor valor={a.restaurar_sesion} alCambiar={(v) => void guardar("restaurar_sesion", v ? null : false)} />
+              </Campo>
             </>
           )}
 

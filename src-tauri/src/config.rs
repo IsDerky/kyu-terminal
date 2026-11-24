@@ -30,12 +30,19 @@ pub struct Config {
     pub aviso_segundos: Option<u32>,
     /// Perfil de las pestañas nuevas (por nombre); sin poner = el primero.
     pub perfil_predeterminado: Option<String>,
+    /// Al abrir, volver a los espacios, paneles, pestañas y conversaciones de la última
+    /// vez. Sin poner = sí.
+    pub restaurar_sesion: Option<bool>,
     pub tema: Tema,
 }
 
 impl Config {
     pub fn autocompletado(&self) -> bool {
         self.autocompletado.unwrap_or(true)
+    }
+
+    pub fn restaurar_sesion(&self) -> bool {
+        self.restaurar_sesion.unwrap_or(true)
     }
 }
 
@@ -114,6 +121,7 @@ pub struct ConfigVista {
     fuente: String,
     autocompletado: bool,
     aviso_segundos: u32,
+    restaurar_sesion: bool,
     tema: Tema,
     perfiles: Vec<PerfilVista>,
 }
@@ -154,6 +162,7 @@ pub fn config() -> ConfigVista {
         fuente,
         autocompletado: config.autocompletado(),
         aviso_segundos: config.aviso_segundos.unwrap_or(10),
+        restaurar_sesion: config.restaurar_sesion(),
         perfiles,
         tema: config.tema,
     }

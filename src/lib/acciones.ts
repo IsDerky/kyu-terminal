@@ -4,6 +4,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { focoActual, useKyu } from "./estado";
 import { destruir } from "./terminales";
 import { destruirEditor } from "./editores";
+import { guardarSesion } from "./restaurar";
 
 /** Cierra una pestaña. Si es un archivo con cambios sin guardar, pregunta antes. */
 export async function cerrarItem(item: string, preguntar = true) {
@@ -23,7 +24,8 @@ export async function cerrarItem(item: string, preguntar = true) {
   else destruirEditor(item);
   useKyu.getState().quitarItem(item);
   // Sin espacios no queda nada que mostrar: se cierra la ventana, como cualquier terminal.
-  if (useKyu.getState().espacios.length === 0) void getCurrentWindow().close();
+  // Sin nada abierto, la próxima vez se empieza de cero.
+  if (useKyu.getState().espacios.length === 0) (guardarSesion(), void getCurrentWindow().close());
 }
 
 /** Cierra la pestaña activa del panel con el foco. */

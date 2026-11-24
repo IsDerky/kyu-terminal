@@ -15,6 +15,7 @@ import { focoActual, useKyu } from "./lib/estado";
 import { aplicarFuente, configurar, itemDePty, sesion } from "./lib/terminales";
 import { configurarEditores, editor } from "./lib/editores";
 import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
+import { restaurarSesion, vigilarSesion } from "./lib/restaurar";
 
 /**
  * Ctrl+Mayús+C: oculto → se abre con el cursor en la caja; abierto sin foco → le da el
@@ -48,13 +49,19 @@ export default function App() {
   useEffect(() => {
     void cerrarTodasPty();
     void cerrarTodasClaude();
-    leerConfig().then((c) => {
+    let dejar: (() => void) | null = null;
+    leerConfig().then(async (c) => {
       document.documentElement.style.setProperty("--font-mono", c.fuente);
       configurar(c);
       configurarEditores(c.fuente, c.tema.fuente_tamano);
+      const porDefecto = c.perfiles[0]?.nombre ?? "";
+      // Lo de la última vez; si no hay (o está apagado en Ajustes), un espacio nuevo.
+      const restaurada = c.restaurar_sesion && (await restaurarSesion(c.perfiles.map((p) => p.nombre), porDefecto).catch(() => false));
+      if (!restaurada) useKyu.getState().iniciar(porDefecto);
       setConfig(c);
-      useKyu.getState().iniciar(c.perfiles[0]?.nombre ?? "");
+      dejar = vigilarSesion();
     }, (e) => setError(String(e)));
+    return () => dejar?.();
   }, []);
 
   // Cuando una shell termina (exit), se cierra su pestaña.

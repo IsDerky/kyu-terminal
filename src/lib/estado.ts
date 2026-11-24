@@ -14,7 +14,8 @@ export type Direccion = "horizontal" | "vertical";
 
 export type Nodo =
   | { tipo: "panel"; id: string; items: string[]; activo: string | null }
-  | { tipo: "division"; id: string; dir: Direccion; hijos: Nodo[] };
+  // `tamanos`: % de cada hijo al montarla (al restaurar la sesión); luego los lleva el ratón.
+  | { tipo: "division"; id: string; dir: Direccion; hijos: Nodo[]; tamanos?: number[] };
 
 export interface Espacio {
   id: string;
@@ -63,7 +64,7 @@ interface Estado {
 }
 
 let contador = 0;
-const nuevoId = (prefijo: string) => `${prefijo}${++contador}`;
+export const nuevoId = (prefijo: string) => `${prefijo}${++contador}`;
 
 // ---------- Árbol ----------
 

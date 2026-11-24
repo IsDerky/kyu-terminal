@@ -8,6 +8,7 @@ import MenuPerfiles from "./MenuPerfiles";
 import { LogoKyu, Mascota } from "./iconos";
 import BotonGrabar from "./BotonGrabar";
 import { useClaude } from "../lib/claude";
+import { guardarSesion } from "../lib/restaurar";
 
 const ventana = getCurrentWindow();
 
@@ -201,7 +202,7 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
         <BotonVentana titulo="Maximizar" onClick={() => void ventana.toggleMaximize()}>
           <Square size={12} strokeWidth={1.8} />
         </BotonVentana>
-        <BotonVentana titulo="Cerrar" cerrar onClick={() => void ventana.close()}>
+        <BotonVentana titulo="Cerrar" cerrar onClick={() => (guardarSesion(), void ventana.close())}>
           <X size={15} strokeWidth={1.8} />
         </BotonVentana>
       </div>
