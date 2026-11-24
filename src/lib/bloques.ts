@@ -1,0 +1,186 @@
+// Bloques: cada orden con su título, resultado y duración.
+//
+// La shell marca los bloques con OSC 133 (el estándar de «shell integration»):
+//   A = empieza el prompt (aquí va el título), B = empieza lo que escribes,
+//   C = la orden empieza a ejecutarse, D;código = la orden ha terminado
+//   (con «;kyu-dur=ms» si la shell sabe lo que tardó).
+// Además manda OSC 7701 con un JSON: carpeta, rama y cambios de git.
+// La hora y lo que tarda la orden las mide Kyu; la RAM la da el núcleo.
+import type { IMarker, Terminal } from "@xterm/xterm";
+import { leerRam } from "./nucleo";
+
+export type Estado = "escribiendo" | "corre" | "ok" | "mal" | "vacio";
+
+export interface Bloque {
+  id: number;
+  /** Línea del título. */
+  inicio: IMarker;
+  /** Línea donde quedó el cursor al terminar (la salida acaba en la anterior). */
+  fin?: IMarker;
+  padre: string;
+  hoja: string;
+  rama: string | null;
+  cambios: number;
+  ram: number | null;
+  hora: string;
+  estado: Estado;
+  tInicio?: number;
+  durMs?: number;
+  codigo?: number;
+}
+
+interface DatosShell {
+  padre?: string;
+  hoja?: string;
+  rama?: string | null;
+  cambios?: number;
+}
+
+const horaAhora = () =>
+  new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+
+export class Bloques {
+  lista: Bloque[] = [];
+  private siguiente = 0;
+  private versionActual = 0;
+  private oyentes = new Set<() => void>();
+  private reloj: number | undefined;
+
+  constructor(private term: Terminal) {
+    term.parser.registerOscHandler(133, (d) => this.marca(d));
+    term.parser.registerOscHandler(7701, (d) => this.datos(d));
+    // cls / clear (borrar pantalla o historial): los bloques de antes ya no existen.
+    // Se devuelve false para que xterm borre igualmente.
+    term.parser.registerCsiHandler({ final: "J" }, (params) => {
+      const modo = params[0];
+      if (modo === 2 || modo === 3) this.vaciar();
+      return false;
+    });
+  }
+
+  private vaciar() {
+    const viejos = this.lista;
+    this.lista = [];
+    viejos.forEach((b) => {
+      b.inicio.dispose();
+      b.fin?.dispose();
+    });
+    this.avisar();
+  }
+
+  suscribir = (oyente: () => void) => {
+    this.oyentes.add(oyente);
+    return () => this.oyentes.delete(oyente);
+  };
+
+  version = () => this.versionActual;
+
+  private avisar() {
+    this.versionActual++;
+    this.oyentes.forEach((o) => o());
+  }
+
+  private get ultimo(): Bloque | undefined {
+    return this.lista[this.lista.length - 1];
+  }
+
+  private marca(datos: string): boolean {
+    const [tipo, arg, ...extra] = datos.split(";");
+    const ultimo = this.ultimo;
+    switch (tipo) {
+      case "A": {
+        // Un prompt que se abandonó (Intro vacío, Ctrl+C) queda como bloque vacío.
+        if (ultimo?.estado === "escribiendo") ultimo.estado = "vacio";
+        const inicio = this.term.registerMarker(0);
+        if (!inicio) return true;
+        const bloque: Bloque = {
+          id: this.siguiente++,
+          inicio,
+          padre: "",
+          hoja: "",
+          rama: null,
+          cambios: 0,
+          ram: null,
+          hora: horaAhora(),
+          estado: "escribiendo",
+        };
+        inicio.onDispose(() => {
+          this.lista = this.lista.filter((b) => b !== bloque);
+          this.avisar();
+        });
+        this.lista.push(bloque);
+        void leerRam().then((r) => {
+          if (r === null) return;
+          bloque.ram = Math.round(r);
+          this.avisar();
+        });
+        break;
+      }
+      case "C":
+        if (ultimo?.estado === "escribiendo") {
+          ultimo.estado = "corre";
+          ultimo.tInicio = performance.now();
+          this.arrancarReloj();
+        }
+        break;
+      case "D":
+        if (ultimo?.estado === "corre") {
+          const codigo = Number(arg ?? 0) || 0;
+          ultimo.codigo = codigo;
+          ultimo.estado = codigo === 0 ? "ok" : "mal";
+          // La shell sabe lo que tardó de verdad; si no lo manda, vale lo medido aquí
+          // (que incluye lo que tarda el prompt siguiente en aparecer).
+          const dur = extra.find((e) => e.startsWith("kyu-dur="));
+          ultimo.durMs = dur
+            ? Number(dur.slice(8))
+            : performance.now() - (ultimo.tInicio ?? performance.now());
+          ultimo.fin = this.term.registerMarker(0);
+        }
+        break;
+    }
+    this.avisar();
+    return true;
+  }
+
+  private datos(json: string): boolean {
+    const ultimo = this.ultimo;
+    if (!ultimo) return true;
+    try {
+      const d = JSON.parse(json) as DatosShell;
+      ultimo.padre = d.padre ?? "";
+      ultimo.hoja = d.hoja ?? "";
+      ultimo.rama = d.rama || null;
+      ultimo.cambios = d.cambios ?? 0;
+      this.avisar();
+    } catch {
+      // Datos mal formados: el título sale sin carpeta, no se rompe nada.
+    }
+    return true;
+  }
+
+  /** Mientras alguna orden corre, refresca cada segundo para que avance «ejecutando · N s». */
+  private arrancarReloj() {
+    if (this.reloj !== undefined) return;
+    this.reloj = window.setInterval(() => {
+      if (!this.lista.some((b) => b.estado === "corre")) {
+        window.clearInterval(this.reloj);
+        this.reloj = undefined;
+      }
+      this.avisar();
+    }, 1000);
+  }
+
+  dispose() {
+    if (this.reloj !== undefined) window.clearInterval(this.reloj);
+    this.oyentes.clear();
+  }
+}
+
+/** 0,2 s · 1 min 12 s · 1 h 3 min (como el prompt antiguo). */
+export function duracion(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1).replace(".", ",")} s`;
+  const min = Math.floor(s / 60);
+  if (min < 60) return `${min} min ${Math.floor(s % 60)} s`;
+  return `${Math.floor(min / 60)} h ${min % 60} min`;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -7,6 +7,8 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { abrirPty, cerrarPty, escribirPty, redimensionarPty, type ConfigVista } from "../lib/nucleo";
+import { Bloques } from "../lib/bloques";
+import CapaBloques from "./CapaBloques";
 
 interface Props {
   config: ConfigVista;
@@ -44,6 +46,7 @@ async function cargarFuente(familias: string, tamano: number) {
 
 export default function Terminal({ config, alCambiarTitulo, alAbrir }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
+  const [capa, setCapa] = useState<{ term: XTerm; bloques: Bloques } | null>(null);
 
   useEffect(() => {
     const div = contenedor.current!;
@@ -65,6 +68,8 @@ export default function Terminal({ config, alCambiarTitulo, alAbrir }: Props) {
     });
     // Para las pruebas automáticas (Playwright por CDP); no existe en release.
     if (import.meta.env.DEV) (window as unknown as { __kyu: XTerm }).__kyu = term;
+    // Antes de que llegue nada de la shell: las marcas de bloque vienen desde el primer prompt.
+    const bloques = new Bloques(term);
     const ajuste = new FitAddon();
     term.loadAddon(ajuste);
     term.loadAddon(new Unicode11Addon());
@@ -119,6 +124,7 @@ export default function Terminal({ config, alCambiarTitulo, alAbrir }: Props) {
       }
       ajuste.fit();
       observador.observe(div);
+      setCapa({ term, bloques });
 
       term.onTitleChange(alCambiarTitulo);
       const nuevoId = await abrirPty(term.cols, term.rows, (d) => term.write(d));
@@ -138,9 +144,23 @@ export default function Terminal({ config, alCambiarTitulo, alAbrir }: Props) {
       observador.disconnect();
       div.removeEventListener("contextmenu", menu);
       if (id !== null) void cerrarPty(id);
+      setCapa(null);
+      bloques.dispose();
       term.dispose();
     };
   }, [config, alCambiarTitulo, alAbrir]);
 
-  return <div ref={contenedor} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={contenedor} className="h-full w-full" />
+      {capa && (
+        <CapaBloques
+          term={capa.term}
+          bloques={capa.bloques}
+          fuente={config.fuente}
+          tamano={config.tema.fuente_tamano}
+        />
+      )}
+    </div>
+  );
 }

@@ -1,29 +1,26 @@
 # Prompt de Kyu para PowerShell. Kyu lo carga después del perfil, así que sustituye
 # al prompt que haya (oh-my-posh, starship…) solo dentro de Kyu.
 #
-#   ╭─ ~\Aleks\kyu-terminal  main ±2                01:52
-#   │ › git status -sb
+# El prompt no dibuja nada: deja una línea vacía para el título y dos espacios para la
+# flecha, y marca el bloque con OSC 133 para que Kyu pinte encima:
+#
+#   kyu-terminal ~\Aleks  [rama tauri ±3] [RAM 59 %]           ✓ 0,2 s   10:42
+#   › git log --oneline -3
 #   ...salida...
-#   ╰─ ✓ 0,1 s
+#
+#   A = empieza el prompt (título)   B = empieza lo que escribes
+#   C = empieza a ejecutarse         D;código;kyu-dur=ms = ha terminado (y lo que tardó)
+#   7701;{json} = carpeta y git del bloque
 
-# Windows PowerShell 5.1 escribe en la página de códigos OEM: sin esto los marcos salen como «?».
+# Windows PowerShell 5.1 escribe en la página de códigos OEM: sin esto los acentos se rompen.
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $OutputEncoding = [Console]::OutputEncoding
 
-# UltimoId = 'inicio' → el primer prompt no pinta pie (sería el de cargar este script).
-$global:__kyu = @{ UltimoId = 'inicio'; Pie = ''; Transitorio = $false }
+# UltimoId = 'inicio' → el primer prompt no cierra ningún bloque (sería el de cargar este script).
+$global:__kyu = @{ UltimoId = 'inicio' }
 
-function global:__KyuColor([string]$hex) {
-    $r = [Convert]::ToInt32($hex.Substring(0, 2), 16)
-    $g = [Convert]::ToInt32($hex.Substring(2, 2), 16)
-    $b = [Convert]::ToInt32($hex.Substring(4, 2), 16)
-    "$([char]27)[38;2;${r};${g};${b}m"
-}
-
-function global:__KyuDuracion([TimeSpan]$t) {
-    if ($t.TotalSeconds -lt 60) { return ('{0:0.0} s' -f $t.TotalSeconds).Replace('.', ',') }
-    if ($t.TotalMinutes -lt 60) { return '{0} min {1} s' -f [int][Math]::Floor($t.TotalMinutes), $t.Seconds }
-    '{0} h {1} min' -f [int][Math]::Floor($t.TotalHours), $t.Minutes
+function global:__KyuOsc([string]$datos) {
+    "$([char]27)]$datos$([char]7)"
 }
 
 function global:__KyuRuta {
@@ -51,65 +48,42 @@ function global:__KyuGit {
 function global:prompt {
     $ok = $?
     $codigo = $global:LASTEXITCODE
-    $e = [char]27
-    $fin = "$e[0m"
-    $morado = __KyuColor 'c4b5fd'; $tenue = __KyuColor '8b8b96'; $muy = __KyuColor '55555e'
-    $cian = __KyuColor '67e8f9'; $ambar = __KyuColor 'fbbf24'; $verde = __KyuColor '4ade80'; $rojo = __KyuColor 'f87171'
 
-    # Al pulsar Enter, PSReadLine solo redibuja la última línea del prompt.
-    if ($global:__kyu.Transitorio) {
-        return "$morado│$fin $morado›$fin "
-    }
-
-    # Pie del comando anterior (solo si de verdad se ejecutó algo).
-    $global:__kyu.Pie = ''
+    # Cierre del bloque anterior, solo si de verdad se ejecutó algo.
+    $cierre = ''
     $h = Get-History -Count 1
     if ($global:__kyu.UltimoId -eq 'inicio') {
         $global:__kyu.UltimoId = if ($h) { $h.Id } else { $null }
     } elseif ($h -and $h.Id -ne $global:__kyu.UltimoId) {
         $global:__kyu.UltimoId = $h.Id
-        $dur = __KyuDuracion ($h.EndExecutionTime - $h.StartExecutionTime)
-        if ($ok) {
-            $global:__kyu.Pie = "$verde╰─ ✓ $muy$dur$fin`n`n"
-        } else {
-            $num = if ($codigo) { " $codigo" } else { '' }
-            $global:__kyu.Pie = "$rojo╰─ ✕$num $ambar$dur$fin`n`n"
-        }
+        $num = if ($ok) { 0 } elseif ($codigo) { $codigo } else { 1 }
+        # Lo que tardó de verdad (sin contar este prompt, que pregunta a git).
+        $ms = [int]($h.EndExecutionTime - $h.StartExecutionTime).TotalMilliseconds
+        $cierre = __KyuOsc "133;D;$num;kyu-dur=$ms"
     }
 
     $padre, $hoja = __KyuRuta
-    $izq = "╭─ $padre$hoja"
-    $izqColor = "$morado╭─$fin $tenue$padre$fin$morado$e[1m$hoja$e[22m$fin"
+    $datos = @{ padre = $padre; hoja = $hoja; rama = $null; cambios = 0 }
     $git = __KyuGit
-    if ($git) {
-        $rama, $cambios = $git
-        $izq += "  $([char]0xE0A0) $rama"
-        $izqColor += "  $cian$([char]0xE0A0) $rama$fin"
-        if ($cambios) { $izq += " ±$cambios"; $izqColor += " $ambar±$cambios$fin" }
-    }
-    $hora = Get-Date -Format 'HH:mm'
-    $ancho = $Host.UI.RawUI.WindowSize.Width
-    $hueco = [Math]::Max(2, $ancho - $izq.Length - $hora.Length - 1)
-    $cabecera = $izqColor + (' ' * $hueco) + "$muy$hora$fin"
+    if ($git) { $datos.rama, $datos.cambios = $git }
+    $json = ConvertTo-Json $datos -Compress
 
     $Host.UI.RawUI.WindowTitle = $hoja
     # Kyu lee aquí la carpeta actual (para arrancar Claude en ella).
     if ($env:KYU_ESTADO) { [IO.File]::WriteAllText($env:KYU_ESTADO, $PWD.ProviderPath) }
     $global:LASTEXITCODE = $codigo
-    "$($global:__kyu.Pie)$cabecera`n$morado╰─$fin $morado›$fin "
+
+    # Línea en blanco de separación, línea del título (vacía) y dos espacios para la flecha.
+    "$cierre`n$(__KyuOsc '133;A')$(__KyuOsc "7701;$json")`n  $(__KyuOsc '133;B')"
 }
 
-# Al pulsar Enter, el «╰─ ›» del prompt pasa a «│ ›»: el bloque queda abierto hasta su pie.
 if (Get-Module PSReadLine) {
+    # Al pulsar Intro con algo escrito, Kyu empieza a contar lo que tarda la orden.
     Set-PSReadLineKeyHandler -Key Enter -ScriptBlock {
         $linea = $null; $cursor = $null
         [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$linea, [ref]$cursor)
-        if ($linea.Trim()) {
-            $global:__kyu.Transitorio = $true
-            [Microsoft.PowerShell.PSConsoleReadLine]::InvokePrompt()
-            $global:__kyu.Transitorio = $false
-        }
         [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
+        if ($linea.Trim()) { [Console]::Write((__KyuOsc '133;C')) }
     }
 
     # Sugerencia en gris mientras escribes, sacada del historial (→ o Fin la acepta).

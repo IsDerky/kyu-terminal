@@ -39,6 +39,9 @@ export const redimensionarPty = (id: number, columnas: number, filas: number) =>
 
 export const cerrarPty = (id: number) => invoke("pty_cerrar", { id });
 
+/** RAM del equipo en uso, en %; null si no se puede leer. */
+export const leerRam = () => invoke<number | null>("ram_uso");
+
 /** Avisa cuando la shell `id` termina (el usuario escribió `exit`, se cerró…). */
 export const alTerminarPty = (alTerminar: (id: number) => void): Promise<UnlistenFn> =>
   listen<number>("pty:fin", (e) => alTerminar(e.payload));
