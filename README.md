@@ -2,7 +2,7 @@
 
 Terminal para Windows y Linux escrita en Rust, con Claude Code integrado.
 
-Estado: en desarrollo, fase 0. Ya abre una shell de verdad en una ventana propia; el panel de Claude llega en la fase 2.
+Estado: en desarrollo. Fases 0 y 2 hechas: shell en ventana propia y panel de Claude Code.
 
 ## Qué hace ahora
 
@@ -12,6 +12,7 @@ Estado: en desarrollo, fase 0. Ya abre una shell de verdad en una ventana propia
 - AltGr funciona en teclados como el español (`\ @ # [ ] { } €`).
 - Prompt propio para PowerShell: cada comando va dentro de un marco con carpeta, rama de git, hora y, al acabar, el resultado y lo que tardó.
 - Usa la primera Nerd Font que encuentre instalada.
+- Panel de Claude Code a la derecha (Ctrl+Mayús+C). Arranca en la carpeta de la terminal, enseña las herramientas que usa y pide los permisos con botones (Permitir, Denegar, Siempre). Con el panel oculto, los permisos y el «he terminado» salen como aviso flotante. La barra de abajo muestra estado, modelo, contexto y coste.
 
 ## Compilar
 
@@ -45,6 +46,7 @@ shell = "pwsh.exe"           # por defecto PowerShell / $SHELL
 argumentos = ["-NoLogo"]
 fuente = "C:/ruta/a/fuente.ttf"
 sin_prompt = false           # true = dejar el prompt de tu perfil (oh-my-posh, starship...)
+claude = "C:/ruta/claude.exe"  # por defecto se busca en el PATH
 
 [tema]
 fuente_tamano = 14.0
@@ -58,9 +60,9 @@ seleccion = "#3a2f5c"
 
 | Fase | Qué |
 |---|---|
-| 0 | Ventana, shell, tema, copiar y pegar, prompt |
+| 0 | Ventana, shell, tema, copiar y pegar, prompt (hecha) |
 | 1 | Pestañas, perfiles (pwsh, Git Bash, WSL, SSH), búsqueda, enlaces clicables |
-| 2 | Panel de Claude Code (stream-json), permisos como botones, barra de estado, avisos |
+| 2 | Panel de Claude Code (stream-json), permisos como botones, barra de estado, avisos (hecha) |
 | 3 | Bloques por comando y «enviar a Claude» |
 | 4 | Claude ejecuta en un panel visible a través de un servidor MCP propio |
 | 5 | Paneles divididos, aviso al terminar, grabar sesión a GIF |

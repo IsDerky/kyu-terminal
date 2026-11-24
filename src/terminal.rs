@@ -27,6 +27,20 @@ impl EventListener for Aviso {
     }
 }
 
+/// Archivo donde el prompt deja la carpeta actual de la shell de esta ventana.
+fn archivo_estado() -> std::path::PathBuf {
+    let carpeta = std::env::temp_dir().join("kyu");
+    let _ = std::fs::create_dir_all(&carpeta);
+    carpeta.join(format!("{}.cwd", std::process::id()))
+}
+
+/// Carpeta actual de la shell, si el prompt la ha apuntado.
+pub fn carpeta_actual() -> Option<std::path::PathBuf> {
+    let texto = std::fs::read_to_string(archivo_estado()).ok()?;
+    let ruta = std::path::PathBuf::from(texto.trim());
+    ruta.is_dir().then_some(ruta)
+}
+
 pub struct Terminal {
     pub term: Arc<FairMutex<Term<Aviso>>>,
     notificador: Notifier,
@@ -48,10 +62,16 @@ impl Terminal {
         let opciones = tty::Options {
             shell: Some(tty::Shell::new(shell.clone(), argumentos.clone())),
             working_directory: dirs::home_dir(),
-            env: [(
-                "KYU_TERMINAL".to_string(),
-                env!("CARGO_PKG_VERSION").to_string(),
-            )]
+            env: [
+                (
+                    "KYU_TERMINAL".to_string(),
+                    env!("CARGO_PKG_VERSION").to_string(),
+                ),
+                (
+                    "KYU_ESTADO".to_string(),
+                    archivo_estado().to_string_lossy().into_owned(),
+                ),
+            ]
             .into(),
             #[cfg(windows)]
             escape_args: true,

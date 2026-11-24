@@ -1,15 +1,19 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod claude;
+mod panel;
 mod tema;
 mod terminal;
 mod vista;
 
+use panel::Panel;
 use tema::Config;
 use terminal::Terminal;
 
 struct Kyu {
     config: Config,
     terminal: Terminal,
+    panel: Panel,
 }
 
 impl Kyu {
@@ -26,9 +30,15 @@ impl Kyu {
             }
             cc.egui_ctx.set_fonts(fuentes);
         }
+        cc.egui_ctx.set_visuals(visuales());
         let terminal = Terminal::nueva(cc.egui_ctx.clone(), &config.shell_elegida())
             .expect("no se pudo arrancar la shell");
-        Self { config, terminal }
+        let panel = Panel::new(config.claude.clone());
+        Self {
+            config,
+            terminal,
+            panel,
+        }
     }
 }
 
@@ -36,6 +46,7 @@ impl eframe::App for Kyu {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.terminal.atender_eventos();
+        self.panel.atender_eventos();
         if self.terminal.cerrada() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
@@ -43,7 +54,14 @@ impl eframe::App for Kyu {
         if let Some(titulo) = self.terminal.titulo_nuevo() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!("{titulo} · Kyu")));
         }
+        if ctx.input_mut(|i| {
+            i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::C)
+        }) {
+            self.panel.alternar(&ctx);
+        }
 
+        self.panel.barra_estado(ui);
+        self.panel.mostrar(ui);
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::NONE
@@ -53,7 +71,20 @@ impl eframe::App for Kyu {
             .show(ui, |ui| {
                 vista::dibujar(ui, &mut self.terminal, &self.config.tema);
             });
+        self.panel.avisos(&ctx);
     }
+}
+
+/// Colores de egui para lo que no es la rejilla (panel de Claude, botones, código).
+fn visuales() -> egui::Visuals {
+    use egui::Color32;
+    let mut v = egui::Visuals::dark();
+    v.code_bg_color = Color32::from_rgb(0x22, 0x1c, 0x35);
+    v.extreme_bg_color = Color32::from_rgb(0x0f, 0x0d, 0x18);
+    v.hyperlink_color = Color32::from_rgb(0xc4, 0x8b, 0xff);
+    v.selection.bg_fill = Color32::from_rgb(0x3a, 0x2f, 0x5c);
+    v.override_text_color = Some(Color32::from_rgb(0xd9, 0xd4, 0xea));
+    v
 }
 
 fn main() -> eframe::Result<()> {

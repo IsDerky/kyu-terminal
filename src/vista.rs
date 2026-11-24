@@ -22,8 +22,16 @@ pub fn dibujar(ui: &mut egui::Ui, terminal: &mut Terminal, tema: &Tema) {
     let lineas = (zona.height() / celda.y).floor().max(1.0) as u16;
     terminal.redimensionar(columnas, lineas, celda.x as u16, celda.y as u16);
 
+    // El teclado es del terminal salvo que otro control (la caja de Claude) tenga el foco.
+    if respuesta.clicked() || respuesta.drag_started() || respuesta.secondary_clicked() {
+        respuesta.request_focus();
+    }
+    let con_foco = ui
+        .ctx()
+        .memory(|m| m.focused().is_none_or(|id| id == respuesta.id));
+
     raton(ui, &respuesta, &mut *terminal, celda, columnas, lineas);
-    teclado(ui, terminal);
+    teclado(ui, terminal, con_foco, respuesta.hovered());
 
     let term = terminal.term.lock();
     let contenido = term.renderable_content();
@@ -274,23 +282,17 @@ fn copiar_o_cortar(ui: &egui::Ui, terminal: &Terminal) {
     }
 }
 
-fn teclado(ui: &egui::Ui, terminal: &Terminal) {
+fn teclado(ui: &egui::Ui, terminal: &Terminal, con_foco: bool, encima: bool) {
     let modo = terminal.modo();
     let app_cursor = modo.contains(TermMode::APP_CURSOR);
     let eventos = ui.input(|i| i.events.clone());
 
     for evento in eventos {
+        let es_raton = matches!(evento, egui::Event::MouseWheel { .. });
+        if (es_raton && !encima) || (!es_raton && !con_foco) {
+            continue;
+        }
         match evento {
-            egui::Event::Key {
-                key: Key::C,
-                pressed: true,
-                modifiers,
-                ..
-            } if modifiers.ctrl && modifiers.shift => {
-                if let Some(texto) = terminal.seleccion() {
-                    ui.ctx().copy_text(texto);
-                }
-            }
             egui::Event::Key {
                 key: Key::V,
                 pressed: true,

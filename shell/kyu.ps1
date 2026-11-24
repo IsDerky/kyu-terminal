@@ -93,6 +93,8 @@ function global:prompt {
     $cabecera = $izqColor + (' ' * $hueco) + "$muy$hora$fin"
 
     $Host.UI.RawUI.WindowTitle = $hoja
+    # Kyu lee aquí la carpeta actual (para arrancar Claude en ella).
+    if ($env:KYU_ESTADO) { [IO.File]::WriteAllText($env:KYU_ESTADO, $PWD.ProviderPath) }
     $global:LASTEXITCODE = $codigo
     "$($global:__kyu.Pie)$cabecera`n$morado╰─$fin $morado›$fin "
 }
