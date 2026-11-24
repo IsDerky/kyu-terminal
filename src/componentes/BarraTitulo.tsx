@@ -6,6 +6,7 @@ import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
 import MenuPerfiles from "./MenuPerfiles";
 import { LogoKyu, Mascota } from "./iconos";
+import BotonGrabar from "./BotonGrabar";
 import { useClaude } from "../lib/claude";
 
 const ventana = getCurrentWindow();
@@ -146,6 +147,8 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
       </div>
 
       <div data-tauri-drag-region className="h-full flex-1" />
+
+      <BotonGrabar />
 
       <button
         type="button"

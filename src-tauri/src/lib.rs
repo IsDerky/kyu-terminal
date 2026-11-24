@@ -7,6 +7,7 @@ mod archivos;
 mod autocompletar;
 mod claude;
 mod config;
+mod grabar;
 mod mcp;
 mod pty;
 mod sistema;
@@ -20,6 +21,7 @@ pub fn run() {
         .manage(pty::Ptys::default())
         .manage(sistema::Sistema::default())
         .manage(claude::Claudes::default())
+        .manage(grabar::Grabadora::default())
         .setup(|app| {
             use tauri::Manager;
             // Servidor MCP para el Claude del panel (None si no se pudo abrir el puerto).
@@ -50,6 +52,8 @@ pub fn run() {
             claude::claude_cerrar,
             claude::claude_cerrar_todas,
             mcp::mcp_responder,
+            grabar::grabar_empezar,
+            grabar::grabar_parar,
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar Kyu");

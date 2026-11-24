@@ -9,6 +9,7 @@ import Ajustes from "./componentes/Ajustes";
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
 import { limpiar, useClaude } from "./lib/claude";
 import { escucharMcp } from "./lib/mcp";
+import { alternarGrabacion } from "./lib/grabar";
 import { focoActual, useKyu } from "./lib/estado";
 import { aplicarFuente, configurar, itemDePty, sesion } from "./lib/terminales";
 import { configurarEditores, editor } from "./lib/editores";
@@ -94,6 +95,7 @@ export default function App() {
           case "KeyW": hecho(); cerrarActual(); return;
           case "Tab": hecho(); k.siguientePestana(-1); return;
           case "KeyC": hecho(); alternarClaude(); return;
+          case "KeyG": hecho(); void alternarGrabacion(); return;
         }
       }
       if (e.ctrlKey && !e.shiftKey && !e.altKey) {

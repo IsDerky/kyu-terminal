@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { Clapperboard, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
 import { textoBloque } from "../lib/bloques";
 import { adjuntar } from "../lib/claude";
 import { sesion } from "../lib/terminales";
 import { ID_ENTRADA } from "./PanelClaude";
+import { alternarGrabacion } from "../lib/grabar";
 import type { ConfigVista, Perfil } from "../lib/nucleo";
 import { nombreEspacio } from "./BarraTitulo";
 import { IconoPerfil } from "./iconos";
@@ -64,6 +65,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
           requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
         },
       },
+      { id: "gif", grupo: "Kyu", titulo: "Grabar el panel a GIF", detalle: "empezar o parar", atajo: "Ctrl+Mayús+G", icono: Clapperboard, hacer: () => void alternarGrabacion() },
       { id: "ajustes", grupo: "Kyu", titulo: "Ajustes", atajo: "Ctrl+,", icono: SlidersHorizontal, hacer: () => k.ponerAjustes(true) },
       { id: "buscar", grupo: "Paneles", titulo: "Buscar en el terminal", atajo: "Ctrl+F", icono: Search, hacer: () => f?.item?.tipo === "terminal" && k.ponerBuscando(f.item.id) },
       ...config.perfiles.map<Orden>((p, i) => ({
