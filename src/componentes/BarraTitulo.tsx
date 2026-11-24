@@ -5,7 +5,7 @@ import { paneles, useKyu, type Espacio } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
 import MenuPerfiles from "./MenuPerfiles";
-import { Mascota } from "./iconos";
+import { LogoKyu, Mascota } from "./iconos";
 import { useClaude } from "../lib/claude";
 
 const ventana = getCurrentWindow();
@@ -46,7 +46,7 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
   return (
     <header data-tauri-drag-region className="flex h-10 flex-none items-center border-b border-borde bg-barra">
       <div data-tauri-drag-region className="flex items-center gap-2 pl-3.5 pr-3 font-mono text-[13px] font-bold">
-        <span className="grid size-[18px] place-items-center rounded-[5px] bg-texto text-[11px] text-fondo">k</span>
+        <LogoKyu size={20} />
         kyu
       </div>
 
