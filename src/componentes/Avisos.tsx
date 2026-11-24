@@ -1,0 +1,167 @@
+import { useEffect } from "react";
+import { Check, ShieldAlert, X } from "lucide-react";
+import { pendiente, responder, useClaude, type AvisoFin } from "../lib/claude";
+import { useKyu } from "../lib/estado";
+import { herramienta, partirRuta, relativa } from "../lib/herramientas";
+import { nombreEspacio } from "./BarraTitulo";
+import { ID_ENTRADA } from "./PanelClaude";
+import { Mascota } from "./iconos";
+
+const DURACION_FIN = 8000;
+
+/** Abre el panel de Claude en ese espacio con el cursor en la caja. */
+function ver(espacio: string) {
+  const k = useKyu.getState();
+  if (k.activo !== espacio) k.cambiarEspacio(espacio);
+  useClaude.getState().mostrar(true);
+  requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
+}
+
+/**
+ * Avisos flotantes de Claude cuando el panel no enseña su conversación (oculto o en otro
+ * espacio): permisos pendientes, que se contestan desde aquí, y turnos terminados.
+ */
+export default function Avisos() {
+  const visible = useClaude((s) => s.visible);
+  const conversaciones = useClaude((s) => s.conversaciones);
+  const avisos = useClaude((s) => s.avisos);
+  const activo = useKyu((s) => s.activo);
+  const espacios = useKyu((s) => s.espacios);
+
+  const muestra = (espacio: string) => visible && activo === espacio;
+  const nombre = (espacio: string) => {
+    const esp = espacios.find((e) => e.id === espacio);
+    return espacios.length > 1 && esp ? nombreEspacio(esp) : null;
+  };
+
+  const permisos = espacios.flatMap((esp) => {
+    const c = conversaciones[esp.id];
+    const p = pendiente(c);
+    return p && !muestra(esp.id) ? [{ espacio: esp.id, p, carpeta: c!.carpeta }] : [];
+  });
+  const fines = avisos.filter((a) => !muestra(a.espacio) && espacios.some((e) => e.id === a.espacio));
+
+  // Lo que ya se ve en el panel no hace falta avisarlo.
+  useEffect(() => {
+    const vistos = avisos.filter((a) => muestra(a.espacio) || !espacios.some((e) => e.id === a.espacio));
+    for (const a of vistos) useClaude.getState().quitarAviso(a.id);
+  });
+
+  if (!permisos.length && !fines.length) return null;
+  return (
+    <div
+      className="pointer-events-none absolute bottom-3 z-40 flex w-[330px] flex-col gap-2"
+      style={{ right: visible ? 380 + 20 : 12 }}
+    >
+      {permisos.map(({ espacio, p, carpeta }) => {
+        const [accion] = herramienta(p.herramienta);
+        const resumen = relativa(p.resumen, carpeta);
+        const ruta = partirRuta(p.herramienta, resumen);
+        return (
+          <Recuadro key={p.id} espacio={nombre(espacio)} onCerrar={null}>
+            <div className="flex min-w-0 items-start gap-2 text-[12.5px]">
+              <ShieldAlert size={14} strokeWidth={1.8} className="mt-0.5 flex-none text-aviso" />
+              <span className="min-w-0">
+                Quiere usar <b className="font-semibold">{accion}</b>{" "}
+                {ruta ? (
+                  <>
+                    <span className="font-mono text-[12px]">{ruta[0]}</span>
+                    {ruta[1] && <span className="block truncate font-mono text-[11px] text-muy">{ruta[1]}</span>}
+                  </>
+                ) : (
+                  <span className="line-clamp-2 break-all font-mono text-[11.5px] text-tenue">{resumen}</span>
+                )}
+              </span>
+            </div>
+            <div className="mt-2.5 flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => void responder(espacio, p.id, "permitir")}
+                className="flex h-7 items-center gap-1.5 rounded-md border border-claude bg-claude px-2.5 text-[12px] font-medium text-white hover:brightness-110"
+              >
+                <Check size={13} /> Permitir
+              </button>
+              <button
+                type="button"
+                onClick={() => void responder(espacio, p.id, "denegar")}
+                className="h-7 rounded-md border border-borde2 px-2.5 text-[12px] text-tenue hover:bg-hover hover:text-texto"
+              >
+                Denegar
+              </button>
+              <button
+                type="button"
+                onClick={() => ver(espacio)}
+                className="ml-auto h-7 rounded-md px-2.5 text-[12px] text-tenue hover:bg-hover hover:text-texto"
+              >
+                Ver detalle
+              </button>
+            </div>
+          </Recuadro>
+        );
+      })}
+      {fines.map((a) => (
+        <AvisoTerminado key={a.id} aviso={a} espacio={nombre(a.espacio)} />
+      ))}
+    </div>
+  );
+}
+
+function AvisoTerminado({ aviso: a, espacio }: { aviso: AvisoFin; espacio: string | null }) {
+  const quitar = () => useClaude.getState().quitarAviso(a.id);
+  useEffect(() => {
+    const t = setTimeout(quitar, DURACION_FIN);
+    return () => clearTimeout(t);
+  }, []);
+  const segundos = (a.duracion / 1000).toLocaleString("es-ES", { maximumFractionDigits: a.duracion < 10_000 ? 1 : 0 });
+  return (
+    <Recuadro espacio={espacio} onCerrar={quitar} onClick={() => ver(a.espacio)}>
+      <div className="flex items-center gap-1.5 text-[12.5px]">
+        {a.error ? <X size={13} className="text-mal" /> : <Check size={13} className="text-ok" />}
+        <span className="font-medium">{a.error ? "Ha terminado con un error" : "Ha terminado"}</span>
+        <span className="text-muy">· {segundos} s</span>
+      </div>
+      {a.texto && <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-tenue">{a.texto}</p>}
+    </Recuadro>
+  );
+}
+
+function Recuadro({
+  espacio,
+  onCerrar,
+  onClick,
+  children,
+}: {
+  espacio: string | null;
+  onCerrar: (() => void) | null;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className={`aviso-entra pointer-events-auto rounded-[10px] border border-claude/40 bg-panel px-3 pb-2.5 pt-2 shadow-[0_0_0_3px_#d977570a,0_16px_40px_-12px_#000000cc] ${
+        onClick ? "cursor-pointer hover:border-claude/60" : ""
+      }`}
+    >
+      <div className="mb-1.5 flex items-center gap-2 text-[11.5px] text-tenue">
+        <Mascota alto={12} />
+        <span className="font-semibold text-texto">Claude</span>
+        {espacio && <span className="truncate">· {espacio}</span>}
+        {onCerrar && (
+          <button
+            type="button"
+            title="Cerrar"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCerrar();
+            }}
+            className="-mr-1 ml-auto grid size-5 place-items-center rounded text-muy hover:bg-hover hover:text-texto"
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}

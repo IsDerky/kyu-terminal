@@ -16,7 +16,17 @@ export type Entrada =
   | { id: number; tipo: "tu"; texto: string }
   | { id: number; tipo: "claude"; texto: string; enCurso: boolean }
   | { id: number; tipo: "herramienta"; idHerramienta: string; nombre: string; resumen: string; estado: "ejecutando" | "ok" | "error" }
-  | { id: number; tipo: "permiso"; idPeticion: string; herramienta: string; resumen: string; input: unknown; respuesta: Respuesta | null }
+  | {
+      id: number;
+      tipo: "permiso";
+      idPeticion: string;
+      herramienta: string;
+      resumen: string;
+      input: unknown;
+      respuesta: Respuesta | null;
+      /** Lo que se le dijo a Claude al denegar. */
+      mensaje?: string;
+    }
   | { id: number; tipo: "error"; texto: string };
 
 export type Respuesta = "permitir" | "siempre" | "denegar";
@@ -43,10 +53,21 @@ export interface Conversacion {
   duracion: number;
 }
 
+/** Aviso flotante de un turno terminado, cuando el panel no lo muestra. */
+export interface AvisoFin {
+  id: number;
+  espacio: string;
+  texto: string;
+  error: boolean;
+  duracion: number;
+}
+
 interface EstadoClaude {
   visible: boolean;
   conversaciones: Record<string, Conversacion>;
+  avisos: AvisoFin[];
   mostrar: (visible: boolean) => void;
+  quitarAviso: (id: number) => void;
 }
 
 const vacia = (): Conversacion => ({
@@ -65,8 +86,17 @@ const vacia = (): Conversacion => ({
 export const useClaude = create<EstadoClaude>((set) => ({
   visible: false,
   conversaciones: {},
+  avisos: [],
   mostrar: (visible) => set({ visible }),
+  quitarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));
+
+/** ¿El panel está enseñando ahora la conversación de este espacio? */
+export const panelMuestra = (espacio: string) => useClaude.getState().visible && useKyu.getState().activo === espacio;
+
+/** El primer permiso sin contestar de la conversación. */
+export const pendiente = (c: Conversacion | undefined) =>
+  c?.entradas.find((e): e is Extract<Entrada, { tipo: "permiso" }> => e.tipo === "permiso" && !e.respuesta);
 
 export const conversacion = (espacio: string) => useClaude.getState().conversaciones[espacio] ?? vacia();
 
@@ -150,6 +180,17 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       cambiar(espacio, () => ({ tokens: ev.tokens }));
       return;
     case "fin":
+      if (!panelMuestra(espacio)) {
+        const c = conversacion(espacio);
+        const ultimo = [...c.entradas].reverse().find((e) => e.tipo === "claude");
+        const texto = (ultimo?.tipo === "claude" ? ultimo.texto : "").replace(/[#*`_>]/g, "").trim().split("\n")[0] ?? "";
+        useClaude.setState((s) => ({
+          avisos: [
+            ...s.avisos.filter((a) => a.espacio !== espacio),
+            { id: ++contador, espacio, texto: texto.slice(0, 140), error: ev.error, duracion: ev.duracion },
+          ],
+        }));
+      }
       cambiar(espacio, (c) => ({
         estado: "listo",
         coste: ev.coste,
@@ -189,15 +230,17 @@ export async function enviar(espacio: string, texto: string) {
   }
 }
 
-export async function responder(espacio: string, entrada: number, respuesta: Respuesta) {
+/** Al denegar, `mensaje` le dice a Claude qué hacer en su lugar. */
+export async function responder(espacio: string, entrada: number, respuesta: Respuesta, mensaje?: string) {
   const c = conversacion(espacio);
   const e = c.entradas.find((x) => x.id === entrada);
   if (c.claudeId === null || e?.tipo !== "permiso" || e.respuesta) return;
+  const nota = respuesta === "denegar" ? mensaje?.trim() || undefined : undefined;
   cambiar(espacio, (c) => ({
-    entradas: c.entradas.map((x) => (x.id === entrada && x.tipo === "permiso" ? { ...x, respuesta } : x)),
+    entradas: c.entradas.map((x) => (x.id === entrada && x.tipo === "permiso" ? { ...x, respuesta, mensaje: nota } : x)),
   }));
   try {
-    await responderClaude(c.claudeId, e.idPeticion, respuesta);
+    await responderClaude(c.claudeId, e.idPeticion, respuesta, nota);
   } catch (err) {
     añadir(espacio, { tipo: "error", texto: String(err) });
   }

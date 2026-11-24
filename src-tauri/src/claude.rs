@@ -185,13 +185,15 @@ pub fn claude_enviar(claudes: State<'_, Claudes>, id: u32, texto: String) -> Res
     })
 }
 
-/// `respuesta`: "permitir", "siempre" o "denegar".
+/// `respuesta`: "permitir", "siempre" o "denegar". Al denegar, `mensaje` le dice a Claude
+/// qué hacer en su lugar (como «No, y dile qué hacer» en `claude`).
 #[tauri::command]
 pub fn claude_responder(
     claudes: State<'_, Claudes>,
     id: u32,
     id_peticion: String,
     respuesta: String,
+    mensaje: Option<String>,
 ) -> Result<(), String> {
     con_sesion(&claudes, id, |s| {
         let (input, sugerencias) = s
@@ -207,7 +209,13 @@ pub fn claude_responder(
                 "updatedInput": input,
                 "updatedPermissions": sugerencias,
             }),
-            _ => json!({ "behavior": "deny", "message": "Denegado desde Kyu" }),
+            _ => {
+                let motivo = match mensaje.as_deref().map(str::trim) {
+                    Some(m) if !m.is_empty() => format!("El usuario lo ha denegado y dice: {m}"),
+                    _ => "El usuario lo ha denegado desde Kyu.".to_string(),
+                };
+                json!({ "behavior": "deny", "message": motivo })
+            }
         };
         s.escribir(json!({
             "type": "control_response",

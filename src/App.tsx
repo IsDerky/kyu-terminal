@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import Avisos from "./componentes/Avisos";
 import BarraTitulo, { nombreEspacio } from "./componentes/BarraTitulo";
 import Espacio from "./componentes/Espacio";
 import Paleta from "./componentes/Paleta";
@@ -119,6 +120,7 @@ export default function App() {
         {espacio && <Espacio key={espacio.id} espacio={espacio} config={config} />}
         {espacio && claudeVisible && <PanelClaude key={`claude-${espacio.id}`} espacio={espacio.id} />}
       </div>
+      <Avisos />
       {paleta && <Paleta config={config} />}
     </div>
   );

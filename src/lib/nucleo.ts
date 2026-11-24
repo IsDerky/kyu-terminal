@@ -101,8 +101,13 @@ export function abrirClaude(carpeta: string | null, alEvento: (e: EventoClaude) 
 
 export const enviarClaude = (id: number, texto: string) => invoke("claude_enviar", { id, texto });
 
-export const responderClaude = (id: number, idPeticion: string, respuesta: "permitir" | "siempre" | "denegar") =>
-  invoke("claude_responder", { id, idPeticion, respuesta });
+/** Al denegar, `mensaje` le dice a Claude qué hacer en su lugar. */
+export const responderClaude = (
+  id: number,
+  idPeticion: string,
+  respuesta: "permitir" | "siempre" | "denegar",
+  mensaje?: string,
+) => invoke("claude_responder", { id, idPeticion, respuesta, mensaje: mensaje ?? null });
 
 export const pararClaude = (id: number) => invoke("claude_parar", { id });
 

@@ -1,66 +1,24 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  ArrowUp,
-  Bot,
-  Check,
-  FilePen,
-  FileText,
-  FolderOpen,
-  Globe,
-  ListTodo,
-  Loader2,
-  Search,
-  ShieldAlert,
-  Square,
-  SquarePen,
-  Terminal,
-  Wrench,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowUp, Check, FolderOpen, Loader2, Square, SquarePen, X } from "lucide-react";
 import {
   carpetaDelEspacio,
   enviar,
   limiteContexto,
   nueva,
   parar,
+  pendiente,
   responder,
   useClaude,
   type Conversacion,
   type Entrada,
 } from "../lib/claude";
 import { useKyu } from "../lib/estado";
+import { herramienta, relativa } from "../lib/herramientas";
 import Markdown from "./Markdown";
+import Permiso from "./Permiso";
 import { Mascota } from "./iconos";
 
 export const ID_ENTRADA = "entrada-claude";
-
-const HERRAMIENTAS: Record<string, [string, LucideIcon]> = {
-  Read: ["Leer", FileText],
-  Write: ["Escribir", FilePen],
-  Edit: ["Editar", FilePen],
-  MultiEdit: ["Editar", FilePen],
-  NotebookEdit: ["Editar", FilePen],
-  Bash: ["Ejecutar", Terminal],
-  PowerShell: ["Ejecutar", Terminal],
-  Grep: ["Buscar", Search],
-  Glob: ["Buscar archivos", Search],
-  WebFetch: ["Abrir web", Globe],
-  WebSearch: ["Buscar en la web", Globe],
-  Agent: ["Agente", Bot],
-  Task: ["Agente", Bot],
-  TodoWrite: ["Tareas", ListTodo],
-};
-const herramienta = (nombre: string): [string, LucideIcon] => HERRAMIENTAS[nombre] ?? [nombre, Wrench];
-
-/** Ruta relativa a la carpeta de la conversación, si está dentro. */
-function relativa(texto: string, carpeta: string | null) {
-  if (!carpeta) return texto;
-  const base = carpeta.replace(/[\\/]+$/, "");
-  return texto.toLowerCase().startsWith(base.toLowerCase() + "\\") || texto.toLowerCase().startsWith(base.toLowerCase() + "/")
-    ? texto.slice(base.length + 1)
-    : texto;
-}
 
 const nombreCarpeta = (ruta: string | null) => (ruta ? ruta.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || ruta : "~");
 
@@ -80,9 +38,26 @@ export default function PanelClaude({ espacio }: { espacio: string }) {
   const carpeta = c.claudeId !== null || c.estado === "cerrado" ? c.carpeta : carpetaFoco;
   const ocupado = c.estado === "arrancando" || c.estado === "pensando";
   const porcentaje = Math.min(100, Math.round((c.tokens / limiteContexto(c.modelo)) * 100));
+  const permiso = pendiente(conv);
+
+  // Con un permiso pendiente y el foco en el panel: Intro permite, Esc deniega. La caja
+  // de texto lo resuelve antes (con texto, Intro deniega y se lo dice a Claude).
+  const teclas = (e: React.KeyboardEvent) => {
+    if (!permiso || e.defaultPrevented || e.nativeEvent.isComposing) return;
+    if (e.target instanceof HTMLButtonElement && e.key === "Enter") return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      void responder(espacio, permiso.id, "denegar");
+    } else if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      void responder(espacio, permiso.id, "permitir");
+    }
+  };
 
   return (
-    <aside className="m-2 ml-0 flex w-[380px] flex-none flex-col overflow-hidden rounded-[10px] border border-claude/40 bg-panel shadow-[0_0_0_3px_#d977570a,0_20px_50px_-25px_#d9775733]">
+    <aside
+      onKeyDown={teclas}
+      className="group/claude m-2 ml-0 flex w-[380px] flex-none flex-col overflow-hidden rounded-[10px] border border-claude/40 bg-panel shadow-[0_0_0_3px_#d977570a,0_20px_50px_-25px_#d9775733]">
       <header className="flex h-11 flex-none items-center gap-2 border-b border-borde pl-3.5 pr-2">
         <span className="flex items-center gap-2 text-[13px] font-semibold">
           <Mascota alto={15} />
@@ -114,7 +89,7 @@ export default function PanelClaude({ espacio }: { espacio: string }) {
 
       <ListaEntradas espacio={espacio} c={c} carpeta={carpeta} />
 
-      <CajaEntrada espacio={espacio} ocupado={ocupado} />
+      <CajaEntrada espacio={espacio} ocupado={ocupado} permiso={permiso?.id ?? null} />
 
       <footer className="flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
         <EstadoTurno c={c} />
@@ -231,37 +206,8 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
         </div>
       );
     }
-    case "permiso": {
-      const [nombre] = herramienta(e.herramienta);
-      if (e.respuesta) {
-        const si = e.respuesta !== "denegar";
-        return (
-          <div className="flex min-w-0 items-center gap-2 px-1 text-[11.5px] text-muy">
-            {si ? <Check size={12} className="flex-none text-ok" /> : <X size={12} className="flex-none text-mal" />}
-            <span className="flex-none">{e.respuesta === "siempre" ? "Permitido siempre" : si ? "Permitido" : "Denegado"}:</span>
-            <span className="truncate font-mono">{nombre} {relativa(e.resumen, carpeta)}</span>
-          </div>
-        );
-      }
-      return (
-        <div className="overflow-hidden rounded-[10px] border border-aviso/25 bg-aviso/[0.03]">
-          <div className="flex min-w-0 items-start gap-2 px-[11px] py-[9px] text-[12.5px]">
-            <ShieldAlert size={14} strokeWidth={1.8} className="mt-0.5 flex-none text-aviso" />
-            <span className="min-w-0">
-              Claude quiere usar <b className="font-semibold">{nombre}</b>{" "}
-              <span className="break-all font-mono text-[12px] text-tenue">{relativa(e.resumen, carpeta)}</span>
-            </span>
-          </div>
-          <div className="flex gap-1.5 px-[11px] pb-2.5">
-            <BotonPermiso principal onClick={() => void responder(espacio, e.id, "permitir")}>
-              <Check size={13} /> Permitir
-            </BotonPermiso>
-            <BotonPermiso onClick={() => void responder(espacio, e.id, "siempre")}>Siempre</BotonPermiso>
-            <BotonPermiso onClick={() => void responder(espacio, e.id, "denegar")}>Denegar</BotonPermiso>
-          </div>
-        </div>
-      );
-    }
+    case "permiso":
+      return <Permiso e={e} espacio={espacio} carpeta={carpeta} />;
     case "error":
       return (
         <p className="select-text whitespace-pre-wrap break-words rounded-lg border border-mal/25 bg-mal/[0.04] px-[9px] py-1.5 font-mono text-[11.5px] text-mal">
@@ -271,23 +217,7 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
   }
 }
 
-function BotonPermiso({ principal, onClick, children }: { principal?: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px] ${
-        principal
-          ? "border-claude bg-claude font-medium text-white hover:brightness-110"
-          : "border-borde2 text-tenue hover:bg-hover hover:text-texto"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function CajaEntrada({ espacio, ocupado }: { espacio: string; ocupado: boolean }) {
+function CajaEntrada({ espacio, ocupado, permiso }: { espacio: string; ocupado: boolean; permiso: number | null }) {
   const [texto, setTexto] = useState("");
   const area = useRef<HTMLTextAreaElement>(null);
 
@@ -315,9 +245,20 @@ function CajaEntrada({ espacio, ocupado }: { espacio: string; ocupado: boolean }
           rows={2}
           value={texto}
           spellCheck={false}
-          placeholder="Escribe a Claude"
+          placeholder={permiso !== null ? "Intro permite · Esc deniega · o escribe qué hacer en su lugar" : "Escribe a Claude"}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
+            if (permiso !== null) {
+              // Con texto, Intro deniega y le dice a Claude qué hacer en su lugar; sin texto
+              // (y con Esc) lo resuelve el panel.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && texto.trim()) {
+                e.preventDefault();
+                const t = texto.trim();
+                setTexto("");
+                void responder(espacio, permiso, "denegar", t);
+              }
+              return;
+            }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               mandar();

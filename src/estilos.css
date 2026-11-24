@@ -98,3 +98,10 @@ body {
 @keyframes parpadeo {
   to { visibility: hidden; }
 }
+
+/* Avisos flotantes de Claude. */
+@keyframes aviso-entra {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.aviso-entra { animation: aviso-entra 160ms ease-out; }
