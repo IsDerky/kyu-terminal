@@ -77,3 +77,35 @@ export const leerArchivo = (ruta: string) => invoke<string>("archivo_leer", { ru
 
 export const guardarArchivo = (ruta: string, contenido: string) =>
   invoke("archivo_guardar", { ruta, contenido });
+
+// ---------- Claude Code ----------
+
+export type EventoClaude =
+  | { tipo: "iniciado"; modelo: string; sesion: string }
+  | { tipo: "parcial"; texto: string }
+  | { tipo: "texto"; texto: string }
+  | { tipo: "herramienta"; id: string; nombre: string; resumen: string }
+  | { tipo: "resultadoHerramienta"; id: string; error: boolean }
+  | { tipo: "permiso"; idPeticion: string; herramienta: string; resumen: string; input: unknown }
+  | { tipo: "contexto"; tokens: number }
+  | { tipo: "fin"; coste: number; error: boolean; duracion: number }
+  | { tipo: "error"; texto: string }
+  | { tipo: "cerrado" };
+
+/** Arranca Claude Code en `carpeta` (null = carpeta personal); devuelve su id. */
+export function abrirClaude(carpeta: string | null, alEvento: (e: EventoClaude) => void): Promise<number> {
+  const eventos = new Channel<EventoClaude>();
+  eventos.onmessage = alEvento;
+  return invoke<number>("claude_abrir", { carpeta, eventos });
+}
+
+export const enviarClaude = (id: number, texto: string) => invoke("claude_enviar", { id, texto });
+
+export const responderClaude = (id: number, idPeticion: string, respuesta: "permitir" | "siempre" | "denegar") =>
+  invoke("claude_responder", { id, idPeticion, respuesta });
+
+export const pararClaude = (id: number) => invoke("claude_parar", { id });
+
+export const cerrarClaude = (id: number) => invoke("claude_cerrar", { id });
+
+export const cerrarTodasClaude = () => invoke("claude_cerrar_todas");

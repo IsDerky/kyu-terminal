@@ -3,11 +3,31 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import BarraTitulo, { nombreEspacio } from "./componentes/BarraTitulo";
 import Espacio from "./componentes/Espacio";
 import Paleta from "./componentes/Paleta";
-import { alTerminarPty, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
+import PanelClaude, { ID_ENTRADA } from "./componentes/PanelClaude";
+import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
+import { limpiar, useClaude } from "./lib/claude";
 import { focoActual, useKyu } from "./lib/estado";
-import { configurar, itemDePty } from "./lib/terminales";
-import { configurarEditores } from "./lib/editores";
+import { configurar, itemDePty, sesion } from "./lib/terminales";
+import { configurarEditores, editor } from "./lib/editores";
 import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
+
+/**
+ * Ctrl+Mayús+C: oculto → se abre con el cursor en la caja; abierto sin foco → le da el
+ * foco; abierto con foco → se oculta y el foco vuelve al panel de antes.
+ */
+function alternarClaude() {
+  const { visible, mostrar } = useClaude.getState();
+  const caja = () => document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null;
+  if (visible && document.activeElement === caja()) {
+    mostrar(false);
+    const it = focoActual()?.item;
+    if (it?.tipo === "terminal") sesion(it.id)?.term.focus();
+    else if (it?.tipo === "archivo") editor(it.id)?.vista.focus();
+    return;
+  }
+  mostrar(true);
+  requestAnimationFrame(() => caja()?.focus());
+}
 
 export default function App() {
   const [config, setConfig] = useState<ConfigVista | null>(null);
@@ -15,11 +35,14 @@ export default function App() {
   const espacios = useKyu((s) => s.espacios);
   const activo = useKyu((s) => s.activo);
   const paleta = useKyu((s) => s.paleta);
+  const claudeVisible = useClaude((s) => s.visible);
   useKyu((s) => s.items); // el título de la ventana sigue al terminal con el foco
 
   useEffect(() => {
     void cerrarTodasPty();
+    void cerrarTodasClaude();
     leerConfig().then((c) => {
+      document.documentElement.style.setProperty("--font-mono", c.fuente);
       configurar(c);
       configurarEditores(c.fuente, c.tema.fuente_tamano);
       setConfig(c);
@@ -35,6 +58,9 @@ export default function App() {
     });
     return () => void quitar.then((f) => f());
   }, []);
+
+  // Al cerrar un espacio se cierra también su conversación con Claude.
+  useEffect(() => limpiar(espacios.map((e) => e.id)), [espacios]);
 
   // Atajos de Kyu. En fase de captura, para que xterm no se los quede.
   useEffect(() => {
@@ -57,6 +83,7 @@ export default function App() {
           case "KeyN": hecho(); k.nuevoEspacio(config.perfiles[0]?.nombre ?? ""); return;
           case "KeyW": hecho(); cerrarActual(); return;
           case "Tab": hecho(); k.siguientePestana(-1); return;
+          case "KeyC": hecho(); alternarClaude(); return;
         }
       }
       if (e.ctrlKey && !e.shiftKey && !e.altKey) {
@@ -88,7 +115,10 @@ export default function App() {
   return (
     <div className="relative flex h-full flex-col">
       <BarraTitulo config={config} />
-      {espacio && <Espacio key={espacio.id} espacio={espacio} config={config} />}
+      <div className="flex min-h-0 flex-1">
+        {espacio && <Espacio key={espacio.id} espacio={espacio} config={config} />}
+        {espacio && claudeVisible && <PanelClaude key={`claude-${espacio.id}`} espacio={espacio.id} />}
+      </div>
       {paleta && <Paleta config={config} />}
     </div>
   );

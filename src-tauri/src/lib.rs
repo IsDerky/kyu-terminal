@@ -1,8 +1,9 @@
 //! Núcleo de Kyu: lo que la ventana (React) no puede hacer sola.
 //! Abre las shells en un PTY, lee `kyu.toml`, abre y guarda archivos y da datos
-//! del equipo (RAM).
+//! del equipo (RAM) y habla con Claude Code.
 
 mod archivos;
+mod claude;
 mod config;
 mod pty;
 mod sistema;
@@ -14,6 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(pty::Ptys::default())
         .manage(sistema::Sistema::default())
+        .manage(claude::Claudes::default())
         .invoke_handler(tauri::generate_handler![
             config::config,
             pty::pty_abrir,
@@ -26,6 +28,12 @@ pub fn run() {
             archivos::archivo_leer,
             archivos::archivo_guardar,
             sistema::ram_uso,
+            claude::claude_abrir,
+            claude::claude_enviar,
+            claude::claude_responder,
+            claude::claude_parar,
+            claude::claude_cerrar,
+            claude::claude_cerrar_todas,
         ])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar Kyu");

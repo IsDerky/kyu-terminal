@@ -13,7 +13,7 @@ interface Props {
 export default function Espacio({ espacio, config }: Props) {
   const varios = paneles(espacio.raiz).length > 1;
   return (
-    <div className="min-h-0 flex-1">
+    <div className="min-h-0 min-w-0 flex-1">
       <Arbol nodo={espacio.raiz} foco={espacio.foco} varios={varios} config={config} />
     </div>
   );

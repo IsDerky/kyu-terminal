@@ -5,6 +5,8 @@ import { paneles, useKyu, type Espacio } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
 import MenuPerfiles from "./MenuPerfiles";
+import { Mascota } from "./iconos";
+import { useClaude } from "../lib/claude";
 
 const ventana = getCurrentWindow();
 
@@ -35,6 +37,7 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
   const { cambiarEspacio, nuevoEspacio, renombrarEspacio } = useKyu.getState();
   const [editando, setEditando] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
+  const claude = useClaude((s) => s.visible);
 
   const cerrarEspacio = async (e: Espacio) => {
     for (const p of paneles(e.raiz)) for (const item of p.items) await cerrarItem(item);
@@ -125,6 +128,18 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
       </div>
 
       <div data-tauri-drag-region className="h-full flex-1" />
+
+      <button
+        type="button"
+        title="Panel de Claude (Ctrl+Mayús+C)"
+        onClick={() => useClaude.getState().mostrar(!claude)}
+        className={`mr-2 flex h-7 items-center gap-2 rounded-[7px] px-2.5 text-[12.5px] ${
+          claude ? "bg-claude/10 text-claude2" : "text-tenue hover:bg-hover hover:text-texto"
+        }`}
+      >
+        <Mascota alto={12} />
+        Claude
+      </button>
 
       <div className="flex h-full">
         <BotonVentana titulo="Minimizar" onClick={() => void ventana.minimize()}>

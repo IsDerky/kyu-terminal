@@ -20,6 +20,8 @@ pub struct Config {
     pub fuente: Option<String>,
     /// `true` = no cargar el prompt de Kyu y dejar el de tu perfil (oh-my-posh…).
     pub sin_prompt: bool,
+    /// Ruta de Claude Code; vacío = el `claude` del PATH.
+    pub claude: Option<String>,
     pub tema: Tema,
 }
 
