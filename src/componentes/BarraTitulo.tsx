@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { BarChart3, ChevronDown, Layers, Minus, Plus, SlidersHorizontal, Square, X } from "lucide-react";
+import { BarChart3, ChevronDown, FolderTree, Layers, Minus, Plus, SlidersHorizontal, Square, X } from "lucide-react";
 import { paneles, useKyu, type Espacio } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
@@ -25,7 +25,10 @@ export function nombreEspacio(e: Espacio): string {
     const it = p?.activo ? s.items[p.activo] : undefined;
     return it?.tipo === "terminal" ? it : undefined;
   };
-  const t = terminalDe(conFoco) ?? lista.map(terminalDe).find(Boolean);
+  // Si no se ve ningún terminal (p. ej. con «Archivos» delante), el primero que haya detrás.
+  const escondido = () =>
+    lista.flatMap((p) => p.items.map((i) => s.items[i])).find((it): it is Extract<typeof it, { tipo: "terminal" }> => it?.tipo === "terminal");
+  const t = terminalDe(conFoco) ?? lista.map(terminalDe).find(Boolean) ?? escondido();
   if (t) return t.titulo;
   const a = conFoco?.activo ? s.items[conFoco.activo] : undefined;
   return a?.tipo === "archivo" ? a.ruta.split(/[\\/]/).pop()! : "Espacio";
@@ -174,6 +177,14 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
         className={`grid size-7 place-items-center rounded-md ${uso ? "bg-hover text-texto" : "text-tenue hover:bg-hover hover:text-texto"}`}
       >
         <BarChart3 size={14} strokeWidth={1.8} />
+      </button>
+      <button
+        type="button"
+        title="Archivos (Ctrl+Mayús+B)"
+        onClick={() => useKyu.getState().alternarArbol()}
+        className="grid size-7 place-items-center rounded-md text-tenue hover:bg-hover hover:text-texto"
+      >
+        <FolderTree size={14} strokeWidth={1.8} />
       </button>
       <button
         type="button"

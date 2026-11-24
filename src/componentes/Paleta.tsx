@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Clapperboard, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { BarChart3, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
 import { textoBloque } from "../lib/bloques";
@@ -48,6 +48,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
     const lista: Orden[] = [
       { id: "div-d", grupo: "Paneles", titulo: "Dividir a la derecha", atajo: "Ctrl+Mayús+D", icono: Columns2, hacer: () => k.dividir("horizontal", perfilFoco) },
       { id: "div-a", grupo: "Paneles", titulo: "Dividir abajo", atajo: "Ctrl+Mayús+E", icono: Rows2, hacer: () => k.dividir("vertical", perfilFoco) },
+      { id: "arbol", grupo: "Paneles", titulo: "Archivos", detalle: "árbol de la carpeta del terminal", atajo: "Ctrl+Mayús+B", icono: FolderTree, hacer: () => k.alternarArbol() },
       { id: "cerrar", grupo: "Paneles", titulo: "Cerrar pestaña", atajo: "Ctrl+Mayús+W", icono: X, hacer: cerrarActual },
       {
         id: "claude-orden",

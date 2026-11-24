@@ -1,11 +1,13 @@
 // Piezas del panel de Claude de la tanda C: razonamiento, subagentes, plan y puntos de control.
 import { useEffect, useRef, useState } from "react";
-import { Brain, ChevronRight, ClipboardList, Loader2, RotateCcw } from "lucide-react";
+import { Brain, ChevronRight, ClipboardList, Diff, Loader2, RotateCcw } from "lucide-react";
 import {
   cambiosAlVolver,
   responder,
   useClaude,
   volver,
+  verCambios,
+  type ArchivoCambiado,
   type CambiosVuelta,
   type Entrada,
   type Vuelta,
@@ -35,6 +37,53 @@ export function Razonamiento({ e }: { e: Extract<Entrada, { tipo: "razonamiento"
           <Markdown texto={e.texto} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** En cada Editar/Escribir terminado: abre el archivo con lo que cambió marcado. */
+export function BotonVerCambios({ espacio, ruta }: { espacio: string; ruta: string }) {
+  const puede = useClaude((s) => {
+    const c = s.conversaciones[espacio];
+    return !!c && (ruta in c.tocados || ruta in c.antesDe);
+  });
+  if (!puede) return null;
+  return (
+    <button
+      type="button"
+      title="Abrir en Kyu con los cambios marcados"
+      onClick={() => void verCambios(espacio, ruta)}
+      className="flex h-5 flex-none items-center gap-1 rounded border border-borde2 px-1.5 text-[11px] text-tenue hover:bg-hover hover:text-texto"
+    >
+      <Diff size={11} strokeWidth={1.9} /> Ver cambios
+    </button>
+  );
+}
+
+/** Al acabar un turno: los archivos que tocó Claude, con lo que puso y quitó. */
+export function ResumenCambios({ espacio, archivos, carpeta }: { espacio: string; archivos: ArchivoCambiado[]; carpeta: string | null }) {
+  return (
+    <div className="overflow-hidden rounded-[9px] border border-borde2">
+      <div className="flex items-center gap-2 border-b border-borde px-2.5 py-1.5 text-[12px] text-tenue">
+        <Diff size={13} strokeWidth={1.8} />
+        <span className="text-texto">Archivos cambiados</span>
+        <span className="ml-auto text-[11px] text-muy">{archivos.length}</span>
+      </div>
+      {archivos.map((a) => (
+        <button
+          key={a.ruta}
+          type="button"
+          disabled={a.borrado}
+          title={a.borrado ? `${a.ruta} (ya no está)` : `${a.ruta} · ver los cambios`}
+          onClick={() => void verCambios(espacio, a.ruta)}
+          className="flex w-full min-w-0 items-center gap-2 px-2.5 py-1 text-left font-mono text-[11.5px] text-tenue hover:bg-hover hover:text-texto disabled:opacity-50"
+        >
+          <span className="min-w-0 flex-1 truncate">{relativa(a.ruta, carpeta)}</span>
+          {a.antes === null && <span className="flex-none font-ui text-[10.5px] text-ok">nuevo</span>}
+          <span className="flex-none text-ok">+{a.puestas}</span>
+          <span className="flex-none text-mal">−{a.quitadas}</span>
+        </button>
+      ))}
     </div>
   );
 }

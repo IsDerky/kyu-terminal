@@ -105,6 +105,7 @@ export default function App() {
           case "Tab": hecho(); k.siguientePestana(-1); return;
           case "KeyC": hecho(); alternarClaude(); return;
           case "KeyG": hecho(); void alternarGrabacion(); return;
+          case "KeyB": hecho(); k.alternarArbol(); return;
         }
       }
       if (e.ctrlKey && !e.shiftKey && !e.altKey) {

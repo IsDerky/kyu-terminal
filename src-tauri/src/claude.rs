@@ -43,6 +43,11 @@ pub enum Evento {
         id: String,
         nombre: String,
         resumen: String,
+        /// En las que cambian un archivo (Write, Edit, MultiEdit): su ruta y cómo estaba
+        /// justo antes (se lee al llegar, antes de que se ejecute). `nuevo` = no existía.
+        ruta: Option<String>,
+        antes: Option<String>,
+        nuevo: bool,
     },
     /// Herramienta que usa un subagente: `padre` es el id de la herramienta Task que lo lanzó.
     Subherramienta {
@@ -484,10 +489,14 @@ fn traducir(v: &Value) -> Vec<Evento> {
                     }
                     Some("tool_use") => {
                         let nombre = texto(&bloque["name"]);
+                        let (ruta, antes, nuevo) = foto_antes(&nombre, &bloque["input"]);
                         sal.push(Evento::Herramienta {
                             id: texto(&bloque["id"]),
                             resumen: resumen(&nombre, &bloque["input"]),
                             nombre,
+                            ruta,
+                            antes,
+                            nuevo,
                         })
                     }
                     _ => {}
@@ -532,6 +541,31 @@ fn traducir(v: &Value) -> Vec<Evento> {
         _ => {}
     }
     sal
+}
+
+/// Cómo estaba el archivo que va a cambiar una herramienta, para enseñar luego el diff:
+/// (ruta, contenido, no existía). Sin ruta si la herramienta no cambia archivos o el archivo
+/// no es de texto o pasa de 4 MB.
+fn foto_antes(herramienta: &str, input: &Value) -> (Option<String>, Option<String>, bool) {
+    if !matches!(herramienta, "Write" | "Edit" | "MultiEdit") {
+        return (None, None, false);
+    }
+    let Some(ruta) = input["file_path"].as_str().filter(|r| !r.is_empty()) else {
+        return (None, None, false);
+    };
+    let p = std::path::Path::new(ruta);
+    if !p.exists() {
+        return (Some(ruta.to_string()), None, true);
+    }
+    let texto = std::fs::metadata(p)
+        .ok()
+        .filter(|m| m.is_file() && m.len() <= 4 * 1024 * 1024)
+        .and_then(|_| std::fs::read(p).ok())
+        .and_then(|b| String::from_utf8(b).ok());
+    match texto {
+        Some(t) => (Some(ruta.to_string()), Some(t), false),
+        None => (None, None, false),
+    }
 }
 
 /// Lo más útil de la entrada de cada herramienta, en una línea.

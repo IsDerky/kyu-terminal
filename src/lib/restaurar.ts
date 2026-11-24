@@ -13,7 +13,8 @@ export const tamanos = new Map<string, Record<string, number>>();
 
 type ItemGuardado =
   | { tipo: "terminal"; perfil: string; carpeta: string | null; titulo: string }
-  | { tipo: "archivo"; ruta: string; linea: number; columna: number };
+  | { tipo: "archivo"; ruta: string; linea: number; columna: number }
+  | { tipo: "arbol" };
 
 type NodoGuardado =
   | { tipo: "panel"; items: ItemGuardado[]; activo: number; foco?: boolean }
@@ -41,6 +42,7 @@ function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGu
     if (!ids.length) return null;
     const lista = ids.map((i): ItemGuardado => {
       const it = items[i];
+      if (it.tipo === "arbol") return { tipo: "arbol" };
       return it.tipo === "terminal"
         ? { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo }
         : { tipo: "archivo", ruta: it.ruta, linea: it.linea, columna: it.columna };
@@ -179,7 +181,9 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
       let activo: string | null = null;
       g.items.forEach((i, k) => {
         let it: Item;
-        if (i.tipo === "terminal") {
+        if (i.tipo === "arbol") {
+          it = { id: nuevoId("r"), tipo: "arbol" };
+        } else if (i.tipo === "terminal") {
           const perfil = perfiles.includes(i.perfil) ? i.perfil : porDefecto;
           it = { id: nuevoId("t"), tipo: "terminal", perfil, titulo: i.titulo || perfil, carpeta: i.carpeta };
         } else {

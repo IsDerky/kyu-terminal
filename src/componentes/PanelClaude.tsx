@@ -30,7 +30,7 @@ import { useKyu } from "../lib/estado";
 import { herramienta, relativa } from "../lib/herramientas";
 import Markdown from "./Markdown";
 import Permiso from "./Permiso";
-import { PasosSubagente, Plan, Razonamiento, VolverAqui } from "./TandaClaude";
+import { BotonVerCambios, PasosSubagente, Plan, Razonamiento, ResumenCambios, VolverAqui } from "./TandaClaude";
 import { Mascota } from "./iconos";
 
 export const ID_ENTRADA = "entrada-claude";
@@ -277,6 +277,8 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
       );
     case "razonamiento":
       return <Razonamiento e={e} />;
+    case "cambios":
+      return <ResumenCambios espacio={espacio} archivos={e.archivos} carpeta={carpeta} />;
     case "claude":
       return (
         <div className={e.enCurso ? "cursor-claude" : undefined}>
@@ -304,6 +306,7 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
                 <X size={13} className="text-mal" />
               )}
             </span>
+            {e.ruta && e.estado === "ok" && <BotonVerCambios espacio={espacio} ruta={e.ruta} />}
           </div>
           {e.pasos ? <PasosSubagente pasos={e.pasos} ultimo={e.estado === "ejecutando" ? e.ultimoPaso : undefined} carpeta={carpeta} /> : null}
         </div>

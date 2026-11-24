@@ -42,6 +42,16 @@ pub fn archivo_guardar(ruta: String, contenido: String) -> Result<(), String> {
     std::fs::write(&ruta, contenido).map_err(|e| e.to_string())
 }
 
+/// Borra un archivo (no carpetas): «Deshacer» de un archivo que creó Claude.
+#[tauri::command]
+pub fn archivo_borrar(ruta: String) -> Result<(), String> {
+    let p = Path::new(&ruta);
+    if !p.is_file() {
+        return Err("no es un archivo".into());
+    }
+    std::fs::remove_file(p).map_err(|e| e.to_string())
+}
+
 fn expandir_casa(ruta: &str) -> PathBuf {
     if let Some(resto) = ruta.strip_prefix("~/").or_else(|| ruta.strip_prefix("~\\"))
         && let Some(casa) = dirs::home_dir()

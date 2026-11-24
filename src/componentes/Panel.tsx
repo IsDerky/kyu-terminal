@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { ChevronDown, Columns2, Plus, Rows2, X } from "lucide-react";
+import { ChevronDown, Columns2, FolderTree, Plus, Rows2, X } from "lucide-react";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
 import VistaTerminal from "./VistaTerminal";
 import VistaArchivo from "./VistaArchivo";
+import VistaArbol from "./VistaArbol";
 import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
 
@@ -69,7 +70,7 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
           {panel.items.map((id) => {
             const it = items[id];
             if (!it) return null;
-            const nombre = it.tipo === "terminal" ? it.titulo : it.ruta.split(/[\\/]/).pop()!;
+            const nombre = it.tipo === "terminal" ? it.titulo : it.tipo === "arbol" ? "Archivos" : it.ruta.split(/[\\/]/).pop()!;
             const esActivo = id === panel.activo;
             return (
               <div
@@ -81,7 +82,7 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
                 }}
                 onClick={() => activar(panel.id, id)}
                 onAuxClick={(e) => e.button === 1 && void cerrarItem(id)}
-                title={it.tipo === "archivo" ? it.ruta : it.carpeta ?? it.perfil}
+                title={it.tipo === "archivo" ? it.ruta : it.tipo === "arbol" ? "Archivos (Ctrl+Mayús+B)" : it.carpeta ?? it.perfil}
                 className={`group flex h-[22px] min-w-0 max-w-48 cursor-default items-center gap-1.5 rounded-[5px] pl-2 pr-1 text-[12px] ${
                   esActivo ? "bg-hover text-texto" : "text-tenue hover:text-texto"
                 }`}
@@ -94,6 +95,8 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
                   ) : (
                     <IconoPerfil perfil={perfilDe(it.perfil)} size={12} />
                   )
+                ) : it.tipo === "arbol" ? (
+                  <FolderTree size={12} strokeWidth={1.8} className="flex-none" />
                 ) : (
                   <IconoArchivo size={12} />
                 )}
@@ -169,6 +172,7 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
       >
         {activo?.tipo === "terminal" && <VistaTerminal key={activo.id} item={activo.id} conFoco={conFoco} config={config} />}
         {activo?.tipo === "archivo" && <VistaArchivo key={activo.id} archivo={activo} conFoco={conFoco} />}
+        {activo?.tipo === "arbol" && <VistaArbol key={activo.id} item={activo.id} />}
         {zona && <ZonaSoltar zona={zona} />}
       </div>
     </div>

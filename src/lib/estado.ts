@@ -8,7 +8,19 @@ import { create } from "zustand";
 
 export type Item =
   | { id: string; tipo: "terminal"; perfil: string; titulo: string; carpeta: string | null; deClaude?: boolean }
-  | { id: string; tipo: "archivo"; ruta: string; sucio: boolean; linea: number; columna: number; salto: number };
+  | {
+      id: string;
+      tipo: "archivo";
+      ruta: string;
+      sucio: boolean;
+      linea: number;
+      columna: number;
+      salto: number;
+      /** Enseñar lo que cambió Claude: cómo estaba antes (null = no existía). */
+      diff?: { antes: string | null };
+    }
+  /** Pestaña «Archivos»: el árbol de la carpeta del terminal con el foco. */
+  | { id: string; tipo: "arbol" };
 
 export type Direccion = "horizontal" | "vertical";
 
@@ -53,7 +65,11 @@ interface Estado {
   /** Quita la pestaña de su panel (y el panel o el espacio si se quedan vacíos). */
   quitarItem: (item: string) => void;
   moverItem: (item: string, destino: string, zona: Zona) => void;
-  abrirArchivo: (ruta: string, linea: number, columna: number) => void;
+  abrirArchivo: (ruta: string, linea: number, columna: number, diff?: { antes: string | null }) => void;
+  /** Quita las marcas de cambios de una pestaña de archivo. */
+  quitarDiff: (item: string) => void;
+  /** Ctrl+Mayús+B: abre la pestaña «Archivos» en el panel con el foco, la enfoca o la cierra. */
+  alternarArbol: () => void;
   ponerTitulo: (item: string, titulo: string, carpeta?: string | null) => void;
   marcarSucio: (item: string, sucio: boolean) => void;
   ponerBuscando: (item: string | null) => void;
@@ -262,7 +278,7 @@ export const useKyu = create<Estado>((set, get) => {
       conEspacio((e) => ({ ...e, raiz: raiz!, foco }));
     },
 
-    abrirArchivo: (ruta, linea, columna) => {
+    abrirArchivo: (ruta, linea, columna, diff) => {
       const s = get();
       const esp = espacioActivo();
       // ¿Ya está abierto en este espacio? Se activa y salta a la línea.
@@ -273,12 +289,12 @@ export const useKyu = create<Estado>((set, get) => {
         });
         if (ya) {
           const it = s.items[ya] as Extract<Item, { tipo: "archivo" }>;
-          set({ items: { ...s.items, [ya]: { ...it, linea, columna, salto: it.salto + 1 } } });
+          set({ items: { ...s.items, [ya]: { ...it, linea, columna, salto: it.salto + 1, diff: diff ?? it.diff } } });
           get().activar(p.id, ya);
           return;
         }
       }
-      const archivo: Item = { id: nuevoId("a"), tipo: "archivo", ruta, sucio: false, linea, columna, salto: 1 };
+      const archivo: Item = { id: nuevoId("a"), tipo: "archivo", ruta, sucio: false, linea, columna, salto: 1, diff };
       set({ items: { ...s.items, [archivo.id]: archivo } });
       // Si hay un panel mostrando archivos, va ahí como pestaña; si no, se abre uno a la derecha.
       const deArchivos = paneles(esp.raiz).find((p) => p.activo && s.items[p.activo]?.tipo === "archivo");
@@ -294,6 +310,34 @@ export const useKyu = create<Estado>((set, get) => {
         const nuevo = nuevoPanel([archivo.id]);
         conEspacio((e) => ({ ...e, foco: nuevo.id, raiz: ponerAlLado(e.raiz, e.foco, nuevo, "derecha") }));
       }
+    },
+
+    quitarDiff: (item) =>
+      set((s) => {
+        const it = s.items[item];
+        if (!it || it.tipo !== "archivo" || !it.diff) return s;
+        return { items: { ...s.items, [item]: { ...it, diff: undefined } } };
+      }),
+
+    alternarArbol: () => {
+      const s = get();
+      const esp = espacioActivo();
+      for (const p of paneles(esp.raiz)) {
+        const ya = p.items.find((i) => s.items[i]?.tipo === "arbol");
+        if (!ya) continue;
+        // Ya se ve y tiene el foco: se cierra. Si no, se enseña.
+        if (p.id === esp.foco && p.activo === ya) get().quitarItem(ya);
+        else get().activar(p.id, ya);
+        return;
+      }
+      const arbol: Item = { id: nuevoId("r"), tipo: "arbol" };
+      set({ items: { ...s.items, [arbol.id]: arbol } });
+      conEspacio((e) => ({
+        ...e,
+        raiz:
+          cambiar(e.raiz, e.foco, (n) => (n.tipo === "panel" ? { ...n, items: [arbol.id, ...n.items], activo: arbol.id } : n)) ??
+          e.raiz,
+      }));
     },
 
     ponerTitulo: (item, titulo, carpeta) =>
@@ -331,6 +375,13 @@ export const useKyu = create<Estado>((set, get) => {
     const it = p?.activo ? get().items[p.activo] : undefined;
     if (it?.tipo === "terminal") return it.carpeta;
     if (it?.tipo === "archivo") return it.ruta.replace(/[\\/][^\\/]*$/, "") || null;
+    // Desde la pestaña «Archivos»: la del primer terminal del espacio.
+    for (const p of paneles(esp.raiz)) {
+      for (const i of p.items) {
+        const t = get().items[i];
+        if (t?.tipo === "terminal" && t.carpeta) return t.carpeta;
+      }
+    }
     return null;
   }
 });

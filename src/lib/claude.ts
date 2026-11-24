@@ -13,6 +13,9 @@ import {
   type EventoClaude,
 } from "./nucleo";
 import { paneles, useKyu } from "./estado";
+import { leerArchivo } from "./nucleo";
+import { contar, diffLineas } from "./diff";
+import { recargarRuta } from "./editores";
 import type { TextoBloque } from "./bloques";
 import type { ImagenAdjunta } from "./imagenes";
 import {
@@ -52,6 +55,8 @@ export type Entrada =
       nombre: string;
       resumen: string;
       estado: "ejecutando" | "ok" | "error";
+      /** Archivo que cambia (Write, Edit, MultiEdit): para «Ver cambios». */
+      ruta?: string;
       /** Subagente (Task): cuántas herramientas lleva y la última. */
       pasos?: number;
       ultimoPaso?: { nombre: string; resumen: string };
@@ -68,10 +73,22 @@ export type Entrada =
       mensaje?: string;
     }
   | { id: number; tipo: "error"; texto: string }
+  /** Al acabar un turno en el que Claude tocó archivos: cuáles y cuánto. */
+  | { id: number; tipo: "cambios"; archivos: ArchivoCambiado[] }
   /** Línea tenue: «Conversación compactada», «Unknown command: /x»… */
   | { id: number; tipo: "aviso"; texto: string };
 
 export type Respuesta = "permitir" | "siempre" | "denegar";
+
+export interface ArchivoCambiado {
+  ruta: string;
+  /** Cómo estaba antes del turno (null = lo creó Claude). */
+  antes: string | null;
+  puestas: number;
+  quitadas: number;
+  /** Ya no está en disco (lo borró algo después). */
+  borrado?: boolean;
+}
 
 type SinId<T> = T extends unknown ? Omit<T, "id"> : never;
 
@@ -92,6 +109,10 @@ export interface Conversacion {
   reanudarEn: string | null;
   /** Última pieza de la cadena (respuesta o resultado): lo anterior al próximo mensaje. */
   ultimoUuid: string | null;
+  /** Archivos que Claude está tocando en este turno → cómo estaban antes (null = no existían). */
+  tocados: Record<string, string | null>;
+  /** Lo mismo para todo lo que ha tocado en la conversación (lo de antes de su último turno). */
+  antesDe: Record<string, string | null>;
   entradas: Entrada[];
   estado: EstadoConv;
   /** Cuándo empezó el turno en curso (para el contador). */
@@ -148,6 +169,8 @@ export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Convers
   reanudar: null,
   reanudarEn: null,
   ultimoUuid: null,
+  tocados: {},
+  antesDe: {},
   entradas: [],
   estado: "parado",
   desde: 0,
@@ -292,7 +315,19 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       cambiar(espacio, () => ({ ultimoUuid: ev.uuid }));
       return;
     case "herramienta":
-      añadir(espacio, { tipo: "herramienta", idHerramienta: ev.id, nombre: ev.nombre, resumen: ev.resumen, estado: "ejecutando" });
+      añadir(espacio, {
+        tipo: "herramienta",
+        idHerramienta: ev.id,
+        nombre: ev.nombre,
+        resumen: ev.resumen,
+        estado: "ejecutando",
+        ruta: ev.ruta ?? undefined,
+      });
+      // La primera vez que toca un archivo en el turno: cómo estaba.
+      if (ev.ruta && (ev.antes !== null || ev.nuevo)) {
+        const ruta = ev.ruta;
+        cambiar(espacio, (c) => (ruta in c.tocados ? {} : { tocados: { ...c.tocados, [ruta]: ev.antes } }));
+      }
       return;
     case "resultadoHerramienta":
       cambiar(espacio, (c) => ({
@@ -338,6 +373,7 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
         entradas: cerrarRazonamiento(c.entradas).map((e) => (e.tipo === "claude" && e.enCurso ? { ...e, enCurso: false } : e)),
       }));
       void refrescarContexto(espacio);
+      void resumirCambios(espacio);
       return;
     case "error":
       añadir(espacio, { tipo: "error", texto: ev.texto });
@@ -347,6 +383,38 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, reanudar: c.sesion }));
       return;
   }
+}
+
+/** Al acabar un turno: recuadro «Archivos cambiados» y los editores abiertos al día. */
+async function resumirCambios(espacio: string) {
+  const c = conversacion(espacio);
+  const tocados = c.tocados;
+  if (!Object.keys(tocados).length) return;
+  cambiar(espacio, (x) => ({ tocados: {}, antesDe: { ...x.antesDe, ...tocados } }));
+  const archivos: ArchivoCambiado[] = [];
+  for (const [ruta, antes] of Object.entries(tocados)) {
+    const ahora = await leerArchivo(ruta).catch(() => null);
+    const { puestas, quitadas } = contar(diffLineas(antes ?? "", ahora ?? ""));
+    if (!puestas && !quitadas && ahora !== null) continue;
+    archivos.push({ ruta, antes, puestas, quitadas, borrado: ahora === null || undefined });
+    recargarRuta(ruta);
+  }
+  if (archivos.length) añadir(espacio, { tipo: "cambios", archivos });
+}
+
+/**
+ * Abre el archivo en Kyu con lo que cambió Claude marcado (desde antes de su último turno
+ * que lo tocó). Salta al primer cambio.
+ */
+export async function verCambios(espacio: string, ruta: string) {
+  const c = conversacion(espacio);
+  const antes = ruta in c.tocados ? c.tocados[ruta] : c.antesDe[ruta];
+  if (antes === undefined) return;
+  const ahora = await leerArchivo(ruta).catch(() => "");
+  const primera = diffLineas(antes ?? "", ahora).find((l) => l.tipo !== "igual");
+  const linea = primera ? (primera.despues ?? primera.antes ?? 1) : 1;
+  recargarRuta(ruta);
+  useKyu.getState().abrirArchivo(ruta, linea, 1, { antes });
 }
 
 /** Adjunta una orden del terminal a lo próximo que se le escriba a Claude. */

@@ -3,6 +3,7 @@
 //! del equipo (RAM) y habla con Claude Code.
 
 mod ajustes;
+mod arbol;
 mod archivos;
 mod autocompletar;
 mod claude;
@@ -44,6 +45,9 @@ pub fn run() {
             archivos::archivo_resolver,
             archivos::archivo_leer,
             archivos::archivo_guardar,
+            archivos::archivo_borrar,
+            arbol::arbol_listar,
+            arbol::git_estado,
             autocompletar::carpeta_listar,
             autocompletar::git_ramas,
             sistema::ram_uso,

@@ -15,6 +15,7 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
 import { yaml } from "@codemirror/lang-yaml";
+import { unifiedMergeView } from "@codemirror/merge";
 import { guardarArchivo, leerArchivo } from "./nucleo";
 import { useKyu } from "./estado";
 
@@ -27,6 +28,8 @@ export interface Editor {
   error: string | null;
   cargado: Promise<void>;
   lenguaje: string;
+  /** Hueco para las marcas de cambios (unifiedMergeView). */
+  comparacion: Compartment;
 }
 
 const editores = new Map<string, Editor>();
@@ -91,6 +94,15 @@ const tema = () =>
       ".cm-button": { backgroundImage: "none", backgroundColor: "#18181c", border: "1px solid #2a2a30", borderRadius: "5px", color: "#ececf1" },
       ".cm-tooltip": { backgroundColor: "#151518", border: "1px solid #2a2a30" },
       ".cm-linea-salto": { backgroundColor: "#a78bfa14", transition: "background-color 1.5s" },
+      // Cambios de Claude (unifiedMergeView): verde lo puesto, rojo lo quitado.
+      "&.cm-merge-b .cm-changedLine, .cm-inlineChangedLine": { backgroundColor: "#4ade8012 !important" },
+      "&.cm-merge-b .cm-changedText": { background: "#4ade8030 !important", textDecoration: "none" },
+      ".cm-deletedChunk": { backgroundColor: "#f8717112 !important", paddingLeft: "0" },
+      ".cm-deletedChunk .cm-deletedText, .cm-deletedChunk del": { background: "#f8717130 !important", textDecoration: "none" },
+      ".cm-deletedChunk .cm-deletedLine": { opacity: "0.75" },
+      ".cm-changeGutter": { width: "3px", paddingLeft: "0" },
+      "&.cm-merge-b .cm-changedLineGutter": { background: "#4ade80" },
+      ".cm-deletedLineGutter": { background: "#f87171" },
     },
     { dark: true },
   );
@@ -105,6 +117,7 @@ export function obtenerEditor(item: string, ruta: string): Editor {
   elemento.className = "h-full w-full";
   const [nombreLenguaje, lenguaje] = lenguajeDe(ruta);
   const soloLectura = new Compartment();
+  const comparacion = new Compartment();
 
   const guardar = () => {
     const e = editores.get(item);
@@ -114,6 +127,8 @@ export function obtenerEditor(item: string, ruta: string): Editor {
       () => {
         e.guardado = texto;
         useKyu.getState().marcarSucio(item, false);
+        // Guardar da los cambios por revisados.
+        useKyu.getState().quitarDiff(item);
       },
       (err) => window.alert(`No se pudo guardar ${e.ruta}: ${err}`),
     );
@@ -131,6 +146,7 @@ export function obtenerEditor(item: string, ruta: string): Editor {
         syntaxHighlighting(resaltado),
         tema(),
         soloLectura.of(EditorState.readOnly.of(true)),
+        comparacion.of([]),
         EditorView.updateListener.of((u) => {
           if (!u.docChanged) return;
           const e = editores.get(item);
@@ -140,7 +156,7 @@ export function obtenerEditor(item: string, ruta: string): Editor {
     }),
   });
 
-  const e: Editor = { vista, elemento, ruta, guardado: "", error: null, cargado: Promise.resolve(), lenguaje: nombreLenguaje };
+  const e: Editor = { vista, elemento, ruta, guardado: "", error: null, cargado: Promise.resolve(), lenguaje: nombreLenguaje, comparacion };
   e.cargado = leerArchivo(ruta).then(
     (texto) => {
       e.guardado = texto;
@@ -155,6 +171,38 @@ export function obtenerEditor(item: string, ruta: string): Editor {
   );
   editores.set(item, e);
   return e;
+}
+
+/**
+ * Marca lo que cambió respecto a `antes` (null = archivo nuevo, todo puesto) o, con
+ * undefined, quita las marcas.
+ */
+export async function ponerDiff(item: string, antes: string | null | undefined) {
+  const e = editores.get(item);
+  if (!e) return;
+  await e.cargado;
+  e.vista.dispatch({
+    effects: e.comparacion.reconfigure(
+      antes === undefined
+        ? []
+        : unifiedMergeView({ original: antes ?? "", mergeControls: false, gutter: true, highlightChanges: true, syntaxHighlightDeletions: true }),
+    ),
+  });
+}
+
+/** Vuelve a leer del disco los editores de `ruta` que no tengan cambios sin guardar. */
+export function recargarRuta(ruta: string) {
+  const r = ruta.toLowerCase();
+  for (const e of editores.values()) {
+    if (e.ruta.toLowerCase() !== r) continue;
+    void e.cargado.then(async () => {
+      if (e.vista.state.doc.toString() !== e.guardado) return;
+      const texto = await leerArchivo(e.ruta).catch(() => null);
+      if (texto === null || texto === e.guardado) return;
+      e.guardado = texto;
+      e.vista.dispatch({ changes: { from: 0, to: e.vista.state.doc.length, insert: texto } });
+    });
+  }
 }
 
 /** Lleva el cursor a `linea:columna` y la centra en pantalla. */

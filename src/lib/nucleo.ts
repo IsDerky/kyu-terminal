@@ -129,7 +129,7 @@ export type EventoClaude =
   | { tipo: "texto"; texto: string }
   | { tipo: "parcialRazonamiento"; texto: string }
   | { tipo: "razonamiento"; texto: string }
-  | { tipo: "herramienta"; id: string; nombre: string; resumen: string }
+  | { tipo: "herramienta"; id: string; nombre: string; resumen: string; ruta: string | null; antes: string | null; nuevo: boolean }
   | { tipo: "subherramienta"; padre: string; nombre: string; resumen: string }
   | { tipo: "eco"; uuid: string }
   | { tipo: "cadena"; uuid: string }
@@ -213,6 +213,20 @@ export const responderClaude = (
 ) => invoke("claude_responder", { id, idPeticion, respuesta, mensaje: mensaje ?? null, modo: modo ?? null });
 
 export const pararClaude = (id: number) => invoke("claude_parar", { id });
+
+export interface NodoArbol {
+  nombre: string;
+  ruta: string;
+  carpeta: boolean;
+}
+
+/** Lo que hay en `carpeta` (sin bajar), respetando .gitignore: carpetas primero. */
+export const arbolListar = (carpeta: string) => invoke<NodoArbol[]>("arbol_listar", { carpeta });
+
+/** Archivos con cambios en git del repositorio de `carpeta`: ruta absoluta → M, A, D, R o ?. */
+export const gitEstado = (carpeta: string) => invoke<Record<string, string>>("git_estado", { carpeta });
+
+export const borrarArchivo = (ruta: string) => invoke("archivo_borrar", { ruta });
 
 export const cerrarClaude = (id: number) => invoke("claude_cerrar", { id });
 
