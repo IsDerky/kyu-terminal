@@ -15,6 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(pty::Ptys::default())
         .manage(sistema::Sistema::default())
         .manage(claude::Claudes::default())

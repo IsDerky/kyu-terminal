@@ -25,6 +25,8 @@ export interface ConfigVista {
   fuente: string;
   /** Sugerencia en gris mientras escribes. */
   autocompletado: boolean;
+  /** Aviso de Windows al terminar una orden de al menos estos segundos (0 = nunca). */
+  aviso_segundos: number;
   tema: Tema;
   /** El primero es el predeterminado. */
   perfiles: Perfil[];

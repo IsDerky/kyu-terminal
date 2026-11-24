@@ -25,6 +25,9 @@ pub struct Config {
     /// Sugerencia en gris mientras escribes (historial de Kyu, carpetas, ramas,
     /// scripts). Sin poner = sí.
     pub autocompletado: Option<bool>,
+    /// Aviso de Windows cuando termina una orden que ha tardado al menos estos
+    /// segundos y Kyu no está delante. Sin poner = 10; 0 = nunca.
+    pub aviso_segundos: Option<u32>,
     pub tema: Tema,
 }
 
@@ -108,6 +111,7 @@ impl Default for Tema {
 pub struct ConfigVista {
     fuente: String,
     autocompletado: bool,
+    aviso_segundos: u32,
     tema: Tema,
     perfiles: Vec<PerfilVista>,
 }
@@ -147,6 +151,7 @@ pub fn config() -> ConfigVista {
     ConfigVista {
         fuente,
         autocompletado: config.autocompletado(),
+        aviso_segundos: config.aviso_segundos.unwrap_or(10),
         perfiles,
         tema: config.tema,
     }

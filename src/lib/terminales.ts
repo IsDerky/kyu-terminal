@@ -15,6 +15,7 @@ import { abrirPty, cerrarPty, escribirPty, redimensionarPty, type ConfigVista } 
 import { Bloques } from "./bloques";
 import { Autocompletado } from "./autocompletado";
 import { apuntar, cargarHistorial } from "./historial";
+import { avisarSiToca } from "./avisos";
 import { registrarEnlaces } from "./enlaces";
 import { useKyu } from "./estado";
 
@@ -93,7 +94,10 @@ export function obtener(item: string): Sesion {
   // Las marcas de bloque llegan desde el primer prompt: registrar antes de abrir la shell.
   const bloques = new Bloques(term);
   bloques.alCambiarCarpeta = (ruta, hoja) => useKyu.getState().ponerTitulo(item, hoja || ruta, ruta);
-  bloques.alTerminarOrden = (b) => apuntar(b.orden ?? "", b.ruta, b.codigo ?? 0);
+  bloques.alTerminarOrden = (b) => {
+    apuntar(b.orden ?? "", b.ruta, b.codigo ?? 0);
+    void avisarSiToca(b, config.aviso_segundos);
+  };
   const datosItem = () => {
     const it = useKyu.getState().items[item];
     return it?.tipo === "terminal" ? it : null;
