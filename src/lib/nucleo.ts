@@ -118,25 +118,42 @@ export const ramasGit = (carpeta: string) => invoke<string[]>("git_ramas", { car
 // ---------- Claude Code ----------
 
 export type EventoClaude =
-  | { tipo: "iniciado"; modelo: string; sesion: string }
+  | { tipo: "iniciado"; modelo: string; sesion: string; modo: string }
+  | { tipo: "estado"; estado: string | null }
+  | { tipo: "compactado"; antes: number; despues: number }
   | { tipo: "parcial"; texto: string }
   | { tipo: "texto"; texto: string }
   | { tipo: "herramienta"; id: string; nombre: string; resumen: string }
   | { tipo: "resultadoHerramienta"; id: string; error: boolean }
   | { tipo: "permiso"; idPeticion: string; herramienta: string; resumen: string; input: unknown }
   | { tipo: "contexto"; tokens: number }
-  | { tipo: "fin"; coste: number; error: boolean; duracion: number }
+  | { tipo: "fin"; coste: number; error: boolean; duracion: number; resultado: string | null }
   | { tipo: "error"; texto: string }
   | { tipo: "cerrado" };
 
+/** Lo elegido en el panel antes de arrancar (`--model`, `--permission-mode`, `--effort`). */
+export interface OpcionesClaude {
+  modelo?: string | null;
+  modo?: string | null;
+  esfuerzo?: string | null;
+}
+
 /** Arranca Claude Code en `carpeta` (null = carpeta personal); devuelve su id. */
-export function abrirClaude(carpeta: string | null, alEvento: (e: EventoClaude) => void): Promise<number> {
+export function abrirClaude(
+  carpeta: string | null,
+  opciones: OpcionesClaude,
+  alEvento: (e: EventoClaude) => void,
+): Promise<number> {
   const eventos = new Channel<EventoClaude>();
   eventos.onmessage = alEvento;
-  return invoke<number>("claude_abrir", { carpeta, eventos });
+  return invoke<number>("claude_abrir", { carpeta, opciones, eventos });
 }
 
 export const enviarClaude = (id: number, texto: string) => invoke("claude_enviar", { id, texto });
+
+/** Orden de control de stream-json (`{subtype: "initialize"}`…); devuelve su `response`. */
+export const controlClaude = <T = unknown>(id: number, peticion: Record<string, unknown>) =>
+  invoke<T>("claude_control", { id, peticion });
 
 /** Al denegar, `mensaje` le dice a Claude qué hacer en su lugar. */
 export const responderClaude = (

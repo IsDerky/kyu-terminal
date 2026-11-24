@@ -48,6 +48,7 @@ pub fn run() {
             sistema::ram_uso,
             claude::claude_abrir,
             claude::claude_enviar,
+            claude::claude_control,
             claude::claude_responder,
             claude::claude_parar,
             claude::claude_cerrar,

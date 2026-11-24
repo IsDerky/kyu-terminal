@@ -10,9 +10,11 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tauri::State;
 use tauri::ipc::Channel;
@@ -20,10 +22,15 @@ use tauri::ipc::Channel;
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "tipo", rename_all = "camelCase")]
 pub enum Evento {
+    /// Llega al arrancar y al principio de cada turno (el modo puede cambiar, p. ej. al salir del plan).
     Iniciado {
         modelo: String,
         sesion: String,
+        modo: String,
     },
+    /// «compacting» mientras compacta; null al acabar.
+    Estado { estado: Option<String> },
+    Compactado { antes: u64, despues: u64 },
     /// Trozo de texto mientras Claude escribe.
     Parcial { texto: String },
     /// Bloque de texto terminado (sustituye a los parciales).
@@ -47,6 +54,8 @@ pub enum Evento {
         coste: f64,
         error: bool,
         duracion: u64,
+        /// Texto del resultado cuando no hubo turno del modelo (p. ej. «Unknown command: /x»).
+        resultado: Option<String>,
     },
     Error { texto: String },
     Cerrado,
@@ -57,6 +66,18 @@ struct Sesion {
     entrada: Arc<Mutex<ChildStdin>>,
     /// Permisos sin contestar: id de la petición → (entrada, sugerencias).
     pendientes: Arc<Mutex<HashMap<String, (Value, Value)>>>,
+    /// Órdenes de control de Kyu esperando respuesta: id → quien espera.
+    respuestas: Esperando,
+}
+
+type Esperando = Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, String>>>>>;
+
+/// Cómo arrancar Claude: lo elegido en el panel antes del primer mensaje.
+#[derive(Deserialize, Default)]
+pub struct Opciones {
+    modelo: Option<String>,
+    modo: Option<String>,
+    esfuerzo: Option<String>,
 }
 
 impl Sesion {
@@ -80,8 +101,10 @@ pub fn claude_abrir(
     claudes: State<'_, Claudes>,
     mcp: State<'_, Option<Arc<crate::mcp::Mcp>>>,
     carpeta: Option<String>,
+    opciones: Option<Opciones>,
     eventos: Channel<Evento>,
 ) -> Result<u32, String> {
+    let opciones = opciones.unwrap_or_default();
     let config = crate::config::Config::cargar();
     let programa = buscar_programa(config.claude.as_deref())
         .ok_or("no encuentro Claude Code (claude) en el PATH; ponlo en kyu.toml con claude = \"ruta\"")?;
@@ -106,6 +129,15 @@ pub fn claude_abrir(
     ])
     .current_dir(&carpeta)
     .env("KYU_TERMINAL", env!("CARGO_PKG_VERSION"));
+    for (opcion, valor) in [
+        ("--model", &opciones.modelo),
+        ("--permission-mode", &opciones.modo),
+        ("--effort", &opciones.esfuerzo),
+    ] {
+        if let Some(v) = valor.as_deref().filter(|v| !v.is_empty()) {
+            cmd.arg(opcion).arg(v);
+        }
+    }
     // Herramientas de Kyu (MCP propio). Leer y listar no piden permiso; ejecutar sí.
     if let Some(mcp) = mcp.inner() {
         let ruta = std::env::temp_dir()
@@ -137,6 +169,7 @@ pub fn claude_abrir(
     let salida = hijo.stdout.take().ok_or("sin stdout")?;
     let errores = hijo.stderr.take().ok_or("sin stderr")?;
     let pendientes: Arc<Mutex<HashMap<String, (Value, Value)>>> = Arc::default();
+    let respuestas: Esperando = Arc::default();
 
     let canal_err = eventos.clone();
     std::thread::spawn(move || {
@@ -148,11 +181,25 @@ pub fn claude_abrir(
     });
 
     let pend = pendientes.clone();
+    let resp = respuestas.clone();
     std::thread::spawn(move || {
         for linea in BufReader::new(salida).lines().map_while(Result::ok) {
             let Ok(v) = serde_json::from_str::<Value>(&linea) else {
                 continue;
             };
+            if v["type"] == "control_response" {
+                let r = &v["response"];
+                if let (Some(id), Ok(mut esperando)) = (r["request_id"].as_str(), resp.lock())
+                    && let Some(quien) = esperando.remove(id)
+                {
+                    let _ = quien.send(if r["subtype"] == "success" {
+                        Ok(r["response"].clone())
+                    } else {
+                        Err(r["error"].as_str().unwrap_or("Claude no pudo hacerlo").to_string())
+                    });
+                }
+                continue;
+            }
             if v["type"] == "control_request" && v["request"]["subtype"] == "can_use_tool" {
                 let r = &v["request"];
                 if let (Some(id), Ok(mut p)) = (v["request_id"].as_str(), pend.lock()) {
@@ -168,6 +215,10 @@ pub fn claude_abrir(
                 }
             }
         }
+        // Nadie va a contestar ya a lo que esté esperando.
+        if let Ok(mut esperando) = resp.lock() {
+            esperando.clear();
+        }
         let _ = eventos.send(Evento::Cerrado);
     });
 
@@ -177,9 +228,31 @@ pub fn claude_abrir(
             hijo,
             entrada,
             pendientes,
+            respuestas,
         },
     );
     Ok(id)
+}
+
+static PETICION: AtomicU32 = AtomicU32::new(0);
+
+/// Manda una orden de control (`initialize`, `set_model`, `get_context_usage`…) y espera su
+/// respuesta, hasta 30 s.
+#[tauri::command]
+pub async fn claude_control(claudes: State<'_, Claudes>, id: u32, peticion: Value) -> Result<Value, String> {
+    let (tx, rx) = mpsc::channel();
+    let id_peticion = format!("kyu-{}", PETICION.fetch_add(1, Ordering::Relaxed));
+    con_sesion(&claudes, id, |s| {
+        s.respuestas
+            .lock()
+            .map_err(|_| "estado roto")?
+            .insert(id_peticion.clone(), tx);
+        s.escribir(json!({ "type": "control_request", "request_id": id_peticion, "request": peticion }))
+    })?;
+    tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(30)))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|_| "Claude no ha contestado".to_string())?
 }
 
 fn con_sesion<T>(
@@ -243,7 +316,6 @@ pub fn claude_responder(
 /// Para lo que esté haciendo Claude (como Esc en `claude`).
 #[tauri::command]
 pub fn claude_parar(claudes: State<'_, Claudes>, id: u32) -> Result<(), String> {
-    static PETICION: AtomicU32 = AtomicU32::new(0);
     con_sesion(&claudes, id, |s| {
         s.escribir(json!({
             "type": "control_request",
@@ -281,7 +353,21 @@ fn traducir(v: &Value) -> Vec<Evento> {
         "system" if v["subtype"] == "init" => sal.push(Evento::Iniciado {
             modelo: texto(&v["model"]),
             sesion: texto(&v["session_id"]),
+            modo: texto(&v["permissionMode"]),
         }),
+        "system" if v["subtype"] == "status" => sal.push(Evento::Estado {
+            estado: v["status"].as_str().map(String::from),
+        }),
+        "system" if v["subtype"] == "compact_boundary" => {
+            let m = &v["compact_metadata"];
+            sal.push(Evento::Compactado {
+                antes: m["pre_tokens"].as_u64().unwrap_or(0),
+                despues: m["post_tokens"].as_u64().unwrap_or(0),
+            });
+            sal.push(Evento::Contexto {
+                tokens: m["post_tokens"].as_u64().unwrap_or(0),
+            });
+        }
         "stream_event" => {
             let ev = &v["event"];
             if ev["type"] == "content_block_delta"
@@ -346,6 +432,9 @@ fn traducir(v: &Value) -> Vec<Evento> {
             coste: v["total_cost_usd"].as_f64().unwrap_or(0.0),
             error: v["is_error"].as_bool().unwrap_or(false),
             duracion: v["duration_ms"].as_u64().unwrap_or(0),
+            resultado: (v["num_turns"].as_u64() == Some(0))
+                .then(|| texto(&v["result"]))
+                .filter(|t| !t.is_empty()),
         }),
         _ => {}
     }
