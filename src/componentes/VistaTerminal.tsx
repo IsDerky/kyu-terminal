@@ -45,7 +45,7 @@ export default function VistaTerminal({ item, conFoco, config }: Props) {
 
   return (
     <div className="relative h-full w-full py-2 pl-3.5 pr-1">
-      <div data-kyu-terminal className="relative h-full w-full">
+      <div className="relative h-full w-full">
         <div ref={caja} className="h-full w-full" />
         {sesion.term.element && (
           <CapaBloques

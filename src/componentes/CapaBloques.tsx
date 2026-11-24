@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { Check, GitBranch, MemoryStick, X } from "lucide-react";
 import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
@@ -48,29 +48,6 @@ const COLOR_FLECHA: Record<Bloque["estado"], string> = {
 export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
   useSyncExternalStore(bloques.suscribir, bloques.version);
   const [, setCuadro] = useState(0);
-  // Bloque con el ratón encima (para enseñar «Preguntar a Claude»). La capa no recibe
-  // clics, así que se mira el ratón en el contenedor del terminal.
-  const [encima, setEncima] = useState<number | null>(null);
-  const filas = useRef<{ id: number; fila: number; filaFin: number }[]>([]);
-  useEffect(() => {
-    const contenedor = term.element?.closest<HTMLElement>("[data-kyu-terminal]");
-    if (!contenedor) return;
-    const mover = (e: MouseEvent) => {
-      const pantalla = term.element?.querySelector<HTMLElement>(".xterm-screen");
-      if (!pantalla || term.rows === 0) return;
-      const r = pantalla.getBoundingClientRect();
-      const fila = Math.floor((e.clientY - r.top) / (r.height / term.rows));
-      const v = filas.current.find((x) => fila >= x.fila && fila <= x.filaFin);
-      setEncima(v ? v.id : null);
-    };
-    const salir = () => setEncima(null);
-    contenedor.addEventListener("mousemove", mover);
-    contenedor.addEventListener("mouseleave", salir);
-    return () => {
-      contenedor.removeEventListener("mousemove", mover);
-      contenedor.removeEventListener("mouseleave", salir);
-    };
-  }, [term]);
 
   // Redibujar cuando xterm pinta, se desplaza o cambia de tamaño (una vez por cuadro).
   useEffect(() => {
@@ -117,7 +94,6 @@ export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
     if (filaFin < 0 || fila >= term.rows) return [];
     return [{ b, fila, filaFin }];
   });
-  filas.current = visibles.map(({ b, fila, filaFin }) => ({ id: b.id, fila, filaFin }));
 
   return (
     <div
@@ -138,7 +114,6 @@ export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
           />
           <Titulo
             b={b}
-            encima={encima === b.id}
             onPreguntar={() => preguntarAClaude(term, b)}
             style={{ left: MARGEN, width: ancho, top: fila * alto, height: alto }}
           />
@@ -163,12 +138,10 @@ export default function CapaBloques({ term, bloques, fuente, tamano }: Props) {
 
 function Titulo({
   b,
-  encima,
   onPreguntar,
   style,
 }: {
   b: Bloque;
-  encima: boolean;
   onPreguntar: () => void;
   style: React.CSSProperties;
 }) {
@@ -194,20 +167,19 @@ function Titulo({
         </Pastilla>
       )}
       <span className="ml-auto flex items-center gap-3.5 pr-1 text-tenue">
-        {terminado && (encima || b.estado === "mal") && (
+        {terminado && (
+          // La mascota fija en cada bloque terminado; al pasar por encima se despliega.
           <button
             type="button"
             title="Preguntar a Claude por esta orden"
             onClick={onPreguntar}
             onMouseDown={(e) => e.preventDefault()}
-            className={`pointer-events-auto flex h-[19px] items-center gap-1.5 rounded-full border px-2 text-[11.5px] transition-colors ${
-              encima
-                ? "border-claude/40 text-claude2 hover:border-claude/70 hover:bg-claude/10"
-                : "border-transparent opacity-50"
-            }`}
+            className="group/claude pointer-events-auto flex h-[19px] items-center gap-1.5 rounded-full border border-transparent px-1.5 text-[11.5px] text-claude2 transition-colors hover:border-claude/50 hover:bg-claude/10"
           >
-            <Mascota alto={10} />
-            {encima && "Preguntar a Claude"}
+            <span className="opacity-55 transition-opacity group-hover/claude:opacity-100">
+              <Mascota alto={10} />
+            </span>
+            <span className="hidden group-hover/claude:inline">Preguntar a Claude</span>
           </button>
         )}
         <Resultado b={b} />
