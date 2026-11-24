@@ -56,7 +56,9 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
       <div
         className="flex h-[30px] flex-none items-center gap-0.5 border-b border-borde bg-barra px-1.5"
         onDragOver={(e) => {
-          if (e.dataTransfer.types.includes(TIPO_ARRASTRE)) e.preventDefault();
+          if (!e.dataTransfer.types.includes(TIPO_ARRASTRE)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
         }}
         onDrop={(e) => {
           const id = e.dataTransfer.getData(TIPO_ARRASTRE);
@@ -73,7 +75,10 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
               <div
                 key={id}
                 draggable
-                onDragStart={(e) => e.dataTransfer.setData(TIPO_ARRASTRE, id)}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(TIPO_ARRASTRE, id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
                 onClick={() => activar(panel.id, id)}
                 onAuxClick={(e) => e.button === 1 && void cerrarItem(id)}
                 title={it.tipo === "archivo" ? it.ruta : it.carpeta ?? it.perfil}
@@ -139,6 +144,7 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
         onDragOver={(e) => {
           if (!e.dataTransfer.types.includes(TIPO_ARRASTRE)) return;
           e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
           setZona(zonaDe(e));
         }}
         onDragLeave={(e) => {
