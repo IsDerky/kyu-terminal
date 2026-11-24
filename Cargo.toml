@@ -1,0 +1,28 @@
+[package]
+name = "kyu-terminal"
+version = "0.1.0"
+edition = "2024"
+description = "Terminal en Rust con Claude Code integrado"
+license = "MIT"
+repository = "https://github.com/IsDerky/kyu-terminal"
+
+[[bin]]
+name = "kyu"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.37", features = ["wgpu"] }
+egui = "0.37"
+alacritty_terminal = "0.26"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+dirs = "6"
+
+# Copia de egui-winit con un cambio: AltGr (Ctrl+Alt en Windows) escribe texto.
+# Ver la marca «Kyu:» en vendor/egui-winit/src/lib.rs.
+[patch.crates-io]
+egui-winit = { path = "vendor/egui-winit" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
