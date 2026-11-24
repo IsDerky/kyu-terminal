@@ -45,6 +45,9 @@ impl Terminal {
         let opciones = tty::Options {
             shell: Some(tty::Shell::new(shell.clone(), argumentos.clone())),
             working_directory: dirs::home_dir(),
+            env: [("KYU_TERMINAL".to_string(), env!("CARGO_PKG_VERSION").to_string())].into(),
+            #[cfg(windows)]
+            escape_args: true,
             ..Default::default()
         };
         let tamano = WindowSize { num_lines: lineas, num_cols: columnas, cell_width: 1, cell_height: 1 };

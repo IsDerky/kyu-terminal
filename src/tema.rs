@@ -14,6 +14,8 @@ pub struct Config {
     pub argumentos: Vec<String>,
     /// Ruta a un .ttf/.otf; vacío = la primera Nerd Font conocida que haya instalada.
     pub fuente: Option<String>,
+    /// `true` = no cargar el prompt de Kyu y dejar el de tu perfil (oh-my-posh…).
+    pub sin_prompt: bool,
     pub tema: Tema,
 }
 
@@ -107,13 +109,33 @@ impl Config {
         #[cfg(windows)]
         {
             let pwsh = which("pwsh.exe").unwrap_or_else(|| "powershell.exe".into());
-            (pwsh, vec!["-NoLogo".into()])
+            let mut args = vec!["-NoLogo".to_string()];
+            if !self.sin_prompt {
+                if let Some(script) = preparar_prompt_pwsh() {
+                    args.extend(["-NoExit".into(), "-Command".into(), format!(". '{}'", script.display())]);
+                }
+            }
+            (pwsh, args)
         }
         #[cfg(not(windows))]
         {
             (std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()), vec![])
         }
     }
+}
+
+/// Deja el script del prompt en `<config>/kyu/shell/kyu.ps1` y devuelve su ruta.
+/// Con BOM para que Windows PowerShell 5.1 lea bien los caracteres de los marcos.
+#[cfg(windows)]
+fn preparar_prompt_pwsh() -> Option<std::path::PathBuf> {
+    const SCRIPT: &str = include_str!("../shell/kyu.ps1");
+    let carpeta = dirs::config_dir()?.join("kyu").join("shell");
+    std::fs::create_dir_all(&carpeta).ok()?;
+    let ruta = carpeta.join("kyu.ps1");
+    let mut bytes = vec![0xEF, 0xBB, 0xBF];
+    bytes.extend_from_slice(SCRIPT.as_bytes());
+    std::fs::write(&ruta, bytes).ok()?;
+    Some(ruta)
 }
 
 #[cfg(windows)]
