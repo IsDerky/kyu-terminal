@@ -132,6 +132,7 @@ const CATEGORIAS: Record<string, string> = {
   "System prompt": "Instrucciones del sistema",
   "System tools": "Herramientas del sistema",
   "MCP tools": "Herramientas MCP",
+  "MCP server instructions": "Instrucciones de los MCP",
   "Custom agents": "Agentes propios",
   "Memory files": "Memoria (CLAUDE.md)",
   Skills: "Skills",
