@@ -40,16 +40,23 @@ fn tamano(columnas: u16, filas: u16) -> PtySize {
     }
 }
 
+/// Abre una shell del perfil `perfil` (o el primero si no existe) en `carpeta`
+/// (o en la carpeta personal).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn pty_abrir(
     app: AppHandle,
     ptys: State<'_, Ptys>,
+    perfil: String,
+    carpeta: Option<String>,
     columnas: u16,
     filas: u16,
     salida: Channel<Response>,
 ) -> Result<u32, String> {
     let id = ptys.siguiente.fetch_add(1, Ordering::Relaxed);
-    let (shell, argumentos) = crate::config::Config::cargar().shell_elegida();
+    let (shell, argumentos) = crate::config::Config::cargar()
+        .orden_de(&perfil)
+        .ok_or("no hay ningún perfil de shell")?;
 
     let par = native_pty_system()
         .openpty(tamano(columnas, filas))
@@ -57,8 +64,12 @@ pub fn pty_abrir(
 
     let mut orden = CommandBuilder::new(&shell);
     orden.args(&argumentos);
-    if let Some(casa) = dirs::home_dir() {
-        orden.cwd(casa);
+    let inicio = carpeta
+        .map(std::path::PathBuf::from)
+        .filter(|c| c.is_dir())
+        .or_else(dirs::home_dir);
+    if let Some(inicio) = inicio {
+        orden.cwd(inicio);
     }
     orden.env("KYU_TERMINAL", env!("CARGO_PKG_VERSION"));
     orden.env("KYU_ESTADO", archivo_estado(id));
@@ -75,7 +86,9 @@ pub fn pty_abrir(
     let escritor = par.master.take_writer().map_err(|e| e.to_string())?;
     let matar = hijo.clone_killer();
 
-    // Lo que escribe la shell → ventana.
+    // Lo que escribe la shell → ventana. Ojo: portable-pty abre ConPTY con
+    // INHERIT_CURSOR, así que lo primero que llega es «¿dónde está el cursor?»
+    // (ESC[6n) y la shell no arranca hasta que la ventana responde.
     std::thread::spawn(move || {
         let mut buf = [0u8; 16 * 1024];
         loop {
@@ -135,6 +148,25 @@ pub fn pty_redimensionar(
         .maestro
         .resize(tamano(columnas, filas))
         .map_err(|e| e.to_string())
+}
+
+/// Carpeta actual de la shell `id`, si su prompt la apunta (el de PowerShell de Kyu).
+#[tauri::command]
+pub fn pty_carpeta(id: u32) -> Option<String> {
+    let texto = std::fs::read_to_string(archivo_estado(id)).ok()?;
+    let ruta = texto.trim();
+    std::path::Path::new(ruta)
+        .is_dir()
+        .then(|| ruta.to_string())
+}
+
+/// Cierra todas las shells. La ventana lo pide al arrancar: si se recargó, las de
+/// antes se quedaron sin pestaña.
+#[tauri::command]
+pub fn pty_cerrar_todas(ptys: State<'_, Ptys>) {
+    for (_, mut sesion) in ptys.sesiones.lock().unwrap().drain() {
+        let _ = sesion.matar.kill();
+    }
 }
 
 #[tauri::command]

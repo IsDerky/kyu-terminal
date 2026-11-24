@@ -39,8 +39,8 @@ body {
   user-select: none;
 }
 
-/* La barra de desplazamiento de xterm, discreta. */
-.xterm .xterm-viewport {
+/* Barras de desplazamiento discretas en todo Kyu (editor, paleta, xterm). */
+* {
   scrollbar-width: thin;
   scrollbar-color: var(--color-borde2) transparent;
 }

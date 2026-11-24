@@ -14,6 +14,6 @@ export default defineConfig({
   build: {
     target: "es2022",
     // Se carga desde disco dentro de la app: un solo archivo grande no penaliza.
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 3000,
   },
 });

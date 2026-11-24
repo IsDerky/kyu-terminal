@@ -10,7 +10,7 @@
 #
 #   A = empieza el prompt (título)   B = empieza lo que escribes
 #   C = empieza a ejecutarse         D;código;kyu-dur=ms = ha terminado (y lo que tardó)
-#   7701;{json} = carpeta y git del bloque
+#   7701;{json} = carpeta (ruta completa, padre y hoja) y git del bloque
 
 # Windows PowerShell 5.1 escribe en la página de códigos OEM: sin esto los acentos se rompen.
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -63,7 +63,7 @@ function global:prompt {
     }
 
     $padre, $hoja = __KyuRuta
-    $datos = @{ padre = $padre; hoja = $hoja; rama = $null; cambios = 0 }
+    $datos = @{ padre = $padre; hoja = $hoja; ruta = $PWD.ProviderPath; rama = $null; cambios = 0 }
     $git = __KyuGit
     if ($git) { $datos.rama, $datos.cambios = $git }
     $json = ConvertTo-Json $datos -Compress

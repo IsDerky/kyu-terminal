@@ -12,24 +12,35 @@ export interface Tema {
   ansi: string[];
 }
 
+export interface Perfil {
+  nombre: string;
+  /** #rrggbb */
+  color: string;
+  /** powershell, bash, linux, cmd, servidor, terminal */
+  icono: string;
+}
+
 export interface ConfigVista {
   /** Lista de familias para CSS, la primera que esté instalada gana. */
   fuente: string;
   tema: Tema;
-  shell: string;
+  /** El primero es el predeterminado. */
+  perfiles: Perfil[];
 }
 
 export const leerConfig = () => invoke<ConfigVista>("config");
 
-/** Abre una shell en un PTY; la salida llega a `alRecibir` en bytes crudos. */
+/** Abre una shell del perfil en un PTY; la salida llega a `alRecibir` en bytes crudos. */
 export async function abrirPty(
+  perfil: string,
+  carpeta: string | null,
   columnas: number,
   filas: number,
   alRecibir: (datos: Uint8Array) => void,
 ): Promise<number> {
   const salida = new Channel<ArrayBuffer | number[]>();
   salida.onmessage = (d) => alRecibir(d instanceof ArrayBuffer ? new Uint8Array(d) : Uint8Array.from(d));
-  return invoke<number>("pty_abrir", { columnas, filas, salida });
+  return invoke<number>("pty_abrir", { perfil, carpeta, columnas, filas, salida });
 }
 
 export const escribirPty = (id: number, datos: string) => invoke("pty_escribir", { id, datos });
@@ -38,6 +49,16 @@ export const redimensionarPty = (id: number, columnas: number, filas: number) =>
   invoke("pty_redimensionar", { id, columnas, filas });
 
 export const cerrarPty = (id: number) => invoke("pty_cerrar", { id });
+
+/** Al arrancar la ventana: cierra las shells que quedaran de antes de recargarla. */
+export const cerrarTodasPty = () => invoke("pty_cerrar_todas");
+
+/** Carpeta actual de la shell (solo si su prompt la apunta: PowerShell con el prompt de Kyu). */
+export const carpetaPty = (id: number) => invoke<string | null>("pty_carpeta", { id });
+
+/** Avisa cuando la shell `id` termina (el usuario escribió `exit`, se cerró…). */
+export const alTerminarPty = (alTerminar: (id: number) => void): Promise<UnlistenFn> =>
+  listen<number>("pty:fin", (e) => alTerminar(e.payload));
 
 export interface Ram {
   /** bytes */
@@ -48,6 +69,11 @@ export interface Ram {
 /** RAM del equipo; null si no se puede leer. */
 export const leerRam = () => invoke<Ram | null>("ram_uso");
 
-/** Avisa cuando la shell `id` termina (el usuario escribió `exit`, se cerró…). */
-export const alTerminarPty = (alTerminar: (id: number) => void): Promise<UnlistenFn> =>
-  listen<number>("pty:fin", (e) => alTerminar(e.payload));
+/** Ruta absoluta si existe el archivo (las relativas, desde `base`). */
+export const resolverArchivo = (ruta: string, base: string | null) =>
+  invoke<string | null>("archivo_resolver", { ruta, base });
+
+export const leerArchivo = (ruta: string) => invoke<string>("archivo_leer", { ruta });
+
+export const guardarArchivo = (ruta: string, contenido: string) =>
+  invoke("archivo_guardar", { ruta, contenido });

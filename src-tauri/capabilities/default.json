@@ -12,6 +12,11 @@
     "core:window:allow-set-title",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "opener:allow-open-url"
+    "dialog:allow-ask",
+    "dialog:allow-message",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }, { "url": "vscode://*" }]
+    }
   ]
 }

@@ -1,22 +1,41 @@
-//! Configuración de `kyu.toml` y colores del tema.
+//! Configuración de `kyu.toml`: perfiles de shell, fuente y colores del tema.
 //!
 //! El archivo vive en `<config>/kyu/kyu.toml` (en Windows `%APPDATA%\kyu\kyu.toml`).
-//! Si no existe se usan los valores de aquí: aspecto «Sobrio».
+//! Si no existe se usan los valores de aquí: aspecto «Sobrio» y los perfiles que haya
+//! en el equipo (PowerShell, Git Bash, WSL…).
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
-    /// Programa de la shell; vacío = la de siempre del sistema.
+    /// Programa de la shell; vacío = la de siempre del sistema. Si se pone, es el
+    /// primer perfil («Shell»).
     pub shell: Option<String>,
     pub argumentos: Vec<String>,
+    /// Perfiles propios; si no hay ninguno se detectan los del equipo.
+    pub perfiles: Vec<Perfil>,
     /// Familia de la fuente (p. ej. "JetBrainsMono Nerd Font Mono"); vacío = la primera
     /// Nerd Font conocida que haya instalada.
     pub fuente: Option<String>,
     /// `true` = no cargar el prompt de Kyu y dejar el de tu perfil (oh-my-posh…).
     pub sin_prompt: bool,
     pub tema: Tema,
+}
+
+/// Lo que abre una pestaña de terminal.
+#[derive(Deserialize, Serialize, Clone)]
+pub struct Perfil {
+    pub nombre: String,
+    pub shell: String,
+    #[serde(default)]
+    pub argumentos: Vec<String>,
+    /// `#rrggbb` del punto de la pestaña.
+    #[serde(default)]
+    pub color: Option<String>,
+    /// powershell, bash, linux, cmd, servidor
+    #[serde(default)]
+    pub icono: Option<String>,
 }
 
 /// Se prueban por orden si `kyu.toml` no dice ninguna; el navegador usa la primera instalada.
@@ -73,12 +92,19 @@ impl Default for Tema {
     }
 }
 
-/// Lo que necesita la ventana para pintar el terminal.
+/// Lo que necesita la ventana para pintar los terminales y los menús de perfiles.
 #[derive(Serialize)]
 pub struct ConfigVista {
     fuente: String,
     tema: Tema,
-    shell: String,
+    perfiles: Vec<PerfilVista>,
+}
+
+#[derive(Serialize)]
+pub struct PerfilVista {
+    nombre: String,
+    color: String,
+    icono: String,
 }
 
 #[tauri::command]
@@ -97,9 +123,18 @@ pub fn config() -> ConfigVista {
         })
         .collect::<Vec<_>>()
         .join(", ");
+    let perfiles = config
+        .perfiles()
+        .into_iter()
+        .map(|p| PerfilVista {
+            color: p.color.unwrap_or_else(|| "#a78bfa".into()),
+            icono: p.icono.unwrap_or_else(|| "terminal".into()),
+            nombre: p.nombre,
+        })
+        .collect();
     ConfigVista {
         fuente,
-        shell: config.shell_elegida().0,
+        perfiles,
         tema: config.tema,
     }
 }
@@ -118,40 +153,114 @@ impl Config {
         }
     }
 
-    /// Shell a arrancar: la de `kyu.toml` o la del sistema.
-    pub fn shell_elegida(&self) -> (String, Vec<String>) {
+    /// Los perfiles a ofrecer, el primero es el predeterminado.
+    pub fn perfiles(&self) -> Vec<Perfil> {
+        let mut lista = Vec::new();
         if let Some(shell) = &self.shell {
-            return (shell.clone(), self.argumentos.clone());
+            lista.push(Perfil {
+                nombre: "Shell".into(),
+                shell: shell.clone(),
+                argumentos: self.argumentos.clone(),
+                color: None,
+                icono: None,
+            });
         }
+        if !self.perfiles.is_empty() {
+            lista.extend(self.perfiles.iter().cloned());
+        } else {
+            lista.extend(detectar_perfiles());
+        }
+        lista
+    }
+
+    /// Programa y argumentos para lanzar un perfil (añade el prompt de Kyu a PowerShell).
+    pub fn orden_de(&self, nombre: &str) -> Option<(String, Vec<String>)> {
+        let perfiles = self.perfiles();
+        let perfil = perfiles
+            .iter()
+            .find(|p| p.nombre == nombre)
+            .or(perfiles.first())?;
+        let mut argumentos = perfil.argumentos.clone();
         #[cfg(windows)]
         {
-            let pwsh = which("pwsh.exe").unwrap_or_else(|| "powershell.exe".into());
-            let mut args = vec!["-NoLogo".to_string()];
-            if !self.sin_prompt
+            let es_powershell = {
+                let s = perfil.shell.to_lowercase();
+                s.ends_with("powershell.exe") || s.ends_with("pwsh.exe") || s == "pwsh"
+            };
+            if es_powershell
+                && !self.sin_prompt
+                && !argumentos
+                    .iter()
+                    .any(|a| a.eq_ignore_ascii_case("-Command"))
                 && let Some(script) = preparar_prompt_pwsh()
             {
-                args.extend([
+                argumentos.extend([
                     "-NoExit".into(),
                     "-Command".into(),
                     format!(". '{}'", script.display()),
                 ]);
             }
-            (pwsh, args)
         }
-        #[cfg(not(windows))]
-        {
-            // El prompt de bash todavía no existe; `sin_prompt` solo cuenta en Windows.
-            let _ = self.sin_prompt;
-            (
-                std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()),
-                vec![],
-            )
-        }
+        Some((perfil.shell.clone(), argumentos))
     }
 }
 
+/// Perfiles que hay en este equipo.
+fn detectar_perfiles() -> Vec<Perfil> {
+    let perfil =
+        |nombre: &str, shell: String, argumentos: &[&str], color: &str, icono: &str| Perfil {
+            nombre: nombre.into(),
+            shell,
+            argumentos: argumentos.iter().map(|a| a.to_string()).collect(),
+            color: Some(color.into()),
+            icono: Some(icono.into()),
+        };
+    let mut lista = Vec::new();
+    #[cfg(windows)]
+    {
+        let pwsh = which("pwsh.exe").unwrap_or_else(|| "powershell.exe".into());
+        lista.push(perfil(
+            "PowerShell",
+            pwsh,
+            &["-NoLogo"],
+            "#a78bfa",
+            "powershell",
+        ));
+        let git_bash = std::path::Path::new(r"C:\Program Files\Git\bin\bash.exe");
+        if git_bash.is_file() {
+            lista.push(perfil(
+                "Git Bash",
+                git_bash.display().to_string(),
+                &["--login", "-i"],
+                "#4ade80",
+                "bash",
+            ));
+        }
+        if let Some(wsl) = which("wsl.exe") {
+            lista.push(perfil("WSL", wsl, &[], "#fbbf24", "linux"));
+        }
+        lista.push(perfil(
+            "Símbolo del sistema",
+            "cmd.exe".into(),
+            &[],
+            "#8b8b96",
+            "cmd",
+        ));
+    }
+    #[cfg(not(windows))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+        let nombre = std::path::Path::new(&shell)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "Shell".into());
+        lista.push(perfil(&nombre, shell, &[], "#a78bfa", "bash"));
+    }
+    lista
+}
+
 /// Deja el script del prompt en `<config>/kyu/shell/kyu.ps1` y devuelve su ruta.
-/// Con BOM para que Windows PowerShell 5.1 lea bien los caracteres de los marcos.
+/// Con BOM para que Windows PowerShell 5.1 lea bien los caracteres.
 #[cfg(windows)]
 fn preparar_prompt_pwsh() -> Option<std::path::PathBuf> {
     const SCRIPT: &str = include_str!("../../shell/kyu.ps1");
@@ -160,7 +269,10 @@ fn preparar_prompt_pwsh() -> Option<std::path::PathBuf> {
     let ruta = carpeta.join("kyu.ps1");
     let mut bytes = vec![0xEF, 0xBB, 0xBF];
     bytes.extend_from_slice(SCRIPT.as_bytes());
-    std::fs::write(&ruta, bytes).ok()?;
+    // Si ya está igual no se reescribe: varias pestañas lo leen a la vez al abrirse.
+    if std::fs::read(&ruta).ok().as_deref() != Some(bytes.as_slice()) {
+        std::fs::write(&ruta, bytes).ok()?;
+    }
     Some(ruta)
 }
 

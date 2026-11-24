@@ -30,6 +30,7 @@ export interface Bloque {
 }
 
 interface DatosShell {
+  ruta?: string;
   padre?: string;
   hoja?: string;
   rama?: string | null;
@@ -46,14 +47,18 @@ export class Bloques {
   private oyentes = new Set<() => void>();
   private reloj: number | undefined;
 
+  /** Se llama en cada prompt con la carpeta actual de la shell. */
+  alCambiarCarpeta: ((ruta: string, hoja: string) => void) | null = null;
+
   constructor(private term: Terminal) {
     term.parser.registerOscHandler(133, (d) => this.marca(d));
     term.parser.registerOscHandler(7701, (d) => this.datos(d));
-    // cls / clear (borrar pantalla o historial): los bloques de antes ya no existen.
+    // cls / clear borran también el historial (CSI 3J): los bloques de antes ya no
+    // existen. Solo «borrar pantalla» (CSI 2J) no cuenta: ConPTY lo manda al cambiar
+    // de tamaño para repintar, y los bloques siguen ahí.
     // Se devuelve false para que xterm borre igualmente.
     term.parser.registerCsiHandler({ final: "J" }, (params) => {
-      const modo = params[0];
-      if (modo === 2 || modo === 3) this.vaciar();
+      if (params[0] === 3) this.vaciar();
       return false;
     });
   }
@@ -151,6 +156,7 @@ export class Bloques {
       ultimo.hoja = d.hoja ?? "";
       ultimo.rama = d.rama || null;
       ultimo.cambios = d.cambios ?? 0;
+      if (d.ruta) this.alCambiarCarpeta?.(d.ruta, ultimo.hoja);
       this.avisar();
     } catch {
       // Datos mal formados: el título sale sin carpeta, no se rompe nada.

@@ -1,0 +1,153 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Columns2, Layers, Search, Rows2, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { focoActual, useKyu } from "../lib/estado";
+import { cerrarActual } from "../lib/acciones";
+import type { ConfigVista, Perfil } from "../lib/nucleo";
+import { nombreEspacio } from "./BarraTitulo";
+import { IconoPerfil } from "./iconos";
+
+interface Orden {
+  id: string;
+  grupo: string;
+  titulo: string;
+  detalle?: string;
+  atajo?: string;
+  icono?: LucideIcon;
+  perfil?: Perfil;
+  hacer: () => void;
+}
+
+/** Coincidencia «difusa»: las letras de la búsqueda aparecen en orden. Devuelve dónde. */
+function coincide(texto: string, busqueda: string): number[] | null {
+  if (!busqueda) return [];
+  const t = texto.toLowerCase();
+  const q = busqueda.toLowerCase().replace(/\s+/g, "");
+  const pos: number[] = [];
+  let j = 0;
+  for (let i = 0; i < t.length && j < q.length; i++) if (t[i] === q[j]) (pos.push(i), j++);
+  return j === q.length ? pos : null;
+}
+
+/** Ctrl+Mayús+P: todo lo que hace Kyu, buscando por nombre. */
+export default function Paleta({ config }: { config: ConfigVista }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [sel, setSel] = useState(0);
+  const entrada = useRef<HTMLInputElement>(null);
+  const espacios = useKyu((s) => s.espacios);
+  const cerrar = () => useKyu.getState().ponerPaleta(false);
+
+  const ordenes = useMemo<Orden[]>(() => {
+    const k = useKyu.getState();
+    const f = focoActual();
+    const perfilFoco = f?.item?.tipo === "terminal" ? f.item.perfil : config.perfiles[0]?.nombre ?? "";
+    const lista: Orden[] = [
+      { id: "div-d", grupo: "Paneles", titulo: "Dividir a la derecha", atajo: "Ctrl+Mayús+D", icono: Columns2, hacer: () => k.dividir("horizontal", perfilFoco) },
+      { id: "div-a", grupo: "Paneles", titulo: "Dividir abajo", atajo: "Ctrl+Mayús+E", icono: Rows2, hacer: () => k.dividir("vertical", perfilFoco) },
+      { id: "cerrar", grupo: "Paneles", titulo: "Cerrar pestaña", atajo: "Ctrl+Mayús+W", icono: X, hacer: cerrarActual },
+      { id: "buscar", grupo: "Paneles", titulo: "Buscar en el terminal", atajo: "Ctrl+F", icono: Search, hacer: () => f?.item?.tipo === "terminal" && k.ponerBuscando(f.item.id) },
+      ...config.perfiles.map<Orden>((p, i) => ({
+        id: `pest-${p.nombre}`,
+        grupo: "Pestañas",
+        titulo: `Nueva pestaña: ${p.nombre}`,
+        atajo: i === 0 ? "Ctrl+Mayús+T" : undefined,
+        perfil: p,
+        hacer: () => k.nuevaPestana(p.nombre),
+      })),
+      ...config.perfiles.map<Orden>((p, i) => ({
+        id: `esp-${p.nombre}`,
+        grupo: "Espacios",
+        titulo: `Nuevo espacio: ${p.nombre}`,
+        atajo: i === 0 ? "Ctrl+Mayús+N" : undefined,
+        icono: Layers,
+        hacer: () => k.nuevoEspacio(p.nombre),
+      })),
+      ...espacios.map<Orden>((e, i) => ({
+        id: `ir-${e.id}`,
+        grupo: "Espacios",
+        titulo: `Ir a ${nombreEspacio(e)}`,
+        atajo: i < 9 ? `Ctrl+${i + 1}` : undefined,
+        icono: ArrowLeftRight,
+        hacer: () => k.cambiarEspacio(e.id),
+      })),
+    ];
+    return lista;
+  }, [config, espacios]);
+
+  const filtradas = ordenes
+    .map((o) => ({ o, pos: coincide(o.titulo, busqueda) }))
+    .filter((x): x is { o: Orden; pos: number[] } => x.pos !== null);
+
+  useEffect(() => setSel(0), [busqueda]);
+  useEffect(() => entrada.current?.focus(), []);
+
+  const ejecutar = (o?: Orden) => {
+    if (!o) return;
+    cerrar();
+    o.hacer();
+  };
+
+  let grupoAnterior = "";
+  return (
+    <div className="absolute inset-0 z-50 flex justify-center bg-[#05040899] pt-[70px]" onMouseDown={cerrar}>
+      <div
+        className="h-max w-[600px] overflow-hidden rounded-xl border border-borde2 bg-[#141417] shadow-[0_40px_90px_-20px_#000]"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2.5 border-b border-borde px-4 py-3">
+          <Search size={17} className="text-tenue" />
+          <input
+            ref={entrada}
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") (e.preventDefault(), setSel((s) => Math.min(s + 1, filtradas.length - 1)));
+              if (e.key === "ArrowUp") (e.preventDefault(), setSel((s) => Math.max(s - 1, 0)));
+              if (e.key === "Enter") ejecutar(filtradas[sel]?.o);
+              if (e.key === "Escape") cerrar();
+            }}
+            placeholder="Escribe una orden…"
+            spellCheck={false}
+            className="flex-1 bg-transparent text-[15px] text-texto outline-none placeholder:text-muy"
+          />
+        </div>
+        <div className="max-h-[420px] overflow-y-auto py-1">
+          {filtradas.length === 0 && <p className="px-4 py-3 text-[13px] text-muy">Nada coincide.</p>}
+          {filtradas.map(({ o, pos }, i) => {
+            const cabecera = o.grupo !== grupoAnterior ? o.grupo : null;
+            grupoAnterior = o.grupo;
+            const Icono = o.icono;
+            return (
+              <div key={o.id}>
+                {cabecera && <div className="px-4 pb-1 pt-2.5 text-[11px] uppercase tracking-wider text-muy">{cabecera}</div>}
+                <div
+                  onMouseMove={() => setSel(i)}
+                  onClick={() => ejecutar(o)}
+                  className={`flex cursor-default items-center gap-2.5 px-4 py-2 text-[13px] text-texto ${
+                    i === sel ? "bg-hover shadow-[inset_2px_0_0_var(--color-acento)]" : ""
+                  }`}
+                >
+                  {o.perfil ? <IconoPerfil perfil={o.perfil} /> : Icono ? <Icono size={14} className="text-tenue" /> : null}
+                  <span>
+                    {[...o.titulo].map((c, j) => (
+                      <span key={j} className={pos.includes(j) ? "font-semibold text-acento2" : ""}>
+                        {c}
+                      </span>
+                    ))}
+                  </span>
+                  {o.atajo && (
+                    <kbd className="ml-auto rounded border border-borde2 px-1.5 font-mono text-[11px] text-tenue">{o.atajo}</kbd>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex gap-4 border-t border-borde px-4 py-2 text-[11px] text-muy">
+          <span>↑↓ moverse</span>
+          <span>Intro ejecutar</span>
+          <span>Esc cerrar</span>
+        </div>
+      </div>
+    </div>
+  );
+}

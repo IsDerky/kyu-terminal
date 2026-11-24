@@ -1,47 +1,95 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import BarraTitulo from "./componentes/BarraTitulo";
-import Terminal from "./componentes/Terminal";
-import { alTerminarPty, leerConfig, type ConfigVista } from "./lib/nucleo";
+import BarraTitulo, { nombreEspacio } from "./componentes/BarraTitulo";
+import Espacio from "./componentes/Espacio";
+import Paleta from "./componentes/Paleta";
+import { alTerminarPty, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
+import { focoActual, useKyu } from "./lib/estado";
+import { configurar, itemDePty } from "./lib/terminales";
+import { configurarEditores } from "./lib/editores";
+import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
 
 export default function App() {
   const [config, setConfig] = useState<ConfigVista | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [titulo, setTitulo] = useState("Kyu Terminal");
-  const idPty = useRef<number | null>(null);
+  const espacios = useKyu((s) => s.espacios);
+  const activo = useKyu((s) => s.activo);
+  const paleta = useKyu((s) => s.paleta);
+  useKyu((s) => s.items); // el título de la ventana sigue al terminal con el foco
 
   useEffect(() => {
-    leerConfig().then(setConfig, (e) => setError(String(e)));
+    void cerrarTodasPty();
+    leerConfig().then((c) => {
+      configurar(c);
+      configurarEditores(c.fuente, c.tema.fuente_tamano);
+      setConfig(c);
+      useKyu.getState().iniciar(c.perfiles[0]?.nombre ?? "");
+    }, (e) => setError(String(e)));
   }, []);
 
-  // Cuando la shell termina (exit), se cierra la ventana, como en cualquier terminal.
+  // Cuando una shell termina (exit), se cierra su pestaña.
   useEffect(() => {
-    const quitar = alTerminarPty((id) => {
-      if (id === idPty.current) void getCurrentWindow().close();
+    const quitar = alTerminarPty((ptyId) => {
+      const item = itemDePty(ptyId);
+      if (item) void cerrarItem(item, false);
     });
     return () => void quitar.then((f) => f());
   }, []);
 
-  const cambiarTitulo = useCallback((t: string) => {
-    const limpio = t.trim() || "Kyu Terminal";
-    setTitulo(limpio);
-    void getCurrentWindow().setTitle(`${limpio} · Kyu`);
-  }, []);
+  // Atajos de Kyu. En fase de captura, para que xterm no se los quede.
+  useEffect(() => {
+    if (!config) return;
+    const teclas = (e: KeyboardEvent) => {
+      const k = useKyu.getState();
+      const f = focoActual();
+      const perfil = f?.item?.tipo === "terminal" ? f.item.perfil : config.perfiles[0]?.nombre ?? "";
+      const enEditor = (document.activeElement as HTMLElement | null)?.closest(".cm-editor");
+      const hecho = () => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      if (e.ctrlKey && e.shiftKey && !e.altKey) {
+        switch (e.code) {
+          case "KeyP": hecho(); k.ponerPaleta(!k.paleta); return;
+          case "KeyD": hecho(); k.dividir("horizontal", perfil); return;
+          case "KeyE": hecho(); k.dividir("vertical", perfil); return;
+          case "KeyT": hecho(); k.nuevaPestana(perfil); return;
+          case "KeyN": hecho(); k.nuevoEspacio(config.perfiles[0]?.nombre ?? ""); return;
+          case "KeyW": hecho(); cerrarActual(); return;
+          case "Tab": hecho(); k.siguientePestana(-1); return;
+        }
+      }
+      if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+        if (e.code === "Tab") return (hecho(), k.siguientePestana(1));
+        if (/^Digit[1-9]$/.test(e.code)) {
+          const esp = k.espacios[Number(e.code.slice(5)) - 1];
+          if (esp) (hecho(), k.cambiarEspacio(esp.id));
+          return;
+        }
+        if (e.code === "KeyF" && !enEditor && f?.item?.tipo === "terminal") return (hecho(), k.ponerBuscando(f.item.id));
+      }
+      if (e.altKey && !e.ctrlKey && !e.shiftKey) {
+        const dir = { ArrowLeft: "izquierda", ArrowRight: "derecha", ArrowUp: "arriba", ArrowDown: "abajo" }[e.code] as
+          | "izquierda" | "derecha" | "arriba" | "abajo" | undefined;
+        if (dir) return (hecho(), moverFoco(dir));
+      }
+    };
+    window.addEventListener("keydown", teclas, true);
+    return () => window.removeEventListener("keydown", teclas, true);
+  }, [config]);
 
-  const alAbrir = useCallback((id: number) => {
-    idPty.current = id;
-  }, []);
+  const espacio = espacios.find((e) => e.id === activo);
+  useEffect(() => {
+    if (espacio) void getCurrentWindow().setTitle(`${nombreEspacio(espacio)} · Kyu`);
+  });
 
+  if (error) return <p className="p-4 font-mono text-mal">No se pudo leer la configuración: {error}</p>;
+  if (!config) return null;
   return (
-    <div className="flex h-full flex-col">
-      <BarraTitulo titulo={titulo} />
-      <main className="min-h-0 flex-1 py-2 pl-3.5 pr-1">
-        {error ? (
-          <p className="p-4 font-mono text-mal">No se pudo leer la configuración: {error}</p>
-        ) : config ? (
-          <Terminal config={config} alCambiarTitulo={cambiarTitulo} alAbrir={alAbrir} />
-        ) : null}
-      </main>
+    <div className="relative flex h-full flex-col">
+      <BarraTitulo config={config} />
+      {espacio && <Espacio key={espacio.id} espacio={espacio} config={config} />}
+      {paleta && <Paleta config={config} />}
     </div>
   );
 }
