@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import type { Terminal } from "@xterm/xterm";
-import { Check, GitBranch, MemoryStick, X } from "lucide-react";
+import { ArrowUpRight, Check, GitBranch, MemoryStick, X } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
 import type { Autocompletado } from "../lib/autocompletado";
 import { adjuntar } from "../lib/claude";
@@ -223,6 +224,20 @@ function Titulo({
         </Pastilla>
       )}
       <span className="ml-auto flex items-center gap-3.5 pr-1 text-tenue">
+        {/* Solo mientras corre: al parar el servidor el enlace ya no lleva a nada. */}
+        {b.estado === "corre" && b.locales?.map((url) => (
+          <button
+            key={url}
+            type="button"
+            title={`Abrir ${url} en el navegador`}
+            onClick={() => void openUrl(url)}
+            onMouseDown={(e) => e.preventDefault()}
+            className="pointer-events-auto flex h-[19px] items-center gap-1 rounded-full border border-acento/40 bg-acento/10 px-2 text-[11.5px] text-acento2 transition-colors hover:border-acento hover:bg-acento/20"
+          >
+            <ArrowUpRight size={12} strokeWidth={2} />
+            {url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+          </button>
+        ))}
         {terminado && (
           // La mascota fija en cada bloque terminado; al pasar por encima se despliega.
           <button

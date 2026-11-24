@@ -33,6 +33,8 @@ export interface Bloque {
   tInicio?: number;
   durMs?: number;
   codigo?: number;
+  /** Direcciones locales que han salido en la salida (servidores de desarrollo). */
+  locales?: string[];
 }
 
 interface DatosShell {
@@ -156,6 +158,7 @@ export class Bloques {
             ? Number(dur.slice(8))
             : performance.now() - (ultimo.tInicio ?? performance.now());
           ultimo.fin = this.term.registerMarker(0);
+          ultimo.locales = undefined;
           if (ultimo.orden) this.alTerminarOrden?.(ultimo);
         }
         break;
@@ -229,6 +232,7 @@ export class Bloques {
   private arrancarReloj() {
     if (this.reloj !== undefined) return;
     this.reloj = window.setInterval(() => {
+      this.lista.forEach((b) => b.estado === "corre" && this.buscarLocales(b));
       if (!this.lista.some((b) => b.estado === "corre")) {
         window.clearInterval(this.reloj);
         this.reloj = undefined;
@@ -237,10 +241,47 @@ export class Bloques {
     }, 1000);
   }
 
+  /** Busca en la salida del bloque (las últimas 400 filas) direcciones locales con puerto. */
+  private buscarLocales(b: Bloque) {
+    if (b.inicio.line < 0) return;
+    const buf = this.term.buffer.normal;
+    const hasta = b.fin && b.fin.line >= 0 ? b.fin.line : buf.baseY + buf.cursorY + 1;
+    const desde = Math.max(b.inicio.line + 2, hasta - 400);
+    let texto = "";
+    for (let y = desde; y < hasta; y++) {
+      const l = buf.getLine(y);
+      if (l) texto += (l.isWrapped ? "" : "\n") + l.translateToString(true);
+    }
+    const nuevas = direccionesLocales(texto);
+    if (nuevas.join() !== (b.locales ?? []).join()) b.locales = nuevas.length ? nuevas : undefined;
+  }
+
   dispose() {
     if (this.reloj !== undefined) window.clearInterval(this.reloj);
     this.oyentes.clear();
   }
+}
+
+// http(s)://localhost:3000/…, 127.0.0.1, 0.0.0.0, [::1], [::] y también «localhost:3000» sin esquema.
+const LOCAL = /(?<![\w.@-])(?:(https?):\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])(?::(\d{2,5}))(\/[^\s'"<>()`]*)?/gi;
+
+/**
+ * Direcciones locales con puerto de un texto, listas para abrir en el navegador: sin
+ * repetir puerto (la primera gana), con 0.0.0.0 y [::] cambiados por localhost.
+ */
+export function direccionesLocales(texto: string): string[] {
+  const vistos = new Map<string, string>();
+  for (const m of texto.matchAll(LOCAL)) {
+    const [, esquema, host, puerto, ruta] = m;
+    if (!puerto || Number(puerto) > 65535) continue;
+    const anfitrion = /^(0\.0\.0\.0|\[::\])$/.test(host) ? "localhost" : host.toLowerCase();
+    const clave = puerto;
+    if (vistos.has(clave)) continue;
+    // Sin esquema solo vale si va suelto (no «user@localhost:22» ni dentro de otra palabra).
+    if (!esquema && /[@\w.-]$/.test(texto.slice(Math.max(0, m.index - 1), m.index))) continue;
+    vistos.set(clave, `${esquema?.toLowerCase() ?? "http"}://${anfitrion}:${puerto}${(ruta ?? "/").replace(/[.,;:]+$/, "")}`);
+  }
+  return [...vistos.values()].slice(0, 3);
 }
 
 /** Lo que se le manda a Claude de un bloque terminado. */

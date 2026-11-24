@@ -123,7 +123,7 @@ export function obtener(item: string): Sesion {
   term.loadAddon(busqueda);
   term.loadAddon(new Unicode11Addon());
   term.unicode.activeVersion = "11";
-  term.loadAddon(new WebLinksAddon((_e, url) => void openUrl(url)));
+  term.loadAddon(new WebLinksAddon((_e, url) => void openUrl(url.replace(/^(https?:\/\/)(0\.0\.0\.0|\[::\])(?=[:/]|$)/i, "$1localhost"))));
   if (import.meta.env.DEV) (window as unknown as { __kyu: XTerm }).__kyu = term;
 
   // Ctrl+C copia si hay selección (si no, va a la shell); Ctrl+V pega.
