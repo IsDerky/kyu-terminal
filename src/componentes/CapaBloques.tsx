@@ -4,10 +4,9 @@ import { ArrowUpRight, Check, GitBranch, MemoryStick, X } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
 import type { Autocompletado } from "../lib/autocompletado";
-import { adjuntar } from "../lib/claude";
+import { adjuntar, ID_ENTRADA } from "../lib/claude";
 import { useKyu } from "../lib/estado";
 import { Mascota } from "./iconos";
-import { ID_ENTRADA } from "./PanelClaude";
 
 /** Abre el panel de Claude con la orden y su salida adjuntas, listo para preguntar. */
 function preguntarAClaude(term: Terminal, b: Bloque) {

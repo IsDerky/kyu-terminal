@@ -17,6 +17,7 @@ import {
   tomarBorrador,
   useClaude,
   vacia,
+  ID_ENTRADA,
   type Conversacion,
   type Entrada,
 } from "../lib/claude";
@@ -33,7 +34,6 @@ import Permiso from "./Permiso";
 import { BotonVerCambios, PasosSubagente, Plan, Razonamiento, ResumenCambios, VolverAqui } from "./TandaClaude";
 import { Mascota } from "./iconos";
 
-export const ID_ENTRADA = "entrada-claude";
 
 const SIN_COMANDOS: Comando[] = [];
 const SIN_IMAGENES: ImagenAdjunta[] = [];

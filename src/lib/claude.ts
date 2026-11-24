@@ -78,6 +78,9 @@ export type Entrada =
   /** Línea tenue: «Conversación compactada», «Unknown command: /x»… */
   | { id: number; tipo: "aviso"; texto: string };
 
+/** id de la caja de texto del panel de Claude (para darle el foco desde fuera). */
+export const ID_ENTRADA = "entrada-claude";
+
 export type Respuesta = "permitir" | "siempre" | "denegar";
 
 export interface ArchivoCambiado {

@@ -3,9 +3,8 @@ import { BarChart3, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, S
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
 import { textoBloque } from "../lib/bloques";
-import { adjuntar } from "../lib/claude";
+import { adjuntar, ID_ENTRADA } from "../lib/claude";
 import { sesion } from "../lib/terminales";
-import { ID_ENTRADA } from "./PanelClaude";
 import { alternarGrabacion } from "../lib/grabar";
 import type { ConfigVista, Perfil } from "../lib/nucleo";
 import { nombreEspacio } from "./BarraTitulo";

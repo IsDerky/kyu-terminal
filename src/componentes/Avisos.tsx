@@ -1,10 +1,9 @@
 import { useEffect } from "react";
 import { Check, ClipboardList, ShieldAlert, X } from "lucide-react";
-import { pendiente, responder, useClaude, type AvisoFin } from "../lib/claude";
+import { pendiente, responder, useClaude, type AvisoFin, ID_ENTRADA } from "../lib/claude";
 import { useKyu } from "../lib/estado";
 import { herramienta, partirRuta, relativa } from "../lib/herramientas";
 import { nombreEspacio } from "./BarraTitulo";
-import { ID_ENTRADA } from "./PanelClaude";
 import { Mascota } from "./iconos";
 
 const DURACION_FIN = 8000;

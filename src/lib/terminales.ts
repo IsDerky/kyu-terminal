@@ -30,6 +30,24 @@ export interface Sesion {
   auto: Autocompletado | null;
   ptyId: number | null;
   abierta: boolean;
+  /** Dibujo por WebGL mientras se ve; al ocultarse se suelta (cada contexto pesa en la GPU). */
+  webgl: WebglAddon | null;
+}
+
+/** Pone el dibujo por WebGL (sin WebGL, p. ej. algunas gráficas en Linux, xterm usa el DOM). */
+function ponerWebgl(s: Sesion) {
+  if (s.webgl) return;
+  try {
+    const webgl = new WebglAddon();
+    webgl.onContextLoss(() => {
+      webgl.dispose();
+      if (s.webgl === webgl) s.webgl = null;
+    });
+    s.term.loadAddon(webgl);
+    s.webgl = webgl;
+  } catch {
+    s.webgl = null;
+  }
 }
 
 const sesiones = new Map<string, Sesion>();
@@ -171,7 +189,7 @@ export function obtener(item: string): Sesion {
     useKyu.getState().ponerTitulo(item, titulo);
   });
 
-  const s: Sesion = { term, elemento, bloques, ajuste, busqueda, auto, ptyId: null, abierta: false };
+  const s: Sesion = { term, elemento, bloques, ajuste, busqueda, auto, ptyId: null, abierta: false, webgl: null };
   sesiones.set(item, s);
   return s;
 }
@@ -192,6 +210,7 @@ export async function enganchar(item: string, contenedor: HTMLElement) {
   if (s.abierta) {
     // El lienzo no se redibuja solo al volver a la página (al dividir o mover el panel).
     if (s.term.element) {
+      ponerWebgl(s);
       s.ajuste.fit();
       s.term.refresh(0, s.term.rows - 1);
     }
@@ -200,13 +219,7 @@ export async function enganchar(item: string, contenedor: HTMLElement) {
   s.abierta = true;
   await fuenteLista;
   s.term.open(s.elemento);
-  try {
-    const webgl = new WebglAddon();
-    webgl.onContextLoss(() => webgl.dispose());
-    s.term.loadAddon(webgl);
-  } catch {
-    // Sin WebGL (algunas gráficas en Linux) xterm dibuja con el DOM.
-  }
+  ponerWebgl(s);
   registrarEnlaces(s.term, item);
   // Al dividir, los paneles de al lado cambian de tamaño a la vez. Se espera a que el
   // reparto se asiente para arrancar la shell ya con su tamaño de verdad.
@@ -253,7 +266,11 @@ function registro(item: string, d: Uint8Array) {
 /** Lo saca de la pantalla sin cerrar la shell. */
 export function soltar(item: string) {
   const s = sesiones.get(item);
-  s?.elemento.remove();
+  if (!s) return;
+  s.elemento.remove();
+  // Una pestaña que no se ve no necesita su contexto WebGL; vuelve al engancharla.
+  s.webgl?.dispose();
+  s.webgl = null;
 }
 
 /** Cierra la shell y libera el terminal. */

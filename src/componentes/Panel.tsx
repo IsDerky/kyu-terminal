@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ChevronDown, Columns2, FolderTree, Plus, Rows2, X } from "lucide-react";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
 import VistaTerminal from "./VistaTerminal";
-import VistaArchivo from "./VistaArchivo";
+// CodeMirror se carga al abrir el primer archivo.
+const VistaArchivo = lazy(() => import("./VistaArchivo"));
 import VistaArbol from "./VistaArbol";
 import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
@@ -171,7 +172,11 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
         }}
       >
         {activo?.tipo === "terminal" && <VistaTerminal key={activo.id} item={activo.id} conFoco={conFoco} config={config} />}
-        {activo?.tipo === "archivo" && <VistaArchivo key={activo.id} archivo={activo} conFoco={conFoco} />}
+        {activo?.tipo === "archivo" && (
+          <Suspense fallback={null}>
+            <VistaArchivo key={activo.id} archivo={activo} conFoco={conFoco} />
+          </Suspense>
+        )}
         {activo?.tipo === "arbol" && <VistaArbol key={activo.id} item={activo.id} />}
         {zona && <ZonaSoltar zona={zona} />}
       </div>

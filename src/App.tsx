@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Avisos from "./componentes/Avisos";
 import BarraTitulo, { nombreEspacio } from "./componentes/BarraTitulo";
 import Espacio from "./componentes/Espacio";
 import Paleta from "./componentes/Paleta";
-import PanelClaude, { ID_ENTRADA } from "./componentes/PanelClaude";
-import Ajustes from "./componentes/Ajustes";
-import Uso from "./componentes/Uso";
+// Se cargan la primera vez que se abren (menos memoria si no se usan).
+const PanelClaude = lazy(() => import("./componentes/PanelClaude"));
+const Ajustes = lazy(() => import("./componentes/Ajustes"));
+const Uso = lazy(() => import("./componentes/Uso"));
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
-import { limpiar, useClaude } from "./lib/claude";
+import { ID_ENTRADA, limpiar, useClaude } from "./lib/claude";
 import { escucharMcp } from "./lib/mcp";
 import { alternarGrabacion } from "./lib/grabar";
 import { focoActual, useKyu } from "./lib/estado";
@@ -32,7 +33,14 @@ function alternarClaude() {
     return;
   }
   mostrar(true);
-  requestAnimationFrame(() => caja()?.focus());
+  // La primera vez el panel aún se está cargando: se reintenta hasta que la caja exista.
+  let intentos = 0;
+  const enfocar = () => {
+    const c = caja();
+    if (c) c.focus();
+    else if (++intentos < 60) requestAnimationFrame(enfocar);
+  };
+  requestAnimationFrame(enfocar);
 }
 
 export default function App() {
@@ -138,6 +146,7 @@ export default function App() {
   return (
     <div className="relative flex h-full flex-col">
       <BarraTitulo config={config} />
+      <Suspense fallback={null}>
       <div className="flex min-h-0 flex-1">
         {ajustes && (
           <Ajustes
@@ -161,6 +170,7 @@ export default function App() {
         )}
         {espacio && claudeVisible && !uso && !ajustes && <PanelClaude key={`claude-${espacio.id}`} espacio={espacio.id} />}
       </div>
+      </Suspense>
       <Avisos />
       {paleta && <Paleta config={config} />}
     </div>

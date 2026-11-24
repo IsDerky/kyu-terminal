@@ -10,6 +10,7 @@ mod claude;
 mod config;
 mod grabar;
 mod mcp;
+mod memoria;
 mod pty;
 mod sesiones;
 mod sistema;
@@ -30,7 +31,20 @@ pub fn run() {
             // Servidor MCP para el Claude del panel (None si no se pudo abrir el puerto).
             let mcp = mcp::arrancar(app.handle().clone());
             app.manage(mcp);
+            // Si arranca sin foco (abierto desde otro programa, detrás de otra ventana) no
+            // llega ningún «ha perdido el foco»: se cuenta desde ya.
+            if let Some(w) = app.get_webview_window("main") {
+                memoria::al_cambiar_foco(&w, w.is_focused().unwrap_or(true));
+            }
             Ok(())
+        })
+        .on_window_event(|ventana, evento| {
+            if let tauri::WindowEvent::Focused(con_foco) = evento {
+                use tauri::Manager;
+                if let Some(w) = ventana.app_handle().get_webview_window(ventana.label()) {
+                    memoria::al_cambiar_foco(&w, *con_foco);
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             config::config,
