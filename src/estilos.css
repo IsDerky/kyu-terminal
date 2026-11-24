@@ -73,6 +73,14 @@ body {
 .md table { border-collapse: collapse; margin: 0.5em 0; font-size: 12px; display: block; overflow-x: auto; }
 .md th, .md td { border: 1px solid var(--color-borde); padding: 3px 8px; text-align: left; }
 .md th { background: var(--color-tarjeta); font-weight: 600; }
+/* Vista de un archivo .md (más grande que en el panel de Claude). */
+.md-doc { font-size: 14px; line-height: 1.7; }
+.md-doc h1 { font-size: 24px; margin: 0.6em 0 0.5em; letter-spacing: -0.01em; }
+.md-doc h2 { font-size: 18px; margin-top: 1.4em; padding-bottom: 0.25em; border-bottom: 1px solid var(--color-borde); }
+.md-doc h3 { font-size: 15px; margin-top: 1.2em; }
+.md-doc h4 { font-size: 14px; }
+.md-doc table { font-size: 13px; }
+.md-doc p { white-space: normal; }
 
 .codigo-md, .codigo-md pre {
   margin: 0;

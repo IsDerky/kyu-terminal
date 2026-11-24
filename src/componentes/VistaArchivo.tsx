@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { Diff, Undo2, X } from "lucide-react";
+import Markdown from "./Markdown";
 import { editor, recargarRuta } from "../lib/editores";
 import { obtenerEditor, ponerDiff, saltar } from "../lib/editorCodigo";
 import { useKyu, type Item } from "../lib/estado";
@@ -10,6 +11,9 @@ import { contar, diffLineas } from "../lib/diff";
 import { cerrarItem } from "../lib/acciones";
 
 type Archivo = Extract<Item, { tipo: "archivo" }>;
+
+/** Pestañas de .md que se están viendo con formato (sobrevive a mover o dividir el panel). */
+const enVista = new Set<string>();
 
 /** Muestra el editor de la pestaña (que vive en el registro, no aquí). */
 export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; conFoco: boolean }) {
@@ -31,6 +35,26 @@ export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; c
   useEffect(() => {
     if (conFoco) editor(archivo.id)?.vista.focus();
   }, [conFoco, archivo.id]);
+
+  // Los .md se pueden ver con formato (interruptor arriba a la derecha o Ctrl+Mayús+V).
+  const esMarkdown = /.(md|markdown|mdx)$/i.test(archivo.ruta);
+  const [vista, setVista] = useState(() => esMarkdown && enVista.has(archivo.id));
+  const [textoVista, setTextoVista] = useState("");
+  const ponerVista = (v: boolean) => {
+    if (v) enVista.add(archivo.id);
+    else enVista.delete(archivo.id);
+    setVista(v);
+    if (!v) requestAnimationFrame(() => ed.vista.focus());
+  };
+  // En la vista, el texto se toma del editor (lo que hay, guardado o no) y se sigue cada segundo
+  // por si cambia el archivo (Claude, git…).
+  useEffect(() => {
+    if (!vista) return;
+    const leer = () => setTextoVista(ed.vista.state.doc.toString());
+    void ed.cargado.then(leer);
+    const t = setInterval(leer, 1000);
+    return () => clearInterval(t);
+  }, [vista, ed]);
 
   // Marcas de los cambios de Claude.
   const antes = archivo.diff ? archivo.diff.antes : undefined;
@@ -68,7 +92,16 @@ export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; c
   };
 
   return (
-    <div className="flex h-full w-full flex-col">
+    <div
+      className="flex h-full w-full flex-col"
+      onKeyDown={(e) => {
+        if (esMarkdown && e.ctrlKey && e.shiftKey && !e.altKey && e.code === "KeyV") {
+          e.preventDefault();
+          e.stopPropagation();
+          ponerVista(!vista);
+        }
+      }}
+    >
       {antes !== undefined && (
         <div className="flex h-8 flex-none items-center gap-2 overflow-hidden whitespace-nowrap border-b border-borde bg-claude/[0.07] pl-3 pr-2 text-[12px] text-claude2">
           <Diff size={13} strokeWidth={1.8} className="flex-none" />
@@ -88,7 +121,28 @@ export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; c
         </div>
       )}
       <div className="relative min-h-0 flex-1">
-        <div ref={caja} className="h-full w-full" />
+        <div ref={caja} className={vista ? "hidden" : "h-full w-full"} />
+        {vista && (
+          <div tabIndex={-1} className="h-full w-full overflow-y-auto outline-none">
+            <div className="md md-doc mx-auto max-w-[820px] select-text px-8 py-6">
+              <Markdown texto={textoVista} />
+            </div>
+          </div>
+        )}
+        {esMarkdown && (
+          <div className="absolute right-3 top-2 z-10 flex overflow-hidden rounded-md border border-borde2 bg-panel text-[11.5px] shadow-sm" title="Ctrl+Mayús+V">
+            {(["Código", "Vista"] as const).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => ponerVista(n === "Vista")}
+                className={`px-2.5 py-0.5 ${(n === "Vista") === vista ? "bg-hover text-texto" : "text-tenue hover:text-texto"}`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        )}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-fondo p-6 text-center text-[13px] text-tenue">
             <p>

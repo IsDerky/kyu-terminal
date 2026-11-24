@@ -35,6 +35,9 @@ pub struct Config {
     pub restaurar_sesion: Option<bool>,
     /// Un perfil por cada `Host` de ~/.ssh/config (sin comodines). Sin poner = sí.
     pub perfiles_ssh: Option<bool>,
+    /// Límite diario de Claude en miles de tokens de salida (aviso al 80 % y al 100 %).
+    /// Sin poner o 0 = sin límite.
+    pub limite_diario: Option<u64>,
     pub tema: Tema,
 }
 
@@ -128,6 +131,7 @@ pub struct ConfigVista {
     autocompletado: bool,
     aviso_segundos: u32,
     restaurar_sesion: bool,
+    limite_diario: u64,
     tema: Tema,
     perfiles: Vec<PerfilVista>,
 }
@@ -169,6 +173,7 @@ pub fn config() -> ConfigVista {
         autocompletado: config.autocompletado(),
         aviso_segundos: config.aviso_segundos.unwrap_or(10),
         restaurar_sesion: config.restaurar_sesion(),
+        limite_diario: config.limite_diario.unwrap_or(0),
         perfiles,
         tema: config.tema,
     }

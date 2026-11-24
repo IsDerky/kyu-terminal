@@ -17,6 +17,7 @@ import { aplicarFuente, configurar, itemDePty, sesion } from "./lib/terminales";
 import { configurarEditores, editor } from "./lib/editores";
 import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
 import { restaurarSesion, vigilarSesion } from "./lib/restaurar";
+import { configurarLimite } from "./lib/gasto";
 
 /**
  * Ctrl+Mayús+C: oculto → se abre con el cursor en la caja; abierto sin foco → le da el
@@ -52,6 +53,7 @@ export default function App() {
   const ajustes = useKyu((s) => s.ajustes);
   const uso = useKyu((s) => s.uso);
   const claudeVisible = useClaude((s) => s.visible);
+  const expandido = useClaude((s) => s.expandido);
   useKyu((s) => s.items); // el título de la ventana sigue al terminal con el foco
 
   useEffect(() => {
@@ -62,6 +64,7 @@ export default function App() {
       document.documentElement.style.setProperty("--font-mono", c.fuente);
       configurar(c);
       configurarEditores(c.fuente, c.tema.fuente_tamano);
+      configurarLimite(c.limite_diario);
       const porDefecto = c.perfiles[0]?.nombre ?? "";
       // Lo de la última vez; si no hay (o está apagado en Ajustes), un espacio nuevo.
       const restaurada = c.restaurar_sesion && (await restaurarSesion(c.perfiles.map((p) => p.nombre), porDefecto).catch(() => false));
@@ -112,6 +115,12 @@ export default function App() {
           case "KeyW": hecho(); cerrarActual(); return;
           case "Tab": hecho(); k.siguientePestana(-1); return;
           case "KeyC": hecho(); alternarClaude(); return;
+          case "KeyX": {
+            hecho();
+            const c = useClaude.getState();
+            useClaude.setState({ expandido: !(c.expandido && c.visible), visible: true });
+            return;
+          }
           case "KeyG": hecho(); void alternarGrabacion(); return;
           case "KeyB": hecho(); k.alternarArbol(); return;
         }
@@ -157,6 +166,7 @@ export default function App() {
                 configurar(c);
                 configurarEditores(c.fuente, c.tema.fuente_tamano);
                 aplicarFuente(c.fuente, c.tema.fuente_tamano);
+                configurarLimite(c.limite_diario);
                 setConfig(c);
               })
             }
@@ -164,7 +174,9 @@ export default function App() {
         )}
         {uso && <Uso />}
         {espacio && (
-          <div className={ajustes || uso ? "hidden" : "flex min-w-0 flex-1"}>
+          // Modo expandido: Claude delante (order-first) y los terminales en una columna a la
+          // derecha. Con CSS order, sin volver a montar los terminales.
+          <div className={ajustes || uso ? "hidden" : expandido && claudeVisible ? "flex w-[420px] min-w-0 flex-none border-l border-borde" : "flex min-w-0 flex-1"}>
             <Espacio key={espacio.id} espacio={espacio} config={config} />
           </div>
         )}

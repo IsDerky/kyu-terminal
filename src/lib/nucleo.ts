@@ -29,6 +29,8 @@ export interface ConfigVista {
   aviso_segundos: number;
   /** Al abrir, volver a lo que había la última vez. */
   restaurar_sesion: boolean;
+  /** Límite diario de Claude en miles de tokens de salida (0 = sin límite). */
+  limite_diario: number;
   tema: Tema;
   /** El primero es el predeterminado. */
   perfiles: Perfil[];
@@ -92,6 +94,7 @@ export interface AjustesVista {
   aviso_segundos: number;
   restaurar_sesion: boolean;
   perfiles_ssh: boolean;
+  limite_diario: number;
   fuente: string | null;
   fuente_tamano: number;
   fuentes_conocidas: string[];

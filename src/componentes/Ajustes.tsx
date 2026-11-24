@@ -199,6 +199,12 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
               >
                 <Texto valor={a.claude ?? ""} marcador="claude del PATH" alCambiar={(v) => void guardar("claude", v || null)} />
               </Campo>
+              <Campo
+                titulo="Límite diario"
+                detalle="Tokens de salida de Claude en el día (todo: Kyu y VS Code). Barrita en el pie del panel y aviso al 80 % y al 100 %; no corta nada. 0 = sin límite."
+              >
+                <Numero valor={a.limite_diario} min={0} max={100000} paso={10} sufijo="mil" alCambiar={(v) => void guardar("limite_diario", v === 0 ? null : v)} />
+              </Campo>
               <Campo titulo="Herramientas de Kyu" detalle="Claude puede ejecutar órdenes en un panel «Claude» a la vista (siempre con tu permiso) y leer tus terminales.">
                 <span className="text-[12px] text-ok">Activas</span>
               </Campo>

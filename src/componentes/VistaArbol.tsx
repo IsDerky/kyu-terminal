@@ -17,8 +17,9 @@ const nombreDe = (ruta: string) => ruta.replace(/[\\/]+$/, "").split(/[\\/]/).po
 export default function VistaArbol({ item }: { item: string }) {
   const espacio = useKyu((s) => s.activo);
   const raiz = useKyu(() => carpetaDelEspacio(espacio));
-  const antesDe = useClaude((s) => s.conversaciones[espacio]?.antesDe ?? SIN_CAMBIOS);
-  const enCurso = useClaude((s) => s.conversaciones[espacio]?.tocados ?? SIN_CAMBIOS);
+  const cid = useClaude((s) => s.activas[espacio] ?? espacio);
+  const antesDe = useClaude((s) => s.conversaciones[cid]?.antesDe ?? SIN_CAMBIOS);
+  const enCurso = useClaude((s) => s.conversaciones[cid]?.tocados ?? SIN_CAMBIOS);
   const [abiertas, setAbiertas] = useState<Set<string>>(() => abiertasDe.get(item) ?? new Set());
   const [listas, setListas] = useState<Record<string, NodoArbol[]>>({});
   const [git, setGit] = useState<Record<string, string>>({});

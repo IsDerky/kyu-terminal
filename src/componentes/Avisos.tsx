@@ -1,6 +1,7 @@
 import { useEffect } from "react";
-import { Check, ClipboardList, ShieldAlert, X } from "lucide-react";
-import { pendiente, responder, useClaude, type AvisoFin, ID_ENTRADA } from "../lib/claude";
+import { Check, ClipboardList, ShieldAlert, TriangleAlert, X } from "lucide-react";
+import { corto, useGasto } from "../lib/gasto";
+import { activarPestana, espacioDe, pendiente, pestanasDe, responder, useClaude, type AvisoFin, ID_ENTRADA } from "../lib/claude";
 import { useKyu } from "../lib/estado";
 import { herramienta, partirRuta, relativa } from "../lib/herramientas";
 import { nombreEspacio } from "./BarraTitulo";
@@ -8,8 +9,10 @@ import { Mascota } from "./iconos";
 
 const DURACION_FIN = 8000;
 
-/** Abre el panel de Claude en ese espacio con el cursor en la caja. */
-function ver(espacio: string) {
+/** Abre el panel de Claude en esa conversación con el cursor en la caja. */
+function ver(cid: string) {
+  const espacio = espacioDe(cid);
+  activarPestana(cid);
   const k = useKyu.getState();
   if (k.activo !== espacio) k.cambiarEspacio(espacio);
   useClaude.getState().mostrar(true);
@@ -27,26 +30,31 @@ export default function Avisos() {
   const activo = useKyu((s) => s.activo);
   const espacios = useKyu((s) => s.espacios);
 
-  const muestra = (espacio: string) => visible && activo === espacio;
-  const nombre = (espacio: string) => {
-    const esp = espacios.find((e) => e.id === espacio);
+  const activas = useClaude((s) => s.activas);
+  const pestanas = useClaude((s) => s.pestanas);
+  const muestra = (cid: string) => visible && activo === espacioDe(cid) && (activas[espacioDe(cid)] ?? espacioDe(cid)) === cid;
+  const nombre = (cid: string) => {
+    const esp = espacios.find((e) => e.id === espacioDe(cid));
     return espacios.length > 1 && esp ? nombreEspacio(esp) : null;
   };
 
-  const permisos = espacios.flatMap((esp) => {
-    const c = conversaciones[esp.id];
-    const p = pendiente(c);
-    return p && !muestra(esp.id) ? [{ espacio: esp.id, p, carpeta: c!.carpeta }] : [];
-  });
-  const fines = avisos.filter((a) => !muestra(a.espacio) && espacios.some((e) => e.id === a.espacio));
+  const permisos = espacios.flatMap((esp) =>
+    pestanasDe(esp.id, { pestanas } as never).flatMap((cid) => {
+      const c = conversaciones[cid];
+      const p = pendiente(c);
+      return p && !muestra(cid) ? [{ espacio: cid, p, carpeta: c!.carpeta }] : [];
+    }),
+  );
+  const fines = avisos.filter((a) => !muestra(a.espacio) && espacios.some((e) => e.id === espacioDe(a.espacio)));
 
   // Lo que ya se ve en el panel no hace falta avisarlo.
   useEffect(() => {
-    const vistos = avisos.filter((a) => muestra(a.espacio) || !espacios.some((e) => e.id === a.espacio));
+    const vistos = avisos.filter((a) => muestra(a.espacio) || !espacios.some((e) => e.id === espacioDe(a.espacio)));
     for (const a of vistos) useClaude.getState().quitarAviso(a.id);
   });
 
-  if (!permisos.length && !fines.length) return null;
+  const gasto = useGasto((s) => s.aviso);
+  if (!permisos.length && !fines.length && !gasto) return null;
   return (
     <div
       className="pointer-events-none absolute bottom-3 z-40 flex w-[330px] flex-col gap-2"
@@ -110,6 +118,17 @@ export default function Avisos() {
           </Recuadro>
         );
       })}
+      {gasto && (
+        <Recuadro espacio={null} onCerrar={() => useGasto.setState({ aviso: null })}>
+          <div className="flex items-center gap-2 text-[12.5px]">
+            <TriangleAlert size={14} strokeWidth={1.8} className={`flex-none ${gasto.nivel === 100 ? "text-mal" : "text-aviso"}`} />
+            <span className="font-medium">{gasto.nivel === 100 ? "Has pasado el límite de hoy" : "Llevas el 80 % del límite de hoy"}</span>
+          </div>
+          <p className="mt-1 text-[12px] text-tenue">
+            {corto(gasto.hoy)} de {corto(gasto.limite)} tokens de salida. No se corta nada; cámbialo en Ajustes → Claude.
+          </p>
+        </Recuadro>
+      )}
       {fines.map((a) => (
         <AvisoTerminado key={a.id} aviso={a} espacio={nombre(a.espacio)} />
       ))}

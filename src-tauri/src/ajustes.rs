@@ -22,6 +22,7 @@ pub struct AjustesVista {
     aviso_segundos: u32,
     restaurar_sesion: bool,
     perfiles_ssh: bool,
+    limite_diario: u64,
     fuente: Option<String>,
     fuente_tamano: f32,
     fuentes_conocidas: Vec<String>,
@@ -64,6 +65,7 @@ pub fn ajustes_leer() -> AjustesVista {
         aviso_segundos: config.aviso_segundos.unwrap_or(10),
         restaurar_sesion: config.restaurar_sesion(),
         perfiles_ssh: config.perfiles_ssh(),
+        limite_diario: config.limite_diario.unwrap_or(0),
         fuente: config.fuente.clone(),
         fuente_tamano: config.tema.fuente_tamano,
         fuentes_conocidas: crate::config::FUENTES_CONOCIDAS
@@ -90,6 +92,7 @@ pub fn ajustes_guardar(clave: String, valor: Value) -> Result<(), String> {
         "aviso_segundos",
         "restaurar_sesion",
         "perfiles_ssh",
+        "limite_diario",
         "fuente",
         "tema.fuente_tamano",
         "claude",

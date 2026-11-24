@@ -16,6 +16,7 @@ import { paneles, useKyu } from "./estado";
 import { leerArchivo } from "./nucleo";
 import { contar, diffLineas } from "./diff";
 import { recargarRuta } from "./editores";
+import { refrescarGasto } from "./gasto";
 import type { TextoBloque } from "./bloques";
 import type { ImagenAdjunta } from "./imagenes";
 import {
@@ -146,7 +147,18 @@ export interface AvisoFin {
 
 interface EstadoClaude {
   visible: boolean;
+  /** Modo expandido: Claude delante y los terminales en una columna. */
+  expandido: boolean;
+  /**
+   * Conversaciones por id. La primera de cada espacio tiene el id del espacio; las demás,
+   * «espacio~n». Las funciones de este módulo reciben ese id (el parámetro se llama
+   * `espacio` por historia).
+   */
   conversaciones: Record<string, Conversacion>;
+  /** Pestañas de conversación de cada espacio, en orden (sin entrada = solo la primera). */
+  pestanas: Record<string, string[]>;
+  /** Conversación que enseña el panel en cada espacio. */
+  activas: Record<string, string>;
   avisos: AvisoFin[];
   /** Orden del terminal adjunta a lo próximo que se escriba, por espacio. */
   adjuntos: Record<string, TextoBloque>;
@@ -190,7 +202,10 @@ export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Convers
 
 export const useClaude = create<EstadoClaude>((set) => ({
   visible: false,
+  expandido: false,
   conversaciones: {},
+  pestanas: {},
+  activas: {},
   avisos: [],
   adjuntos: {},
   imagenes: {},
@@ -202,8 +217,64 @@ export const useClaude = create<EstadoClaude>((set) => ({
   quitarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));
 
-/** ¿El panel está enseñando ahora la conversación de este espacio? */
-export const panelMuestra = (espacio: string) => useClaude.getState().visible && useKyu.getState().activo === espacio;
+/** Espacio de una conversación («e3~2» → «e3»). */
+export const espacioDe = (cid: string) => cid.split("~")[0];
+
+/** Conversación que enseña el panel en el espacio. */
+export const activaDe = (espacio: string) => useClaude.getState().activas[espacio] ?? espacio;
+
+/** Conversaciones (pestañas) del espacio, en orden. */
+export const pestanasDe = (espacio: string, s = useClaude.getState()) => s.pestanas[espacio] ?? [espacio];
+
+/** ¿El panel está enseñando ahora esta conversación? */
+export const panelMuestra = (cid: string) => {
+  const espacio = espacioDe(cid);
+  return useClaude.getState().visible && useKyu.getState().activo === espacio && activaDe(espacio) === cid;
+};
+
+let siguientePestana = 1;
+
+/** Abre una conversación nueva en el espacio, como pestaña, y la enseña. Devuelve su id. */
+export function nuevaPestana(espacio: string): string {
+  const cid = `${espacio}~${++siguientePestana}`;
+  useClaude.setState((s) => ({
+    verContexto: false,
+    conversaciones: { ...s.conversaciones, [cid]: vacia() },
+    pestanas: { ...s.pestanas, [espacio]: [...pestanasDe(espacio, s), cid] },
+    activas: { ...s.activas, [espacio]: cid },
+  }));
+  return cid;
+}
+
+export function activarPestana(cid: string) {
+  useClaude.setState((s) => ({ verContexto: false, activas: { ...s.activas, [espacioDe(cid)]: cid } }));
+}
+
+/** Cierra una conversación (para su Claude). Si era la única, queda una vacía. */
+export function cerrarPestana(cid: string) {
+  const espacio = espacioDe(cid);
+  const c = useClaude.getState().conversaciones[cid];
+  if (c?.claudeId != null) void cerrarClaude(c.claudeId);
+  useClaude.setState((s) => {
+    const lista = pestanasDe(espacio, s);
+    const i = lista.indexOf(cid);
+    let resto = lista.filter((x) => x !== cid);
+    const { [cid]: _, ...conversaciones } = s.conversaciones;
+    if (!resto.length) {
+      resto = [espacio];
+      conversaciones[espacio] = vacia();
+    }
+    const activa = s.activas[espacio] === cid || !s.activas[espacio] ? resto[Math.min(Math.max(0, i), resto.length - 1)] : s.activas[espacio];
+    return { conversaciones, pestanas: { ...s.pestanas, [espacio]: resto }, activas: { ...s.activas, [espacio]: activa } };
+  });
+}
+
+/** Título de una conversación para su pestaña: su primer mensaje. */
+export function tituloDe(c: Conversacion | undefined): string {
+  const primero = c?.entradas.find((e) => e.tipo === "tu");
+  const t = primero?.tipo === "tu" ? primero.texto.replace(/\s+/g, " ").trim() : "";
+  return t ? (t.length > 32 ? t.slice(0, 32).trimEnd() + "…" : t) : "Nueva";
+}
 
 /** El primer permiso sin contestar de la conversación. */
 export const pendiente = (c: Conversacion | undefined) =>
@@ -377,6 +448,7 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       }));
       void refrescarContexto(espacio);
       void resumirCambios(espacio);
+      void refrescarGasto();
       return;
     case "error":
       añadir(espacio, { tipo: "error", texto: ev.texto });
@@ -422,7 +494,9 @@ export async function verCambios(espacio: string, ruta: string) {
 
 /** Adjunta una orden del terminal a lo próximo que se le escriba a Claude. */
 export function adjuntar(espacio: string, bloque: TextoBloque) {
-  useClaude.setState((s) => ({ adjuntos: { ...s.adjuntos, [espacio]: bloque }, visible: true }));
+  // Se llama con el espacio (desde un bloque del terminal): va a la conversación que se ve.
+  const cid = activaDe(espacio);
+  useClaude.setState((s) => ({ adjuntos: { ...s.adjuntos, [cid]: bloque }, visible: true }));
 }
 
 export function quitarAdjunto(espacio: string) {
@@ -637,7 +711,7 @@ export async function enviar(espacio: string, texto: string) {
   try {
     if (c.claudeId === null) {
       // Al reanudar, en la carpeta de la conversación guardada; si no, la del terminal con el foco.
-      const carpeta = c.reanudar ? c.carpeta : carpetaDelEspacio(espacio);
+      const carpeta = c.reanudar ? c.carpeta : carpetaDelEspacio(espacioDe(espacio));
       const generacion = ++contador;
       cambiar(espacio, () => ({ generacion }));
       const id = await abrirClaude(
@@ -805,12 +879,14 @@ export function tomarBorrador(espacio: string) {
 /** Cierra las conversaciones de los espacios que ya no existen. */
 export function limpiar(espacios: string[]) {
   for (const id of Object.keys(useClaude.getState().conversaciones)) {
-    if (!espacios.includes(id)) {
+    if (!espacios.includes(espacioDe(id))) {
       const c = conversacion(id);
       if (c.claudeId !== null) void cerrarClaude(c.claudeId);
       useClaude.setState((s) => {
         const { [id]: _, ...resto } = s.conversaciones;
-        return { conversaciones: resto };
+        const { [espacioDe(id)]: __, ...pestanas } = s.pestanas;
+        const { [espacioDe(id)]: ___, ...activas } = s.activas;
+        return { conversaciones: resto, pestanas, activas };
       });
     }
   }
