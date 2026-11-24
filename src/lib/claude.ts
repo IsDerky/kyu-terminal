@@ -7,12 +7,14 @@ import {
   cerrarClaude,
   controlClaude,
   enviarClaude,
+  historialClaude,
   pararClaude,
   responderClaude,
   type EventoClaude,
 } from "./nucleo";
 import { paneles, useKyu } from "./estado";
 import type { TextoBloque } from "./bloques";
+import type { ImagenAdjunta } from "./imagenes";
 import {
   catalogoGuardado,
   esfuerzos,
@@ -27,7 +29,7 @@ import {
 } from "./claudeOpciones";
 
 export type Entrada =
-  | { id: number; tipo: "tu"; texto: string; adjunto?: TextoBloque }
+  | { id: number; tipo: "tu"; texto: string; adjunto?: TextoBloque; imagenes?: string[] }
   | { id: number; tipo: "claude"; texto: string; enCurso: boolean }
   | { id: number; tipo: "herramienta"; idHerramienta: string; nombre: string; resumen: string; estado: "ejecutando" | "ok" | "error" }
   | {
@@ -56,8 +58,12 @@ export interface Conversacion {
   claudeId: number | null;
   /** Cambia con cada proceso: los eventos de uno ya cerrado se ignoran. */
   generacion: number;
-  /** Carpeta donde arrancó Claude. */
+  /** Carpeta donde arrancó Claude (o la de la conversación que se va a reanudar). */
   carpeta: string | null;
+  /** Id de la sesión de Claude Code (del init). */
+  sesion: string | null;
+  /** Conversación guardada que se sigue al escribir (`--resume`). */
+  reanudar: string | null;
   entradas: Entrada[];
   estado: EstadoConv;
   /** Cuándo empezó el turno en curso (para el contador). */
@@ -92,6 +98,8 @@ interface EstadoClaude {
   avisos: AvisoFin[];
   /** Orden del terminal adjunta a lo próximo que se escriba, por espacio. */
   adjuntos: Record<string, TextoBloque>;
+  /** Imágenes pegadas o soltadas para lo próximo que se escriba, por espacio. */
+  imagenes: Record<string, ImagenAdjunta[]>;
   /** Comandos y modelos de Claude Code (del último initialize). */
   catalogo: Catalogo | null;
   /** Lo elegido la última vez: lo hereda cada conversación nueva. */
@@ -106,6 +114,8 @@ export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Convers
   claudeId: null,
   generacion: 0,
   carpeta: null,
+  sesion: null,
+  reanudar: null,
   entradas: [],
   estado: "parado",
   desde: 0,
@@ -125,6 +135,7 @@ export const useClaude = create<EstadoClaude>((set) => ({
   conversaciones: {},
   avisos: [],
   adjuntos: {},
+  imagenes: {},
   catalogo: catalogoGuardado(),
   prefs: prefsGuardadas(),
   verContexto: false,
@@ -178,7 +189,7 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
   if (useClaude.getState().conversaciones[espacio]?.generacion !== generacion) return;
   switch (ev.tipo) {
     case "iniciado":
-      cambiar(espacio, (c) => ({ modelo: ev.modelo, modo: ev.modo || c.modo }));
+      cambiar(espacio, (c) => ({ modelo: ev.modelo, modo: ev.modo || c.modo, sesion: ev.sesion || c.sesion }));
       return;
     case "estado":
       cambiar(espacio, () => ({ compactando: ev.estado === "compacting" }));
@@ -259,7 +270,8 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       añadir(espacio, { tipo: "error", texto: ev.texto });
       return;
     case "cerrado":
-      cambiar(espacio, () => ({ estado: "cerrado", claudeId: null }));
+      // Al volver a escribir se sigue la misma conversación (--resume), en la misma carpeta.
+      cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, reanudar: c.sesion }));
       return;
   }
 }
@@ -396,6 +408,58 @@ export async function cambiarEsfuerzo(espacio: string, esfuerzo: string | null) 
   }
 }
 
+export function añadirImagenes(espacio: string, nuevas: ImagenAdjunta[]) {
+  if (!nuevas.length) return;
+  useClaude.setState((s) => ({ imagenes: { ...s.imagenes, [espacio]: [...(s.imagenes[espacio] ?? []), ...nuevas].slice(0, 8) } }));
+}
+
+export function quitarImagen(espacio: string, id: number) {
+  useClaude.setState((s) => ({ imagenes: { ...s.imagenes, [espacio]: (s.imagenes[espacio] ?? []).filter((i) => i.id !== id) } }));
+}
+
+/** Carga una conversación guardada en el panel; Claude la sigue (`--resume`) al escribir. */
+export async function reanudar(espacio: string, carpeta: string, id: string, titulo: string) {
+  const pasado = await historialClaude(carpeta, id);
+  const antes = conversacion(espacio);
+  if (antes.claudeId !== null) void cerrarClaude(antes.claudeId);
+  const entradas: Entrada[] = pasado.map((p): Entrada => {
+    switch (p.tipo) {
+      case "tu":
+        return { id: ++contador, tipo: "tu", texto: p.texto };
+      case "claude":
+        return { id: ++contador, tipo: "claude", texto: p.texto, enCurso: false };
+      case "herramienta":
+        return {
+          id: ++contador,
+          tipo: "herramienta",
+          idHerramienta: p.id,
+          nombre: p.nombre,
+          resumen: p.resumen,
+          estado: p.error ? "error" : "ok",
+        };
+      case "aviso":
+        return { id: ++contador, tipo: "aviso", texto: p.texto };
+    }
+  });
+  entradas.push({ id: ++contador, tipo: "aviso", texto: `Reanudada «${titulo}»: sigue donde lo dejaste` });
+  useClaude.setState((s) => ({
+    verContexto: false,
+    conversaciones: {
+      ...s.conversaciones,
+      [espacio]: {
+        ...vacia(),
+        eleccionModelo: antes.eleccionModelo,
+        modo: antes.modo,
+        esfuerzo: antes.esfuerzo,
+        carpeta,
+        reanudar: id,
+        sesion: id,
+        entradas,
+      },
+    },
+  }));
+}
+
 export async function enviar(espacio: string, texto: string) {
   let c = conversacion(espacio);
   if (c.estado === "arrancando" || c.estado === "pensando") return;
@@ -408,17 +472,25 @@ export async function enviar(espacio: string, texto: string) {
   }
   const adjunto = useClaude.getState().adjuntos[espacio];
   if (adjunto) quitarAdjunto(espacio);
+  const imagenes = useClaude.getState().imagenes[espacio] ?? [];
+  if (imagenes.length) useClaude.setState((s) => ({ imagenes: { ...s.imagenes, [espacio]: [] } }));
   const mensaje = adjunto ? conAdjunto(texto, adjunto) : texto;
-  añadir(espacio, { tipo: "tu", texto: texto || (adjunto ? PREGUNTA_POR_DEFECTO : ""), adjunto });
+  añadir(espacio, {
+    tipo: "tu",
+    texto: texto || (adjunto ? PREGUNTA_POR_DEFECTO : ""),
+    adjunto,
+    imagenes: imagenes.length ? imagenes.map((i) => i.url) : undefined,
+  });
   cambiar(espacio, () => ({ estado: "arrancando", desde: Date.now() }));
   try {
     if (c.claudeId === null) {
-      const carpeta = carpetaDelEspacio(espacio);
+      // Al reanudar, en la carpeta de la conversación guardada; si no, la del terminal con el foco.
+      const carpeta = c.reanudar ? c.carpeta : carpetaDelEspacio(espacio);
       const generacion = ++contador;
       cambiar(espacio, () => ({ generacion }));
       const id = await abrirClaude(
         carpeta,
-        { modelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo },
+        { modelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, reanudar: c.reanudar },
         (ev) => alEvento(espacio, generacion, ev),
       );
       cambiar(espacio, () => ({ claudeId: id, carpeta }));
@@ -429,7 +501,11 @@ export async function enviar(espacio: string, texto: string) {
         .then(() => refrescarContexto(espacio))
         .catch(() => {});
     }
-    await enviarClaude(c.claudeId!, mensaje);
+    await enviarClaude(
+      c.claudeId!,
+      mensaje,
+      imagenes.map((i) => ({ tipo: i.tipo, datos: i.datos })),
+    );
     cambiar(espacio, (c) => (c.estado === "arrancando" ? { estado: "pensando" } : {}));
   } catch (e) {
     añadir(espacio, { tipo: "error", texto: String(e) });

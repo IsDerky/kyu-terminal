@@ -78,6 +78,15 @@ pub struct Opciones {
     modelo: Option<String>,
     modo: Option<String>,
     esfuerzo: Option<String>,
+    /// Id de una conversación guardada para seguirla (`--resume`).
+    reanudar: Option<String>,
+}
+
+/// Imagen pegada o soltada en el panel: tipo MIME y datos en base64.
+#[derive(Deserialize)]
+pub struct Imagen {
+    tipo: String,
+    datos: String,
 }
 
 impl Sesion {
@@ -133,6 +142,7 @@ pub fn claude_abrir(
         ("--model", &opciones.modelo),
         ("--permission-mode", &opciones.modo),
         ("--effort", &opciones.esfuerzo),
+        ("--resume", &opciones.reanudar),
     ] {
         if let Some(v) = valor.as_deref().filter(|v| !v.is_empty()) {
             cmd.arg(opcion).arg(v);
@@ -265,12 +275,22 @@ fn con_sesion<T>(
 }
 
 #[tauri::command]
-pub fn claude_enviar(claudes: State<'_, Claudes>, id: u32, texto: String) -> Result<(), String> {
+pub fn claude_enviar(
+    claudes: State<'_, Claudes>,
+    id: u32,
+    texto: String,
+    imagenes: Option<Vec<Imagen>>,
+) -> Result<(), String> {
+    let mut contenido: Vec<Value> = imagenes
+        .unwrap_or_default()
+        .into_iter()
+        .map(|i| json!({ "type": "image", "source": { "type": "base64", "media_type": i.tipo, "data": i.datos } }))
+        .collect();
+    if !texto.is_empty() || contenido.is_empty() {
+        contenido.push(json!({ "type": "text", "text": texto }));
+    }
     con_sesion(&claudes, id, |s| {
-        s.escribir(json!({
-            "type": "user",
-            "message": { "role": "user", "content": [{ "type": "text", "text": texto }] }
-        }))
+        s.escribir(json!({ "type": "user", "message": { "role": "user", "content": contenido } }))
     })
 }
 
@@ -442,7 +462,7 @@ fn traducir(v: &Value) -> Vec<Evento> {
 }
 
 /// Lo más útil de la entrada de cada herramienta, en una línea.
-fn resumen(herramienta: &str, input: &Value) -> String {
+pub(crate) fn resumen(herramienta: &str, input: &Value) -> String {
     let campo = match herramienta {
         "Bash" | "PowerShell" => "command",
         "mcp__kyu__ejecutar_en_panel" => "orden",

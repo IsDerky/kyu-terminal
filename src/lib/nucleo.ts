@@ -136,6 +136,14 @@ export interface OpcionesClaude {
   modelo?: string | null;
   modo?: string | null;
   esfuerzo?: string | null;
+  /** Id de una conversación guardada para seguirla (`--resume`). */
+  reanudar?: string | null;
+}
+
+/** Imagen para Claude: tipo MIME y datos en base64 (sin el «data:…,» delante). */
+export interface ImagenClaude {
+  tipo: string;
+  datos: string;
 }
 
 /** Arranca Claude Code en `carpeta` (null = carpeta personal); devuelve su id. */
@@ -149,7 +157,34 @@ export function abrirClaude(
   return invoke<number>("claude_abrir", { carpeta, opciones, eventos });
 }
 
-export const enviarClaude = (id: number, texto: string) => invoke("claude_enviar", { id, texto });
+export const enviarClaude = (id: number, texto: string, imagenes: ImagenClaude[] = []) =>
+  invoke("claude_enviar", { id, texto, imagenes });
+
+export interface SesionGuardada {
+  id: string;
+  titulo: string;
+  /** Lo último que escribió el usuario. */
+  ultimo: string | null;
+  /** ms desde 1970 */
+  fecha: number;
+  bytes: number;
+}
+
+/** Conversaciones guardadas de Claude Code en `carpeta`, la más reciente primero. */
+export const sesionesClaude = (carpeta: string) => invoke<SesionGuardada[]>("claude_sesiones", { carpeta });
+
+export type Pasado =
+  | { tipo: "tu"; texto: string }
+  | { tipo: "claude"; texto: string }
+  | { tipo: "herramienta"; id: string; nombre: string; resumen: string; error: boolean }
+  | { tipo: "aviso"; texto: string };
+
+/** Lo que se ve de una conversación guardada (sus últimas 400 piezas). */
+export const historialClaude = (carpeta: string, id: string) => invoke<Pasado[]>("claude_historial", { carpeta, id });
+
+/** Archivos y carpetas (las carpetas acaban en «/») de `carpeta` que encajan con `consulta`. */
+export const buscarArchivos = (carpeta: string, consulta: string) =>
+  invoke<string[]>("archivos_buscar", { carpeta, consulta });
 
 /** Orden de control de stream-json (`{subtype: "initialize"}`…); devuelve su `response`. */
 export const controlClaude = <T = unknown>(id: number, peticion: Record<string, unknown>) =>

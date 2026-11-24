@@ -10,6 +10,7 @@ mod config;
 mod grabar;
 mod mcp;
 mod pty;
+mod sesiones;
 mod sistema;
 mod uso;
 
@@ -49,6 +50,9 @@ pub fn run() {
             claude::claude_abrir,
             claude::claude_enviar,
             claude::claude_control,
+            sesiones::claude_sesiones,
+            sesiones::claude_historial,
+            sesiones::archivos_buscar,
             claude::claude_responder,
             claude::claude_parar,
             claude::claude_cerrar,

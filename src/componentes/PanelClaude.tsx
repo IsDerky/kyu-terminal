@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Check, FolderOpen, Info, Loader2, Square, SquarePen, SquareTerminal, X } from "lucide-react";
+import { ArrowUp, Check, FolderOpen, History, ImageIcon, Info, Loader2, Square, SquarePen, SquareTerminal, X } from "lucide-react";
 import {
+  añadirImagenes,
   cargarCatalogo,
   carpetaDelEspacio,
   enviar,
@@ -9,6 +10,7 @@ import {
   parar,
   pendiente,
   quitarAdjunto,
+  quitarImagen,
   refrescarContexto,
   responder,
   siguienteModo,
@@ -19,6 +21,9 @@ import {
 } from "../lib/claude";
 import type { Comando } from "../lib/claudeOpciones";
 import { BarraOpciones, DesgloseContexto, filtrarComandos, MenuComandos } from "./ControlesClaude";
+import { ListaSesiones, mencionEnCursor, MenuArchivos, Miniaturas, Recientes } from "./AdjuntosClaude";
+import { imagenesDe, type ImagenAdjunta } from "../lib/imagenes";
+import { buscarArchivos } from "../lib/nucleo";
 import type { TextoBloque } from "../lib/bloques";
 import { useKyu } from "../lib/estado";
 import { herramienta, relativa } from "../lib/herramientas";
@@ -29,6 +34,7 @@ import { Mascota } from "./iconos";
 export const ID_ENTRADA = "entrada-claude";
 
 const SIN_COMANDOS: Comando[] = [];
+const SIN_IMAGENES: ImagenAdjunta[] = [];
 
 const nombreCarpeta = (ruta: string | null) => (ruta ? ruta.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || ruta : "~");
 
@@ -45,7 +51,9 @@ export default function PanelClaude({ espacio }: { espacio: string }) {
   // Antes de arrancar, la carpeta que se usará (sigue al terminal con el foco).
   const carpetaFoco = useKyu(() => carpetaDelEspacio(espacio));
   const c: Conversacion = conv ?? vacia(prefs);
-  const carpeta = c.claudeId !== null || c.estado === "cerrado" ? c.carpeta : carpetaFoco;
+  const carpeta = c.claudeId !== null || c.estado === "cerrado" || c.reanudar ? c.carpeta : carpetaFoco;
+  const [verSesiones, setVerSesiones] = useState(false);
+  const [soltando, setSoltando] = useState(false);
   const ocupado = c.estado === "arrancando" || c.estado === "pensando";
   const limite = limiteContexto(c);
   const porcentaje = Math.min(100, Math.round((c.tokens / limite) * 100));
@@ -80,6 +88,22 @@ export default function PanelClaude({ espacio }: { espacio: string }) {
   return (
     <aside
       onKeyDown={teclas}
+      // Soltar imágenes en cualquier parte del panel.
+      onDragOver={(e) => {
+        if (![...e.dataTransfer.items].some((i) => i.kind === "file")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setSoltando(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setSoltando(false);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        setSoltando(false);
+        void imagenesDe(e.dataTransfer.files).then((l) => añadirImagenes(espacio, l));
+      }}
       className="group/claude relative m-2 ml-0 flex w-[380px] flex-none flex-col overflow-hidden rounded-[10px] border border-claude/40 bg-panel shadow-[0_0_0_3px_#d977570a,0_20px_50px_-25px_#d9775733]">
       <header className="flex h-11 flex-none items-center gap-2 border-b border-borde pl-3.5 pr-2">
         <span className="flex items-center gap-2 text-[13px] font-semibold">
@@ -104,11 +128,16 @@ export default function PanelClaude({ espacio }: { espacio: string }) {
           }}
           className={`ml-auto flex h-7 flex-none items-center gap-1.5 rounded-md px-1.5 text-[11px] text-tenue hover:bg-hover ${verContexto ? "bg-hover" : ""}`}
         >
-          <span className="h-[5px] w-12 overflow-hidden rounded-full bg-hover">
+          <span className="h-[5px] w-9 overflow-hidden rounded-full bg-hover">
             <span className="block h-full rounded-full bg-claude" style={{ width: `${porcentaje}%` }} />
           </span>
           {porcentaje} %
         </button>
+        <span data-boton-sesiones>
+          <BotonCabecera titulo="Conversaciones anteriores" onClick={() => setVerSesiones((v) => !v)}>
+            <History size={14} strokeWidth={1.8} />
+          </BotonCabecera>
+        </span>
         <BotonCabecera titulo="Nueva conversación" onClick={() => nueva(espacio)}>
           <SquarePen size={14} strokeWidth={1.8} />
         </BotonCabecera>
@@ -117,11 +146,22 @@ export default function PanelClaude({ espacio }: { espacio: string }) {
         </BotonCabecera>
       </header>
 
+      {verSesiones && (
+        <ListaSesiones espacio={espacio} carpeta={carpeta} actual={c.sesion} alCerrar={() => setVerSesiones(false)} />
+      )}
+      {soltando && (
+        <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center rounded-[10px] border-2 border-dashed border-claude/60 bg-panel/80">
+          <span className="flex items-center gap-2 text-[13px] text-texto">
+            <ImageIcon size={15} strokeWidth={1.8} /> Suelta las imágenes para Claude
+          </span>
+        </div>
+      )}
+
       {verContexto && <DesgloseContexto espacio={espacio} c={c} alCerrar={() => useClaude.setState({ verContexto: false })} />}
 
       <ListaEntradas espacio={espacio} c={c} carpeta={carpeta} />
 
-      <CajaEntrada espacio={espacio} c={c} ocupado={ocupado} permiso={permiso?.id ?? null} />
+      <CajaEntrada espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} />
 
       <footer className="flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
         <EstadoTurno c={c} />
@@ -176,6 +216,7 @@ function ListaEntradas({ espacio, c, carpeta }: { espacio: string; c: Conversaci
           Claude trabajará en <span className="font-mono text-[11.5px] text-texto">{nombreCarpeta(carpeta)}</span>, la
           carpeta del terminal con el foco.
         </p>
+        <Recientes espacio={espacio} carpeta={carpeta} />
       </div>
     );
   }
@@ -195,7 +236,7 @@ function ListaEntradas({ espacio, c, carpeta }: { espacio: string; c: Conversaci
         ))}
         {c.estado === "cerrado" && (
           <p className="text-center text-[11.5px] text-muy">
-            Claude se ha cerrado. Al escribir empieza una conversación nueva.
+            Claude se ha cerrado. Al escribir, sigue esta misma conversación.
           </p>
         )}
       </div>
@@ -209,6 +250,13 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
       return (
         <div className="flex max-w-[88%] flex-col items-end gap-1.5 self-end">
           {e.adjunto && <RecuadroOrden a={e.adjunto} />}
+          {e.imagenes && (
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {e.imagenes.map((u, i) => (
+                <img key={i} src={u} alt="" className="max-h-28 max-w-[160px] rounded-md border border-borde object-cover" />
+              ))}
+            </div>
+          )}
           <div className="select-text whitespace-pre-wrap break-words rounded-[12px_12px_4px_12px] border border-borde bg-tarjeta px-[11px] py-2">
             {e.texto}
           </div>
@@ -291,16 +339,78 @@ function RecuadroOrden({ a, onQuitar }: { a: TextoBloque; onQuitar?: () => void 
 function CajaEntrada({
   espacio,
   c,
+  carpeta,
   ocupado,
   permiso,
 }: {
   espacio: string;
   c: Conversacion;
+  carpeta: string | null;
   ocupado: boolean;
   permiso: number | null;
 }) {
   const [texto, setTexto] = useState("");
   const adjunto = useClaude((s) => s.adjuntos[espacio]);
+  const imagenes = useClaude((s) => s.imagenes[espacio] ?? SIN_IMAGENES);
+  const selector = useRef<HTMLInputElement>(null);
+  // @archivo: lo escrito tras la @ del cursor, los archivos que encajan y cuál está elegido.
+  const [cursor, setCursor] = useState(0);
+  const [rutas, setRutas] = useState<string[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [elegidoA, setElegidoA] = useState(0);
+  const [sinMenuA, setSinMenuA] = useState(false);
+  const mencion = permiso === null && !sinMenuA && carpeta ? mencionEnCursor(texto, cursor) : null;
+  const consulta = mencion?.[1] ?? null;
+  const selA = Math.min(elegidoA, Math.max(0, rutas.length - 1));
+
+  useEffect(() => {
+    if (consulta === null || !carpeta) return;
+    let vivo = true;
+    setBuscando(true);
+    const t = setTimeout(() => {
+      buscarArchivos(carpeta, consulta)
+        .then((r) => vivo && (setRutas(r), setElegidoA(0)))
+        .catch(() => vivo && setRutas([]))
+        .finally(() => vivo && setBuscando(false));
+    }, 70);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
+  }, [consulta, carpeta]);
+
+  const ponerRuta = (ruta: string) => {
+    if (!mencion) return;
+    const [desde] = mencion;
+    // Las rutas con espacios van entre comillas, como en `claude`.
+    const r = /\s/.test(ruta) ? `"${ruta}"` : ruta;
+    // En una carpeta se sigue escribiendo dentro de ella; en un archivo se cierra con un espacio.
+    const pon = `@${r}${ruta.endsWith("/") ? "" : " "}`;
+    const nuevo = texto.slice(0, desde) + pon + texto.slice(cursor);
+    setTexto(nuevo);
+    const pos = desde + pon.length;
+    setCursor(pos);
+    requestAnimationFrame(() => {
+      area.current?.focus();
+      area.current?.setSelectionRange(pos, pos);
+    });
+  };
+
+  const insertar = (s: string) => {
+    const el = area.current;
+    const pos = el?.selectionStart ?? texto.length;
+    const antes = texto.slice(0, pos);
+    const hueco = antes && !/\s$/.test(antes) ? " " : "";
+    const nuevo = antes + hueco + s + texto.slice(pos);
+    const fin = pos + hueco.length + s.length;
+    setTexto(nuevo);
+    setCursor(fin);
+    setSinMenuA(false);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(fin, fin);
+    });
+  };
   const lista = useClaude((s) => s.catalogo?.commands ?? SIN_COMANDOS);
   const area = useRef<HTMLTextAreaElement>(null);
   const [elegido, setElegido] = useState(0);
@@ -324,7 +434,7 @@ function CajaEntrada({
 
   const mandar = () => {
     const t = texto.trim();
-    if ((!t && !adjunto) || ocupado) return;
+    if ((!t && !adjunto && !imagenes.length) || ocupado) return;
     setTexto("");
     void enviar(espacio, t);
   };
@@ -333,6 +443,10 @@ function CajaEntrada({
     <div className="flex-none border-t border-borde px-3 pb-3 pt-2.5">
       <div className="relative rounded-[10px] border border-borde2 bg-fondo focus-within:border-[#3a3a42]">
         {comandos && <MenuComandos comandos={comandos} elegido={sel} alElegir={completar} alPasar={setElegido} />}
+        {!comandos && mencion && (
+          <MenuArchivos rutas={rutas} elegido={selA} buscando={buscando} alElegir={ponerRuta} alPasar={setElegidoA} />
+        )}
+        {imagenes.length > 0 && <Miniaturas imagenes={imagenes} alQuitar={(id) => quitarImagen(espacio, id)} />}
         {adjunto && (
           <div className="flex px-2 pt-2">
             <RecuadroOrden a={adjunto} onQuitar={() => quitarAdjunto(espacio)} />
@@ -349,14 +463,50 @@ function CajaEntrada({
               ? "Intro permite · Esc deniega · o escribe qué hacer en su lugar"
               : adjunto
                 ? "Pregunta sobre esta orden, o Intro para que la revise"
-                : "Escribe a Claude"
+                : imagenes.length
+                  ? "Pregunta sobre la imagen"
+                  : "Escribe a Claude · @ archivos · / comandos"
           }
           onChange={(e) => {
             setTexto(e.target.value);
+            setCursor(e.target.selectionStart);
             setElegido(0);
             setSinMenu(false);
+            setSinMenuA(false);
+          }}
+          onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
+          onPaste={(e) => {
+            const archivos = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+            if (!archivos.length) return;
+            e.preventDefault();
+            void imagenesDe(archivos).then((l) => añadirImagenes(espacio, l));
           }}
           onKeyDown={(e) => {
+            // Menú de archivos abierto: lo mismo que el de comandos.
+            if (!comandos && mencion && rutas.length > 0 && !e.nativeEvent.isComposing) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const d = e.key === "ArrowDown" ? 1 : -1;
+                setElegidoA((selA + d + rutas.length) % rutas.length);
+                return;
+              }
+              if ((e.key === "Tab" || e.key === "Enter") && !e.shiftKey) {
+                e.preventDefault();
+                ponerRuta(rutas[selA]);
+                return;
+              }
+            }
+            // Mientras busca, Tab no saca el foco de la caja.
+            if (!comandos && mencion && e.key === "Tab") {
+              e.preventDefault();
+              return;
+            }
+            if (!comandos && mencion && e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              setSinMenuA(true);
+              return;
+            }
             // Menú de comandos abierto: flechas, Tab/Intro y Esc son suyos.
             if (comandos && comandos.length > 0 && !e.nativeEvent.isComposing) {
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -405,10 +555,18 @@ function CajaEntrada({
         <BarraOpciones
           espacio={espacio}
           c={c}
-          alBarra={() => {
-            setTexto("/");
-            setSinMenu(false);
-            area.current?.focus();
+          alArroba={() => insertar("@")}
+          alImagen={() => selector.current?.click()}
+        />
+        <input
+          ref={selector}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          multiple
+          hidden
+          onChange={(e) => {
+            void imagenesDe(e.target.files).then((l) => añadirImagenes(espacio, l));
+            e.target.value = "";
           }}
         />
         {ocupado ? (
@@ -425,7 +583,7 @@ function CajaEntrada({
             type="button"
             title="Enviar (Intro)"
             onClick={mandar}
-            disabled={!texto.trim() && !adjunto}
+            disabled={!texto.trim() && !adjunto && !imagenes.length}
             className="absolute bottom-1 right-1.5 grid size-6 place-items-center rounded-lg bg-texto text-fondo disabled:bg-hover disabled:text-muy"
           >
             <ArrowUp size={15} strokeWidth={2.2} />

@@ -68,6 +68,8 @@ export const guardarPrefs = (p: Preferencias) => localStorage.setItem(CLAVE_PREF
 export interface Modo {
   id: string;
   nombre: string;
+  /** En el botón de la barra, donde hay poco sitio. */
+  corto: string;
   ayuda: string;
   Icono: LucideIcon;
   /** Clase de color del recuadro (vacía = gris). */
@@ -76,10 +78,10 @@ export interface Modo {
 
 /** En el orden de Mayús+Tab. `auto` solo si el modelo lo admite. */
 export const MODOS: Modo[] = [
-  { id: "default", nombre: "Pedir permiso", ayuda: "Pregunta antes de editar archivos o ejecutar órdenes", Icono: Hand, color: "" },
-  { id: "acceptEdits", nombre: "Editar sin preguntar", ayuda: "Edita archivos sin preguntar; las órdenes sí las pregunta", Icono: Pencil, color: "text-acento" },
-  { id: "plan", nombre: "Planificar", ayuda: "Solo lee y propone un plan; no cambia nada hasta que lo apruebes", Icono: ClipboardList, color: "text-aviso" },
-  { id: "auto", nombre: "Automático", ayuda: "Claude decide qué necesita permiso y qué no", Icono: Zap, color: "text-claude2" },
+  { id: "default", nombre: "Pedir permiso", corto: "Preguntar", ayuda: "Pregunta antes de editar archivos o ejecutar órdenes", Icono: Hand, color: "" },
+  { id: "acceptEdits", nombre: "Editar sin preguntar", corto: "Editar", ayuda: "Edita archivos sin preguntar; las órdenes sí las pregunta", Icono: Pencil, color: "text-acento" },
+  { id: "plan", nombre: "Planificar", corto: "Plan", ayuda: "Solo lee y propone un plan; no cambia nada hasta que lo apruebes", Icono: ClipboardList, color: "text-aviso" },
+  { id: "auto", nombre: "Automático", corto: "Auto", ayuda: "Claude decide qué necesita permiso y qué no", Icono: Zap, color: "text-claude2" },
 ];
 
 export const modo = (id: string) => MODOS.find((m) => m.id === id) ?? MODOS[0];

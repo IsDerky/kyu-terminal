@@ -1,7 +1,7 @@
 // Controles del panel de Claude: modo, modelo y esfuerzo bajo la caja de texto, menú de
 // comandos con barra y desglose del contexto.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Gauge, Minimize2, Slash } from "lucide-react";
+import { AtSign, Check, ChevronDown, ChevronRight, Gauge, ImagePlus, Minimize2 } from "lucide-react";
 import {
   cambiarEsfuerzo,
   cambiarModelo,
@@ -151,7 +151,17 @@ const Separador = () => <div className="mx-3 my-1 border-t border-borde" />;
 
 // ---------- Barra bajo la caja ----------
 
-export function BarraOpciones({ espacio, c, alBarra }: { espacio: string; c: Conversacion; alBarra: () => void }) {
+export function BarraOpciones({
+  espacio,
+  c,
+  alArroba,
+  alImagen,
+}: {
+  espacio: string;
+  c: Conversacion;
+  alArroba: () => void;
+  alImagen: () => void;
+}) {
   const catalogo = useClaude((s) => s.catalogo);
   const elegido = modeloDe(catalogo, c.eleccionModelo);
   const m = datosModo(c.modo);
@@ -184,18 +194,26 @@ export function BarraOpciones({ espacio, c, alBarra }: { espacio: string; c: Con
         etiqueta={
           <span className={`flex min-w-0 items-center gap-1.5 ${m.color || "text-tenue"}`}>
             <m.Icono size={12} strokeWidth={2} className="flex-none" />
-            <span className="truncate">{m.nombre}</span>
+            <span className="truncate">{m.corto}</span>
           </span>
         }
         opciones={modosDisponibles(elegido).map((x) => ({ valor: x.id, titulo: x.nombre, ayuda: x.ayuda }))}
       />
       <button
         type="button"
-        title="Comandos (/)"
-        onClick={alBarra}
+        title="Mencionar un archivo (@)"
+        onClick={alArroba}
         className="grid size-6 flex-none place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
       >
-        <Slash size={12} strokeWidth={2} />
+        <AtSign size={12} strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        title="Adjuntar imagen (también se puede pegar o soltar)"
+        onClick={alImagen}
+        className="grid size-6 flex-none place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
+      >
+        <ImagePlus size={12} strokeWidth={2} />
       </button>
       <span className="ml-auto" />
       <Desplegable

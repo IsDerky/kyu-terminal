@@ -32,6 +32,7 @@ tiny_http = "0.12"
 tauri-plugin-notification = "2"
 toml_edit = "0.23"
 gif = "0.14.2"
+ignore = "0.4"
 
 [profile.release]
 lto = "thin"
