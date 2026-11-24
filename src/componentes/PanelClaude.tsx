@@ -14,6 +14,7 @@ import {
   refrescarContexto,
   responder,
   siguienteModo,
+  tomarBorrador,
   useClaude,
   vacia,
   type Conversacion,
@@ -29,6 +30,7 @@ import { useKyu } from "../lib/estado";
 import { herramienta, relativa } from "../lib/herramientas";
 import Markdown from "./Markdown";
 import Permiso from "./Permiso";
+import { PasosSubagente, Plan, Razonamiento, VolverAqui } from "./TandaClaude";
 import { Mascota } from "./iconos";
 
 export const ID_ENTRADA = "entrada-claude";
@@ -81,7 +83,7 @@ export default function PanelClaude({ espacio }: { espacio: string }) {
       void responder(espacio, permiso.id, "denegar");
     } else if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      void responder(espacio, permiso.id, "permitir");
+      void responder(espacio, permiso.id, "permitir", undefined, permiso.herramienta === "ExitPlanMode" ? "acceptEdits" : undefined);
     }
   };
 
@@ -161,7 +163,7 @@ export default function PanelClaude({ espacio }: { espacio: string }) {
 
       <ListaEntradas espacio={espacio} c={c} carpeta={carpeta} />
 
-      <CajaEntrada espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} />
+      <CajaEntrada espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} />
 
       <footer className="flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
         <EstadoTurno c={c} />
@@ -207,6 +209,14 @@ function ListaEntradas({ espacio, c, carpeta }: { espacio: string; c: Conversaci
     return () => obs.disconnect();
   }, [vacia]);
 
+  // Al mandar un mensaje se vuelve abajo aunque hubieras subido a leer.
+  const ultimoTuyo = [...c.entradas].reverse().find((e) => e.tipo === "tu")?.id;
+  useLayoutEffect(() => {
+    pegado.current = true;
+    const el = caja.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [ultimoTuyo]);
+
   if (vacia) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
@@ -248,20 +258,25 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
   switch (e.tipo) {
     case "tu":
       return (
-        <div className="flex max-w-[88%] flex-col items-end gap-1.5 self-end">
-          {e.adjunto && <RecuadroOrden a={e.adjunto} />}
-          {e.imagenes && (
-            <div className="flex flex-wrap justify-end gap-1.5">
-              {e.imagenes.map((u, i) => (
-                <img key={i} src={u} alt="" className="max-h-28 max-w-[160px] rounded-md border border-borde object-cover" />
-              ))}
+        <div className="group/tu flex max-w-[88%] items-start gap-1 self-end">
+          {e.uuid && <VolverAqui espacio={espacio} entrada={e.id} tieneUuid />}
+          <div className="flex min-w-0 flex-col items-end gap-1.5">
+            {e.adjunto && <RecuadroOrden a={e.adjunto} />}
+            {e.imagenes && (
+              <div className="flex flex-wrap justify-end gap-1.5">
+                {e.imagenes.map((u, i) => (
+                  <img key={i} src={u} alt="" className="max-h-28 max-w-[160px] rounded-md border border-borde object-cover" />
+                ))}
+              </div>
+            )}
+            <div className="select-text whitespace-pre-wrap break-words rounded-[12px_12px_4px_12px] border border-borde bg-tarjeta px-[11px] py-2">
+              {e.texto}
             </div>
-          )}
-          <div className="select-text whitespace-pre-wrap break-words rounded-[12px_12px_4px_12px] border border-borde bg-tarjeta px-[11px] py-2">
-            {e.texto}
           </div>
         </div>
       );
+    case "razonamiento":
+      return <Razonamiento e={e} />;
     case "claude":
       return (
         <div className={e.enCurso ? "cursor-claude" : undefined}>
@@ -269,28 +284,33 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
         </div>
       );
     case "herramienta": {
+      // El plan ya sale entero en su recuadro.
+      if (e.nombre === "ExitPlanMode") return null;
       const [nombre, Icono] = herramienta(e.nombre);
       return (
-        <div className="flex min-w-0 items-center gap-2 rounded-lg border border-borde px-[9px] py-[5px] text-[12px] text-tenue">
-          <Icono size={13} strokeWidth={1.8} className="flex-none" />
-          <b className="flex-none font-semibold text-texto">{nombre}</b>
-          <span title={e.resumen} className="min-w-0 truncate font-mono text-[11.5px]">
-            {relativa(e.resumen, carpeta)}
-          </span>
-          <span className="ml-auto flex-none">
-            {e.estado === "ejecutando" ? (
-              <Loader2 size={13} className="animate-spin text-muy" />
-            ) : e.estado === "ok" ? (
-              <Check size={13} className="text-ok" />
-            ) : (
-              <X size={13} className="text-mal" />
-            )}
-          </span>
+        <div className="flex flex-col gap-1 rounded-lg border border-borde px-[9px] py-[5px]">
+          <div className="flex min-w-0 items-center gap-2 text-[12px] text-tenue">
+            <Icono size={13} strokeWidth={1.8} className="flex-none" />
+            <b className="flex-none font-semibold text-texto">{nombre}</b>
+            <span title={e.resumen} className="min-w-0 truncate font-mono text-[11.5px]">
+              {relativa(e.resumen, carpeta)}
+            </span>
+            <span className="ml-auto flex-none">
+              {e.estado === "ejecutando" ? (
+                <Loader2 size={13} className="animate-spin text-muy" />
+              ) : e.estado === "ok" ? (
+                <Check size={13} className="text-ok" />
+              ) : (
+                <X size={13} className="text-mal" />
+              )}
+            </span>
+          </div>
+          {e.pasos ? <PasosSubagente pasos={e.pasos} ultimo={e.estado === "ejecutando" ? e.ultimoPaso : undefined} carpeta={carpeta} /> : null}
         </div>
       );
     }
     case "permiso":
-      return <Permiso e={e} espacio={espacio} carpeta={carpeta} />;
+      return e.herramienta === "ExitPlanMode" ? <Plan e={e} espacio={espacio} /> : <Permiso e={e} espacio={espacio} carpeta={carpeta} />;
     case "aviso":
       return (
         <p className="flex items-start gap-1.5 self-center text-[11.5px] text-muy">
@@ -342,14 +362,27 @@ function CajaEntrada({
   carpeta,
   ocupado,
   permiso,
+  esPlan,
 }: {
   espacio: string;
   c: Conversacion;
   carpeta: string | null;
   ocupado: boolean;
   permiso: number | null;
+  /** El permiso pendiente es un plan (ExitPlanMode). */
+  esPlan: boolean;
 }) {
   const [texto, setTexto] = useState("");
+  const borrador = useClaude((s) => s.borradores[espacio]);
+  useEffect(() => {
+    if (borrador === undefined) return;
+    const t = tomarBorrador(espacio) ?? "";
+    setTexto(t);
+    requestAnimationFrame(() => {
+      area.current?.focus();
+      area.current?.setSelectionRange(t.length, t.length);
+    });
+  }, [borrador, espacio]);
   const adjunto = useClaude((s) => s.adjuntos[espacio]);
   const imagenes = useClaude((s) => s.imagenes[espacio] ?? SIN_IMAGENES);
   const selector = useRef<HTMLInputElement>(null);
@@ -460,7 +493,9 @@ function CajaEntrada({
           spellCheck={false}
           placeholder={
             permiso !== null
-              ? "Intro permite · Esc deniega · o escribe qué hacer en su lugar"
+              ? esPlan
+                ? "Intro aprueba · Esc sigue planificando · o escribe qué cambiar"
+                : "Intro permite · Esc deniega · o escribe qué hacer en su lugar"
               : adjunto
                 ? "Pregunta sobre esta orden, o Intro para que la revise"
                 : imagenes.length

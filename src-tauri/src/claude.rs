@@ -35,11 +35,26 @@ pub enum Evento {
     Parcial { texto: String },
     /// Bloque de texto terminado (sustituye a los parciales).
     Texto { texto: String },
+    /// Trozo del resumen de lo que va pensando (`--thinking-display summarized`).
+    ParcialRazonamiento { texto: String },
+    /// Resumen del razonamiento terminado (sustituye a los parciales).
+    Razonamiento { texto: String },
     Herramienta {
         id: String,
         nombre: String,
         resumen: String,
     },
+    /// Herramienta que usa un subagente: `padre` es el id de la herramienta Task que lo lanzó.
+    Subherramienta {
+        padre: String,
+        nombre: String,
+        resumen: String,
+    },
+    /// Eco de un mensaje tuyo (`--replay-user-messages`): su uuid sirve de punto de control.
+    Eco { uuid: String },
+    /// Uuid de cada pieza de la conversación (respuestas y resultados): la última antes de un
+    /// mensaje tuyo es por donde se corta al volver a ese punto.
+    Cadena { uuid: String },
     ResultadoHerramienta { id: String, error: bool },
     Permiso {
         #[serde(rename = "idPeticion")]
@@ -80,6 +95,10 @@ pub struct Opciones {
     esfuerzo: Option<String>,
     /// Id de una conversación guardada para seguirla (`--resume`).
     reanudar: Option<String>,
+    /// Con `reanudar`: seguirla solo hasta esta pieza, en una copia (`--resume-session-at`
+    /// + `--fork-session`). Es «volver a este punto» de la conversación.
+    #[serde(rename = "reanudarEn")]
+    reanudar_en: Option<String>,
 }
 
 /// Imagen pegada o soltada en el panel: tipo MIME y datos en base64.
@@ -135,9 +154,21 @@ pub fn claude_abrir(
         "--include-partial-messages",
         "--permission-prompt-tool",
         "stdio",
+        // Uuid de cada mensaje tuyo, para los puntos de control.
+        "--replay-user-messages",
+        // Resumen de lo que piensa (sin esto el razonamiento llega vacío).
+        "--thinking-display",
+        "summarized",
     ])
     .current_dir(&carpeta)
-    .env("KYU_TERMINAL", env!("CARGO_PKG_VERSION"));
+    .env("KYU_TERMINAL", env!("CARGO_PKG_VERSION"))
+    // Copia de los archivos antes de cada cambio de Claude: `rewind_files` los devuelve.
+    .env("CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING", "true");
+    if opciones.reanudar.is_some()
+        && let Some(en) = opciones.reanudar_en.as_deref().filter(|v| !v.is_empty())
+    {
+        cmd.args(["--resume-session-at", en, "--fork-session"]);
+    }
     for (opcion, valor) in [
         ("--model", &opciones.modelo),
         ("--permission-mode", &opciones.modo),
@@ -295,7 +326,8 @@ pub fn claude_enviar(
 }
 
 /// `respuesta`: "permitir", "siempre" o "denegar". Al denegar, `mensaje` le dice a Claude
-/// qué hacer en su lugar (como «No, y dile qué hacer» en `claude`).
+/// qué hacer en su lugar (como «No, y dile qué hacer» en `claude`). Al permitir, `modo`
+/// cambia el modo de permisos a la vez (aprobar un plan: «sí, y edita sin preguntar»).
 #[tauri::command]
 pub fn claude_responder(
     claudes: State<'_, Claudes>,
@@ -303,6 +335,7 @@ pub fn claude_responder(
     id_peticion: String,
     respuesta: String,
     mensaje: Option<String>,
+    modo: Option<String>,
 ) -> Result<(), String> {
     con_sesion(&claudes, id, |s| {
         let (input, sugerencias) = s
@@ -312,7 +345,14 @@ pub fn claude_responder(
             .remove(&id_peticion)
             .ok_or("ese permiso ya se contestó")?;
         let cuerpo = match respuesta.as_str() {
-            "permitir" => json!({ "behavior": "allow", "updatedInput": input }),
+            "permitir" => match modo {
+                Some(m) => json!({
+                    "behavior": "allow",
+                    "updatedInput": input,
+                    "updatedPermissions": [{ "type": "setMode", "mode": m, "destination": "session" }],
+                }),
+                None => json!({ "behavior": "allow", "updatedInput": input }),
+            },
             "siempre" => json!({
                 "behavior": "allow",
                 "updatedInput": input,
@@ -388,17 +428,37 @@ fn traducir(v: &Value) -> Vec<Evento> {
                 tokens: m["post_tokens"].as_u64().unwrap_or(0),
             });
         }
-        "stream_event" => {
+        "stream_event" if v["parent_tool_use_id"].is_null() => {
             let ev = &v["event"];
-            if ev["type"] == "content_block_delta"
-                && ev["delta"]["type"] == "text_delta"
-                && let Some(t) = ev["delta"]["text"].as_str()
-            {
-                sal.push(Evento::Parcial { texto: t.into() });
+            if ev["type"] == "content_block_delta" {
+                let d = &ev["delta"];
+                match (d["type"].as_str(), d["text"].as_str(), d["thinking"].as_str()) {
+                    (Some("text_delta"), Some(t), _) => sal.push(Evento::Parcial { texto: t.into() }),
+                    (Some("thinking_delta"), _, Some(t)) if !t.is_empty() => {
+                        sal.push(Evento::ParcialRazonamiento { texto: t.into() })
+                    }
+                    _ => {}
+                }
             }
         }
-        // Mensajes de los subagentes: no van al panel.
-        "assistant" if v["parent_tool_use_id"].is_null() => {
+        // Mensajes de los subagentes: solo las herramientas que usan, bajo la Task que los lanzó.
+        "assistant" if !v["parent_tool_use_id"].is_null() => {
+            let padre = texto(&v["parent_tool_use_id"]);
+            for bloque in v["message"]["content"].as_array().into_iter().flatten() {
+                if bloque["type"] == "tool_use" {
+                    let nombre = texto(&bloque["name"]);
+                    sal.push(Evento::Subherramienta {
+                        padre: padre.clone(),
+                        resumen: resumen(&nombre, &bloque["input"]),
+                        nombre,
+                    });
+                }
+            }
+        }
+        "assistant" => {
+            if let Some(u) = v["uuid"].as_str() {
+                sal.push(Evento::Cadena { uuid: u.into() });
+            }
             let uso = &v["message"]["usage"];
             let tokens = [
                 "input_tokens",
@@ -416,6 +476,12 @@ fn traducir(v: &Value) -> Vec<Evento> {
                     Some("text") => sal.push(Evento::Texto {
                         texto: texto(&bloque["text"]),
                     }),
+                    Some("thinking") => {
+                        let t = texto(&bloque["thinking"]);
+                        if !t.trim().is_empty() {
+                            sal.push(Evento::Razonamiento { texto: t });
+                        }
+                    }
                     Some("tool_use") => {
                         let nombre = texto(&bloque["name"]);
                         sal.push(Evento::Herramienta {
@@ -428,7 +494,14 @@ fn traducir(v: &Value) -> Vec<Evento> {
                 }
             }
         }
-        "user" => {
+        "user" if v["parent_tool_use_id"].is_null() => {
+            if let Some(u) = v["uuid"].as_str() {
+                sal.push(if v["isReplay"].as_bool() == Some(true) {
+                    Evento::Eco { uuid: u.into() }
+                } else {
+                    Evento::Cadena { uuid: u.into() }
+                });
+            }
             for bloque in v["message"]["content"].as_array().into_iter().flatten() {
                 if bloque["type"] == "tool_result" {
                     sal.push(Evento::ResultadoHerramienta {

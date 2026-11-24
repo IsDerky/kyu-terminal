@@ -123,7 +123,12 @@ export type EventoClaude =
   | { tipo: "compactado"; antes: number; despues: number }
   | { tipo: "parcial"; texto: string }
   | { tipo: "texto"; texto: string }
+  | { tipo: "parcialRazonamiento"; texto: string }
+  | { tipo: "razonamiento"; texto: string }
   | { tipo: "herramienta"; id: string; nombre: string; resumen: string }
+  | { tipo: "subherramienta"; padre: string; nombre: string; resumen: string }
+  | { tipo: "eco"; uuid: string }
+  | { tipo: "cadena"; uuid: string }
   | { tipo: "resultadoHerramienta"; id: string; error: boolean }
   | { tipo: "permiso"; idPeticion: string; herramienta: string; resumen: string; input: unknown }
   | { tipo: "contexto"; tokens: number }
@@ -138,6 +143,8 @@ export interface OpcionesClaude {
   esfuerzo?: string | null;
   /** Id de una conversación guardada para seguirla (`--resume`). */
   reanudar?: string | null;
+  /** Con `reanudar`: solo hasta esta pieza, en una copia (volver a un punto). */
+  reanudarEn?: string | null;
 }
 
 /** Imagen para Claude: tipo MIME y datos en base64 (sin el «data:…,» delante). */
@@ -174,10 +181,11 @@ export interface SesionGuardada {
 export const sesionesClaude = (carpeta: string) => invoke<SesionGuardada[]>("claude_sesiones", { carpeta });
 
 export type Pasado =
-  | { tipo: "tu"; texto: string }
+  | { tipo: "tu"; texto: string; uuid: string | null; previo: string | null }
   | { tipo: "claude"; texto: string }
   | { tipo: "herramienta"; id: string; nombre: string; resumen: string; error: boolean }
-  | { tipo: "aviso"; texto: string };
+  | { tipo: "aviso"; texto: string }
+  | { tipo: "cadena"; uuid: string };
 
 /** Lo que se ve de una conversación guardada (sus últimas 400 piezas). */
 export const historialClaude = (carpeta: string, id: string) => invoke<Pasado[]>("claude_historial", { carpeta, id });
@@ -190,13 +198,15 @@ export const buscarArchivos = (carpeta: string, consulta: string) =>
 export const controlClaude = <T = unknown>(id: number, peticion: Record<string, unknown>) =>
   invoke<T>("claude_control", { id, peticion });
 
-/** Al denegar, `mensaje` le dice a Claude qué hacer en su lugar. */
+/** Al denegar, `mensaje` le dice a Claude qué hacer en su lugar; al permitir, `modo` cambia
+ *  también el modo de permisos (aprobar un plan). */
 export const responderClaude = (
   id: number,
   idPeticion: string,
   respuesta: "permitir" | "siempre" | "denegar",
   mensaje?: string,
-) => invoke("claude_responder", { id, idPeticion, respuesta, mensaje: mensaje ?? null });
+  modo?: string,
+) => invoke("claude_responder", { id, idPeticion, respuesta, mensaje: mensaje ?? null, modo: modo ?? null });
 
 export const pararClaude = (id: number) => invoke("claude_parar", { id });
 

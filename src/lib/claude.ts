@@ -29,9 +29,33 @@ import {
 } from "./claudeOpciones";
 
 export type Entrada =
-  | { id: number; tipo: "tu"; texto: string; adjunto?: TextoBloque; imagenes?: string[] }
+  | {
+      id: number;
+      tipo: "tu";
+      texto: string;
+      adjunto?: TextoBloque;
+      imagenes?: string[];
+      /** Uuid del mensaje en Claude Code (punto de control) y la pieza anterior de la cadena
+       *  (por donde se corta al volver aquí; null = era el primero). */
+      uuid?: string | null;
+      previo?: string | null;
+      /** Enviado y esperando su eco con el uuid. */
+      esperaEco?: boolean;
+    }
   | { id: number; tipo: "claude"; texto: string; enCurso: boolean }
-  | { id: number; tipo: "herramienta"; idHerramienta: string; nombre: string; resumen: string; estado: "ejecutando" | "ok" | "error" }
+  /** Resumen de lo que pensó Claude antes de contestar. */
+  | { id: number; tipo: "razonamiento"; texto: string; enCurso: boolean }
+  | {
+      id: number;
+      tipo: "herramienta";
+      idHerramienta: string;
+      nombre: string;
+      resumen: string;
+      estado: "ejecutando" | "ok" | "error";
+      /** Subagente (Task): cuántas herramientas lleva y la última. */
+      pasos?: number;
+      ultimoPaso?: { nombre: string; resumen: string };
+    }
   | {
       id: number;
       tipo: "permiso";
@@ -64,6 +88,10 @@ export interface Conversacion {
   sesion: string | null;
   /** Conversación guardada que se sigue al escribir (`--resume`). */
   reanudar: string | null;
+  /** Con `reanudar`: seguirla solo hasta esta pieza (al volver a un punto). */
+  reanudarEn: string | null;
+  /** Última pieza de la cadena (respuesta o resultado): lo anterior al próximo mensaje. */
+  ultimoUuid: string | null;
   entradas: Entrada[];
   estado: EstadoConv;
   /** Cuándo empezó el turno en curso (para el contador). */
@@ -106,6 +134,8 @@ interface EstadoClaude {
   prefs: Preferencias;
   /** Desglose del contexto abierto. */
   verContexto: boolean;
+  /** Texto que vuelve a la caja al volver a un punto, por espacio. */
+  borradores: Record<string, string>;
   mostrar: (visible: boolean) => void;
   quitarAviso: (id: number) => void;
 }
@@ -116,6 +146,8 @@ export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Convers
   carpeta: null,
   sesion: null,
   reanudar: null,
+  reanudarEn: null,
+  ultimoUuid: null,
   entradas: [],
   estado: "parado",
   desde: 0,
@@ -139,6 +171,7 @@ export const useClaude = create<EstadoClaude>((set) => ({
   catalogo: catalogoGuardado(),
   prefs: prefsGuardadas(),
   verContexto: false,
+  borradores: {},
   mostrar: (visible) => set({ visible }),
   quitarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));
@@ -161,8 +194,12 @@ function cambiar(espacio: string, f: (c: Conversacion) => Partial<Conversacion>)
   });
 }
 
+/** El razonamiento en curso se da por terminado cuando llega otra cosa. */
+const cerrarRazonamiento = (entradas: Entrada[]) =>
+  entradas.map((e) => (e.tipo === "razonamiento" && e.enCurso ? { ...e, enCurso: false } : e));
+
 const añadir = (espacio: string, e: SinId<Entrada>) =>
-  cambiar(espacio, (c) => ({ entradas: [...c.entradas, { ...e, id: ++contador } as Entrada] }));
+  cambiar(espacio, (c) => ({ entradas: [...cerrarRazonamiento(c.entradas), { ...e, id: ++contador } as Entrada] }));
 
 /** Carpeta del terminal con el foco del espacio o, si el foco está en un archivo, la del primer terminal. */
 export function carpetaDelEspacio(espacio: string): string | null {
@@ -201,22 +238,58 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       });
       return;
     case "parcial":
+    case "parcialRazonamiento": {
+      const tipo = ev.tipo === "parcial" ? "claude" : "razonamiento";
       cambiar(espacio, (c) => {
         const ultima = c.entradas.at(-1);
-        if (ultima?.tipo === "claude" && ultima.enCurso) {
+        if (ultima?.tipo === tipo && ultima.enCurso) {
           return { entradas: [...c.entradas.slice(0, -1), { ...ultima, texto: ultima.texto + ev.texto }] };
         }
-        return { entradas: [...c.entradas, { id: ++contador, tipo: "claude", texto: ev.texto, enCurso: true }] };
+        return { entradas: [...cerrarRazonamiento(c.entradas), { id: ++contador, tipo, texto: ev.texto, enCurso: true }] };
       });
       return;
+    }
     case "texto":
+    case "razonamiento": {
+      const tipo = ev.tipo === "texto" ? "claude" : "razonamiento";
       cambiar(espacio, (c) => {
         const ultima = c.entradas.at(-1);
-        if (ultima?.tipo === "claude" && ultima.enCurso) {
+        if (ultima?.tipo === tipo && ultima.enCurso) {
           return { entradas: [...c.entradas.slice(0, -1), { ...ultima, texto: ev.texto, enCurso: false }] };
         }
-        return { entradas: [...c.entradas, { id: ++contador, tipo: "claude", texto: ev.texto, enCurso: false }] };
+        return { entradas: [...cerrarRazonamiento(c.entradas), { id: ++contador, tipo, texto: ev.texto, enCurso: false }] };
       });
+      return;
+    }
+    case "subherramienta":
+      cambiar(espacio, (c) => ({
+        entradas: c.entradas.map((e) =>
+          e.tipo === "herramienta" && e.idHerramienta === ev.padre
+            ? { ...e, pasos: (e.pasos ?? 0) + 1, ultimoPaso: { nombre: ev.nombre, resumen: ev.resumen } }
+            : e,
+        ),
+      }));
+      return;
+    case "eco":
+      // El eco es del último mensaje enviado; los anteriores que no lo tuvieron se quedan sin él.
+      cambiar(espacio, (c) => {
+        let i = -1;
+        c.entradas.forEach((e, k) => e.tipo === "tu" && e.esperaEco && (i = k));
+        if (i < 0) return {};
+        return {
+          entradas: c.entradas.map((e, k) =>
+            e.tipo !== "tu" || !e.esperaEco
+              ? e
+              : k === i
+                ? { ...e, esperaEco: false, uuid: ev.uuid, previo: c.ultimoUuid }
+                : { ...e, esperaEco: false },
+          ),
+          ultimoUuid: ev.uuid,
+        };
+      });
+      return;
+    case "cadena":
+      cambiar(espacio, () => ({ ultimoUuid: ev.uuid }));
       return;
     case "herramienta":
       añadir(espacio, { tipo: "herramienta", idHerramienta: ev.id, nombre: ev.nombre, resumen: ev.resumen, estado: "ejecutando" });
@@ -262,7 +335,7 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
         coste: ev.coste,
         duracion: ev.duracion,
         // Un texto que se quedara a medias (al parar) se da por terminado.
-        entradas: c.entradas.map((e) => (e.tipo === "claude" && e.enCurso ? { ...e, enCurso: false } : e)),
+        entradas: cerrarRazonamiento(c.entradas).map((e) => (e.tipo === "claude" && e.enCurso ? { ...e, enCurso: false } : e)),
       }));
       void refrescarContexto(espacio);
       return;
@@ -422,23 +495,29 @@ export async function reanudar(espacio: string, carpeta: string, id: string, tit
   const pasado = await historialClaude(carpeta, id);
   const antes = conversacion(espacio);
   if (antes.claudeId !== null) void cerrarClaude(antes.claudeId);
-  const entradas: Entrada[] = pasado.map((p): Entrada => {
+  let ultimoUuid: string | null = null;
+  const entradas: Entrada[] = pasado.flatMap((p): Entrada[] => {
     switch (p.tipo) {
+      case "cadena":
+        ultimoUuid = p.uuid;
+        return [];
       case "tu":
-        return { id: ++contador, tipo: "tu", texto: p.texto };
+        return [{ id: ++contador, tipo: "tu", texto: p.texto, uuid: p.uuid, previo: p.previo }];
       case "claude":
-        return { id: ++contador, tipo: "claude", texto: p.texto, enCurso: false };
+        return [{ id: ++contador, tipo: "claude", texto: p.texto, enCurso: false }];
       case "herramienta":
-        return {
-          id: ++contador,
-          tipo: "herramienta",
-          idHerramienta: p.id,
-          nombre: p.nombre,
-          resumen: p.resumen,
-          estado: p.error ? "error" : "ok",
-        };
+        return [
+          {
+            id: ++contador,
+            tipo: "herramienta",
+            idHerramienta: p.id,
+            nombre: p.nombre,
+            resumen: p.resumen,
+            estado: p.error ? "error" : "ok",
+          },
+        ];
       case "aviso":
-        return { id: ++contador, tipo: "aviso", texto: p.texto };
+        return [{ id: ++contador, tipo: "aviso", texto: p.texto }];
     }
   });
   entradas.push({ id: ++contador, tipo: "aviso", texto: `Reanudada «${titulo}»: sigue donde lo dejaste` });
@@ -454,6 +533,7 @@ export async function reanudar(espacio: string, carpeta: string, id: string, tit
         carpeta,
         reanudar: id,
         sesion: id,
+        ultimoUuid,
         entradas,
       },
     },
@@ -480,6 +560,7 @@ export async function enviar(espacio: string, texto: string) {
     texto: texto || (adjunto ? PREGUNTA_POR_DEFECTO : ""),
     adjunto,
     imagenes: imagenes.length ? imagenes.map((i) => i.url) : undefined,
+    esperaEco: true,
   });
   cambiar(espacio, () => ({ estado: "arrancando", desde: Date.now() }));
   try {
@@ -490,10 +571,11 @@ export async function enviar(espacio: string, texto: string) {
       cambiar(espacio, () => ({ generacion }));
       const id = await abrirClaude(
         carpeta,
-        { modelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, reanudar: c.reanudar },
+        { modelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, reanudar: c.reanudar, reanudarEn: c.reanudarEn },
         (ev) => alEvento(espacio, generacion, ev),
       );
-      cambiar(espacio, () => ({ claudeId: id, carpeta }));
+      // La copia cortada ya existe: si Claude se cierra, se sigue esa (su id llega en el init).
+      cambiar(espacio, () => ({ claudeId: id, carpeta, reanudarEn: null }));
       c = conversacion(espacio);
       // Comandos de este proyecto y modelos: en segundo plano, sin esperar.
       void controlClaude<Catalogo>(id, { subtype: "initialize" })
@@ -513,8 +595,9 @@ export async function enviar(espacio: string, texto: string) {
   }
 }
 
-/** Al denegar, `mensaje` le dice a Claude qué hacer en su lugar. */
-export async function responder(espacio: string, entrada: number, respuesta: Respuesta, mensaje?: string) {
+/** Al denegar, `mensaje` le dice a Claude qué hacer en su lugar. Al permitir, `modo` cambia
+ *  también el modo de permisos (aprobar un plan). */
+export async function responder(espacio: string, entrada: number, respuesta: Respuesta, mensaje?: string, modo?: string) {
   const c = conversacion(espacio);
   const e = c.entradas.find((x) => x.id === entrada);
   if (c.claudeId === null || e?.tipo !== "permiso" || e.respuesta) return;
@@ -523,7 +606,8 @@ export async function responder(espacio: string, entrada: number, respuesta: Res
     entradas: c.entradas.map((x) => (x.id === entrada && x.tipo === "permiso" ? { ...x, respuesta, mensaje: nota } : x)),
   }));
   try {
-    await responderClaude(c.claudeId, e.idPeticion, respuesta, nota);
+    await responderClaude(c.claudeId, e.idPeticion, respuesta, nota, respuesta === "permitir" ? modo : undefined);
+    if (respuesta === "permitir" && modo) cambiar(espacio, () => ({ modo }));
   } catch (err) {
     añadir(espacio, { tipo: "error", texto: String(err) });
   }
@@ -546,6 +630,105 @@ export function nueva(espacio: string) {
       [espacio]: { ...vacia(), eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo },
     },
   }));
+}
+
+// ---------- Puntos de control ----------
+
+/** Qué deshacer al volver a un mensaje tuyo. */
+export type Vuelta = "todo" | "conversacion" | "archivos";
+
+/** Lo que cambiaría en los archivos al volver a ese mensaje (null si no se puede saber). */
+export interface CambiosVuelta {
+  canRewind: boolean;
+  error?: string;
+  filesChanged?: string[];
+  insertions?: number;
+  deletions?: number;
+}
+
+const mensajeTuyo = (c: Conversacion, entrada: number) => {
+  const e = c.entradas.find((x) => x.id === entrada);
+  return e?.tipo === "tu" ? e : null;
+};
+
+/** Pregunta a Claude (sin tocar nada) qué archivos devolvería a como estaban. */
+export async function cambiosAlVolver(espacio: string, entrada: number): Promise<CambiosVuelta | null> {
+  const c = conversacion(espacio);
+  const e = mensajeTuyo(c, entrada);
+  if (c.claudeId === null || !e?.uuid) return null;
+  try {
+    return await controlClaude<CambiosVuelta>(c.claudeId, { subtype: "rewind_files", user_message_id: e.uuid, dry_run: true });
+  } catch (err) {
+    return { canRewind: false, error: String(err) };
+  }
+}
+
+/**
+ * Vuelve a antes de un mensaje tuyo. «archivos»: los archivos que tocó Claude desde entonces
+ * quedan como estaban (hace falta Claude en marcha). «conversacion»: se corta la conversación
+ * ahí (Claude sigue una copia hasta ese punto) y el mensaje vuelve a la caja para cambiarlo.
+ */
+export async function volver(espacio: string, entrada: number, que: Vuelta) {
+  const c = conversacion(espacio);
+  const e = mensajeTuyo(c, entrada);
+  if (!e || c.estado === "arrancando" || c.estado === "pensando") return;
+  if (que !== "conversacion") {
+    if (c.claudeId === null || !e.uuid) return;
+    try {
+      const r = await controlClaude<CambiosVuelta>(c.claudeId, { subtype: "rewind_files", user_message_id: e.uuid });
+      if (!r.canRewind) throw new Error(r.error || "Claude no tiene copia de esos archivos");
+    } catch (err) {
+      añadir(espacio, { tipo: "error", texto: `No se pudieron devolver los archivos: ${err}` });
+      return;
+    }
+    if (que === "archivos") {
+      añadir(espacio, { tipo: "aviso", texto: `Archivos como estaban antes de «${corto(e.texto)}»` });
+      return;
+    }
+  }
+  if (c.claudeId !== null) void cerrarClaude(c.claudeId);
+  const i = c.entradas.indexOf(e);
+  // Sin pieza anterior era el primer mensaje: se empieza de cero.
+  const seguir = e.previo && c.sesion ? c.sesion : null;
+  useClaude.setState((s) => ({
+    verContexto: false,
+    borradores: { ...s.borradores, [espacio]: e.texto },
+    conversaciones: {
+      ...s.conversaciones,
+      [espacio]: {
+        ...c,
+        claudeId: null,
+        generacion: ++contador,
+        estado: seguir ? "cerrado" : "parado",
+        reanudar: seguir,
+        reanudarEn: seguir ? (e.previo ?? null) : null,
+        sesion: seguir,
+        ultimoUuid: seguir ? (e.previo ?? null) : null,
+        carpeta: seguir ? c.carpeta : null,
+        contexto: null,
+        tokens: 0,
+        entradas: [
+          ...c.entradas.slice(0, i),
+          ...(i > 0
+            ? [{ id: ++contador, tipo: "aviso", texto: que === "todo" ? "Vuelto aquí: conversación y archivos" : "Vuelto aquí: solo la conversación" } as Entrada]
+            : []),
+        ],
+      },
+    },
+  }));
+}
+
+const corto = (t: string) => (t.length > 40 ? t.slice(0, 40).trimEnd() + "…" : t);
+
+/** El texto que tiene que volver a la caja (y se olvida). */
+export function tomarBorrador(espacio: string) {
+  const t = useClaude.getState().borradores[espacio];
+  if (t === undefined) return null;
+  useClaude.setState((s) => {
+    const { [espacio]: _, ...resto } = s.borradores;
+    return { borradores: resto };
+  });
+  return t;
 }
 
 /** Cierra las conversaciones de los espacios que ya no existen. */

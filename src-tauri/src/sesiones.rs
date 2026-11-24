@@ -186,10 +186,13 @@ pub async fn claude_sesiones(carpeta: String) -> Result<Vec<SesionGuardada>, Str
 #[derive(Serialize)]
 #[serde(tag = "tipo", rename_all = "camelCase")]
 pub enum Pasado {
-    Tu { texto: String },
+    /// `uuid` y `previo` (la pieza anterior de la cadena) sirven para volver a este punto.
+    Tu { texto: String, uuid: Option<String>, previo: Option<String> },
     Claude { texto: String },
     Herramienta { id: String, nombre: String, resumen: String, error: bool },
     Aviso { texto: String },
+    /// Al final: la última pieza de la cadena (por donde sigue la conversación).
+    Cadena { uuid: String },
 }
 
 /// Lo que se ve de una conversación guardada: mensajes, respuestas y herramientas (las
@@ -208,6 +211,7 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
         let f = File::open(&ruta).map_err(|e| e.to_string())?;
         let mut sal: Vec<Pasado> = Vec::new();
         let mut errores: HashMap<String, bool> = HashMap::new();
+        let mut ultimo: Option<String> = None;
         for linea in BufReader::new(f).lines().map_while(Result::ok) {
             // Las líneas enormes que no son mensajes (instantáneas del prompt…) ni se analizan.
             if !(linea.contains("\"type\":\"user\"")
@@ -219,6 +223,11 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
             let Ok(v) = serde_json::from_str::<Value>(&linea) else { continue };
             if v["isSidechain"].as_bool() == Some(true) {
                 continue;
+            }
+            if v["type"] != "system"
+                && let Some(u) = v["uuid"].as_str()
+            {
+                ultimo = Some(u.to_string());
             }
             match v["type"].as_str() {
                 Some("user") => {
@@ -233,7 +242,11 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
                         if t.starts_with("[Request interrupted") {
                             sal.push(Pasado::Aviso { texto: "Parado por ti".into() });
                         } else {
-                            sal.push(Pasado::Tu { texto: t });
+                            sal.push(Pasado::Tu {
+                                texto: t,
+                                uuid: v["uuid"].as_str().map(String::from),
+                                previo: v["parentUuid"].as_str().map(String::from),
+                            });
                         }
                     }
                 }
@@ -275,6 +288,9 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
         }
         let quitar = sal.len().saturating_sub(400);
         sal.drain(..quitar);
+        if let Some(uuid) = ultimo {
+            sal.push(Pasado::Cadena { uuid });
+        }
         Ok(sal)
     })
     .await
