@@ -1,7 +1,7 @@
 // Controles del panel de Claude: modo, modelo y esfuerzo bajo la caja de texto, menú de
 // comandos con barra y desglose del contexto.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Gauge, Minimize2, Slash } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Gauge, Minimize2, Slash } from "lucide-react";
 import {
   cambiarEsfuerzo,
   cambiarModelo,
@@ -13,8 +13,10 @@ import {
   type Conversacion,
 } from "../lib/claude";
 import {
+  ayudaModelo,
   ESFUERZOS,
   esfuerzos,
+  esVersionFija,
   modeloDe,
   modo as datosModo,
   modosDisponibles,
@@ -34,6 +36,8 @@ interface Opcion {
   titulo: string;
   ayuda?: string;
   desactivada?: string;
+  /** Va plegada bajo «Versiones anteriores». */
+  anterior?: boolean;
 }
 
 function Desplegable({
@@ -48,7 +52,7 @@ function Desplegable({
   derecha = false,
 }: {
   fijo?: boolean;
-  /** Abre hacia la izquierda, pegado al borde derecho del botón. */
+  /** Abre pegado al borde derecho de la barra (el contenedor con `relative`), no del botón. */
   derecha?: boolean;
   etiqueta: React.ReactNode;
   ayuda: string;
@@ -59,7 +63,12 @@ function Desplegable({
   cabecera: string;
 }) {
   const [abierto, setAbierto] = useState(false);
+  const [verAnteriores, setVerAnteriores] = useState(false);
   const caja = useRef<HTMLDivElement>(null);
+  const actuales = opciones.filter((o) => !o.anterior);
+  const anteriores = opciones.filter((o) => o.anterior);
+  // Si lo elegido es una versión anterior, se ve sin tener que desplegar.
+  const desplegadas = verAnteriores || anteriores.some((o) => o.valor === valor);
 
   useEffect(() => {
     if (!abierto) return;
@@ -71,11 +80,14 @@ function Desplegable({
   }, [abierto]);
 
   return (
-    <div ref={caja} className={`relative ${fijo ? "flex-none" : "min-w-0"}`}>
+    <div ref={caja} className={`${derecha ? "" : "relative"} ${fijo ? "flex-none" : "min-w-0"}`}>
       <button
         type="button"
         title={ayuda}
-        onClick={() => setAbierto((a) => !a)}
+        onClick={() => {
+          setAbierto((a) => !a);
+          setVerAnteriores(false);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Escape" && abierto) {
             e.preventDefault();
@@ -91,12 +103,13 @@ function Desplegable({
       {abierto && (
         <div
           style={{ width: ancho }}
-          className={`absolute bottom-full ${derecha ? "right-0" : "left-0"} z-30 mb-1.5 overflow-hidden rounded-lg border border-borde2 bg-tarjeta py-1 shadow-[0_12px_32px_-12px_#000]`}
+          className={`absolute bottom-full ${derecha ? "right-1" : "left-0"} z-30 mb-1.5 max-h-[min(460px,70vh)] overflow-y-auto rounded-lg border border-borde2 bg-tarjeta py-1 shadow-[0_12px_32px_-12px_#000]`}
         >
           <p className="px-3 pb-1 pt-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muy">{cabecera}</p>
-          {opciones.map((o) => (
+          {[...actuales, ...(desplegadas ? anteriores : [])].map((o, i) => (
+            <div key={o.valor ?? "_"}>
+            {anteriores.length > 0 && i === actuales.length && <Separador />}
             <button
-              key={o.valor ?? "_"}
               type="button"
               disabled={!!o.desactivada}
               title={o.desactivada}
@@ -104,20 +117,37 @@ function Desplegable({
                 setAbierto(false);
                 if (o.valor !== valor) alElegir(o.valor);
               }}
-              className="flex w-full items-start gap-2 px-3 py-1.5 text-left hover:bg-hover disabled:opacity-40 disabled:hover:bg-transparent"
+              className={`flex w-full items-start gap-2 px-3 text-left hover:bg-hover disabled:opacity-40 disabled:hover:bg-transparent ${o.anterior ? "py-1" : "py-1.5"}`}
             >
               <span className="mt-[3px] w-3 flex-none">{o.valor === valor && <Check size={12} className="text-acento" />}</span>
               <span className="min-w-0">
-                <span className="block text-[12.5px] text-texto">{o.titulo}</span>
+                <span className={`block ${o.anterior ? "text-[12px] text-tenue" : "text-[12.5px] text-texto"}`}>{o.titulo}</span>
                 {o.ayuda && <span className="block text-[11px] leading-snug text-tenue">{o.ayuda}</span>}
               </span>
             </button>
+            </div>
           ))}
+          {anteriores.length > 0 && !desplegadas && (
+            <>
+              <Separador />
+              <button
+                type="button"
+                onClick={() => setVerAnteriores(true)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-tenue hover:bg-hover hover:text-texto"
+              >
+                <ChevronRight size={12} className="flex-none" />
+                Versiones anteriores
+                <span className="ml-auto text-muy">{anteriores.length}</span>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
+
+const Separador = () => <div className="mx-3 my-1 border-t border-borde" />;
 
 // ---------- Barra bajo la caja ----------
 
@@ -132,7 +162,8 @@ export function BarraOpciones({ espacio, c, alBarra }: { espacio: string; c: Con
     ? catalogo.models.map((x) => ({
         valor: x.value === "default" ? null : x.value,
         titulo: x.value === "default" ? `Predeterminado · ${nombreModelo(x, "")}` : x.displayName,
-        ayuda: x.description.split("·").slice(1).join("·").trim() || x.description,
+        ayuda: esVersionFija(x.value) ? undefined : ayudaModelo(x),
+        anterior: esVersionFija(x.value),
       }))
     : [
         { valor: null, titulo: "Predeterminado" },
@@ -142,7 +173,7 @@ export function BarraOpciones({ espacio, c, alBarra }: { espacio: string; c: Con
       ];
 
   return (
-    <div className="flex h-8 items-center gap-0.5 pl-1.5 pr-9">
+    <div className="relative flex h-8 items-center gap-0.5 pl-1.5 pr-9">
       <Desplegable
         cabecera="Modo · Mayús+Tab"
         fijo

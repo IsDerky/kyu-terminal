@@ -315,12 +315,13 @@ function guardarCatalogoDe(r: Catalogo) {
   useClaude.setState({ catalogo: catalogoGuardado() });
 }
 
-let probando = false;
+let probado = false;
 
-/** Si nunca se ha visto el catálogo, arranca Claude un momento solo para pedírselo (no gasta tokens). */
+/** Una vez por sesión de Kyu, arranca Claude un momento solo para pedirle comandos y modelos (no
+ *  gasta tokens): el guardado puede ser de una versión anterior de Claude Code. */
 export async function cargarCatalogo(carpeta: string | null) {
-  if (useClaude.getState().catalogo || probando) return;
-  probando = true;
+  if (probado) return;
+  probado = true;
   let id: number | null = null;
   try {
     id = await abrirClaude(carpeta, {}, () => {});
@@ -329,7 +330,6 @@ export async function cargarCatalogo(carpeta: string | null) {
     // Sin catálogo los menús salen con lo mínimo.
   } finally {
     if (id !== null) void cerrarClaude(id);
-    probando = false;
   }
 }
 

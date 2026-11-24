@@ -106,6 +106,24 @@ export function esfuerzos(m: Modelo | undefined) {
   return m?.supportedEffortLevels ?? ["low", "medium", "high"];
 }
 
+/** Las versiones con nombre completo (claude-opus-4-7…) son fijas; los alias (opus, sonnet…) siguen a la última. */
+export const esVersionFija = (valor: string) => valor.startsWith("claude-");
+
+const AYUDAS: Record<string, string> = {
+  default: "El que recomienda Claude Code",
+  opus: "Para trabajo complejo y el día a día",
+  sonnet: "El más eficiente para tareas sencillas",
+  fable: "Para lo más difícil y las tareas largas",
+  haiku: "El más rápido, para respuestas rápidas",
+};
+
+/** Descripción corta en español; si no la hay, la de Claude Code (sin el nombre delante). */
+export function ayudaModelo(m: Modelo) {
+  const base = m.value.replace(/\[.*\]$/, "");
+  const extra = /\[1m\]/i.test(m.value) ? " · contexto de 1 M" : "";
+  return AYUDAS[base] ? AYUDAS[base] + extra : m.description.split("·").slice(1).join("·").trim() || m.description;
+}
+
 /** «Opus 4.7 · Most capable…» → «Opus 4.7». */
 export const nombreModelo = (m: Modelo | undefined, id: string) =>
   m ? (m.value === "default" ? m.description.split("·")[0].trim() || m.displayName : m.displayName) : id.replace(/^claude-/, "");
