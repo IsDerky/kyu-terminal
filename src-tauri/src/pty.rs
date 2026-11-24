@@ -54,7 +54,11 @@ pub fn pty_abrir(
     salida: Channel<Response>,
 ) -> Result<u32, String> {
     let id = ptys.siguiente.fetch_add(1, Ordering::Relaxed);
-    let (shell, argumentos) = crate::config::Config::cargar()
+    let crate::config::Lanzar {
+        shell,
+        argumentos,
+        entorno,
+    } = crate::config::Config::cargar()
         .orden_de(&perfil)
         .ok_or("no hay ningún perfil de shell")?;
 
@@ -75,6 +79,9 @@ pub fn pty_abrir(
     orden.env("KYU_ESTADO", archivo_estado(id));
     orden.env("TERM", "xterm-256color");
     orden.env("COLORTERM", "truecolor");
+    for (clave, valor) in &entorno {
+        orden.env(clave, valor);
+    }
 
     let mut hijo = par
         .slave

@@ -175,14 +175,19 @@ impl Config {
         lista
     }
 
-    /// Programa y argumentos para lanzar un perfil (añade el prompt de Kyu a PowerShell).
-    pub fn orden_de(&self, nombre: &str) -> Option<(String, Vec<String>)> {
+    /// Programa, argumentos y variables de entorno para lanzar un perfil (añade el
+    /// prompt de Kyu a PowerShell y a bash).
+    pub fn orden_de(&self, nombre: &str) -> Option<Lanzar> {
         let perfiles = self.perfiles();
         let perfil = perfiles
             .iter()
             .find(|p| p.nombre == nombre)
             .or(perfiles.first())?;
         let mut argumentos = perfil.argumentos.clone();
+        let mut entorno = Vec::new();
+        if !self.sin_prompt {
+            prompt_bash(&perfil.shell, &mut argumentos, &mut entorno);
+        }
         #[cfg(windows)]
         {
             let es_powershell = {
@@ -203,8 +208,78 @@ impl Config {
                 ]);
             }
         }
-        Some((perfil.shell.clone(), argumentos))
+        Some(Lanzar {
+            shell: perfil.shell.clone(),
+            argumentos,
+            entorno,
+        })
     }
+}
+
+pub struct Lanzar {
+    pub shell: String,
+    pub argumentos: Vec<String>,
+    pub entorno: Vec<(String, String)>,
+}
+
+/// bash (Git Bash, WSL o Linux): se arranca con `--rcfile shell/kyu.bash -i`, que carga
+/// la configuración de siempre y pone el prompt de Kyu. Solo si el perfil no trae ya
+/// su propia orden (`-c`, `--rcfile`, un programa para WSL…).
+fn prompt_bash(shell: &str, argumentos: &mut Vec<String>, entorno: &mut Vec<(String, String)>) {
+    let programa = std::path::Path::new(shell)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let solo_opciones_de_login = argumentos
+        .iter()
+        .all(|a| matches!(a.as_str(), "--login" | "-l" | "-i" | "--norc"));
+    if programa == "bash" || programa == "bash.exe" {
+        if !solo_opciones_de_login {
+            return;
+        }
+        let Some(script) = preparar_prompt_bash() else { return };
+        // Con --login en el perfil (Git Bash lo trae), kyu.bash carga lo de login.
+        if argumentos.iter().any(|a| a == "--login" || a == "-l") {
+            entorno.push(("KYU_LOGIN".into(), "1".into()));
+        }
+        *argumentos = vec!["--rcfile".into(), script.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/"), "-i".into()];
+    } else if cfg!(windows) && programa == "wsl.exe" && argumentos.is_empty() {
+        let Some(script) = preparar_prompt_bash() else { return };
+        let Some(ruta) = ruta_wsl(&script) else { return };
+        // wsl.exe abre una shell de login: se hace lo mismo a mano en kyu.bash.
+        entorno.push(("KYU_LOGIN".into(), "1".into()));
+        // Las variables de Kyu pasan a Linux; /p traduce la ruta de Windows.
+        entorno.push(("WSLENV".into(), wslenv()));
+        *argumentos = vec!["-e".into(), "bash".into(), "--rcfile".into(), ruta, "-i".into()];
+    }
+}
+
+/// C:\Users\x\… → /mnt/c/Users/x/… (el montaje por defecto de WSL).
+fn ruta_wsl(ruta: &std::path::Path) -> Option<String> {
+    let texto = ruta.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+    let (unidad, resto) = texto.split_once(":/")?;
+    (unidad.len() == 1).then(|| format!("/mnt/{}/{resto}", unidad.to_lowercase()))
+}
+
+fn wslenv() -> String {
+    let propias = "KYU_TERMINAL:KYU_LOGIN:KYU_ESTADO/p";
+    match std::env::var("WSLENV") {
+        Ok(v) if !v.is_empty() => format!("{v}:{propias}"),
+        _ => propias.into(),
+    }
+}
+
+/// Deja el script del prompt de bash en `<config>/kyu/shell/kyu.bash` (sin BOM, en LF).
+fn preparar_prompt_bash() -> Option<std::path::PathBuf> {
+    const SCRIPT: &str = include_str!("../../shell/kyu.bash");
+    let carpeta = dirs::config_dir()?.join("kyu").join("shell");
+    std::fs::create_dir_all(&carpeta).ok()?;
+    let ruta = carpeta.join("kyu.bash");
+    let bytes = SCRIPT.replace("\r\n", "\n").into_bytes();
+    if std::fs::read(&ruta).ok().as_deref() != Some(bytes.as_slice()) {
+        std::fs::write(&ruta, bytes).ok()?;
+    }
+    Some(ruta)
 }
 
 /// Perfiles que hay en este equipo.

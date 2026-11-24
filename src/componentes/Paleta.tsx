@@ -93,9 +93,13 @@ export default function Paleta({ config }: { config: ConfigVista }) {
     return lista;
   }, [config, espacios]);
 
+  // Buscando, primero lo que coincide más junto («pestaña wsl» → WSL antes que
+  // PowerShell, donde las letras salen sueltas); sin buscar, el orden por grupos.
   const filtradas = ordenes
     .map((o) => ({ o, pos: coincide(o.titulo, busqueda) }))
-    .filter((x): x is { o: Orden; pos: number[] } => x.pos !== null);
+    .filter((x): x is { o: Orden; pos: number[] } => x.pos !== null)
+    .map((x) => ({ ...x, nota: x.pos.length ? x.pos[x.pos.length - 1] - x.pos[0] + x.pos[0] / 100 : 0 }))
+    .sort((a, b) => (busqueda ? a.nota - b.nota : 0));
 
   useEffect(() => setSel(0), [busqueda]);
   useEffect(() => entrada.current?.focus(), []);
@@ -133,7 +137,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
         <div className="max-h-[420px] overflow-y-auto py-1">
           {filtradas.length === 0 && <p className="px-4 py-3 text-[13px] text-muy">Nada coincide.</p>}
           {filtradas.map(({ o, pos }, i) => {
-            const cabecera = o.grupo !== grupoAnterior ? o.grupo : null;
+            const cabecera = !busqueda && o.grupo !== grupoAnterior ? o.grupo : null;
             grupoAnterior = o.grupo;
             const Icono = o.icono;
             return (
