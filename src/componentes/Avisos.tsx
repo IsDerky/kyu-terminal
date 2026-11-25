@@ -203,7 +203,7 @@ function AvisoDeCI({ aviso: a }: { aviso: AvisoCI }) {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const repo = a.repo.replace(/[\/]+$/, "").split(/[\/]/).pop();
+  const repo = a.repo.replace(/[\\/]+$/, "").split(/[\\/]/).pop();
   const titulo = bien ? "en verde" : a.run.conclusion === "cancelled" ? "cancelado" : "en rojo";
   return (
     <div
