@@ -1,7 +1,7 @@
 // Controles del panel de Claude: modo, modelo y esfuerzo bajo la caja de texto, menú de
 // comandos con barra y desglose del contexto.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AtSign, Check, ChevronDown, ChevronRight, Gauge, ImagePlus, Minimize2, UserRound } from "lucide-react";
+import { AtSign, Check, ChevronDown, ChevronRight, Gauge, ImagePlus, Minimize2, UserRound, X } from "lucide-react";
 import {
   cambiarCuenta,
   cambiarEsfuerzo,
@@ -176,14 +176,20 @@ export function LimiteCuenta({ c }: { c: Conversacion }) {
 }
 
 /** Encima de la caja, con la cuenta al 90 % o rechazada: cuándo se reinicia y pasar a otra. */
+/** Avisos de límite cerrados con la X: vuelven con la siguiente ventana (otro reinicio). */
+const cerrados = new Set<string>();
+
 export function AvisoLimite({ espacio, c }: { espacio: string; c: Conversacion }) {
   const cuentas = useClaude((s) => s.cuentas);
   const porCuenta = useLimites((s) => s.porCuenta);
   const sesiones = useSesiones((s) => s.porCuenta);
+  const [, setCerrado] = useState(0);
   const actual = claveCuenta(c.cuenta, cuentas);
   const l = porCuenta[actual];
   if (!agotada(l)) return null;
   const p = peor(l);
+  const clave = `${actual}|${p?.nombre ?? ""}|${p?.v.reinicio ?? ""}`;
+  if (cerrados.has(clave)) return null;
   // La otra cuenta con sesión y menos uso (sin datos cuenta como libre).
   const otra = cuentas
     .filter((n) => n !== actual && sesiones?.[n] !== false)
@@ -192,7 +198,8 @@ export function AvisoLimite({ espacio, c }: { espacio: string; c: Conversacion }
     .sort((a, b) => a.uso - b.uso)[0]?.n;
   const ocupado = c.estado === "arrancando" || c.estado === "pensando";
   return (
-    <div className="mx-3 mb-2 flex items-center gap-2 rounded-lg border border-aviso/30 bg-aviso/[0.06] px-3 py-2 text-[12px] text-tenue">
+    // Pestaña pegada encima de la caja: algo más estrecha, sin borde abajo y sin hueco.
+    <div className="mx-3 flex items-center gap-2 rounded-t-lg border border-b-0 border-aviso/30 bg-aviso/[0.06] py-1.5 pl-3 pr-1.5 text-[12px] text-tenue">
       <span className="min-w-0 flex-1">
         {cuentas.length > 1 ? `«${actual}» está` : "La cuenta está"}{" "}
         {p ? `al ${porcentaje(p.v)} % de la ${p.nombre === "sesion" ? "sesión de 5 h" : "semana"}` : "en su límite"}
@@ -209,6 +216,17 @@ export function AvisoLimite({ espacio, c }: { espacio: string; c: Conversacion }
           Seguir con «{otra}»
         </button>
       )}
+      <button
+        type="button"
+        title="Cerrar el aviso"
+        onClick={() => {
+          cerrados.add(clave);
+          setCerrado((n) => n + 1);
+        }}
+        className="grid size-6 flex-none place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
+      >
+        <X size={13} />
+      </button>
     </div>
   );
 }

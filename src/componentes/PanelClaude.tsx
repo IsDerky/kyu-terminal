@@ -220,8 +220,6 @@ export default function PanelClaude({
 
       <ListaEntradas espacio={espacio} c={c} carpeta={carpeta} grande />
 
-      <AvisoLimite espacio={espacio} c={c} />
-
       <CajaEntrada enfocar={conFoco} grande espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} esPregunta={permiso?.herramienta === "AskUserQuestion"} />
 
       <footer className="relative flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
@@ -689,6 +687,8 @@ function CajaEntrada({
     <div className={`flex-none border-t border-borde px-3 pb-3 pt-2.5 ${grande ? "border-t-0" : ""}`}>
       <div className={grande ? "mx-auto w-full max-w-[780px]" : undefined}>
       <Cola espacio={espacio} alEditar={editarDeCola} />
+      {/* Pegado al borde de arriba de la caja, como una pestaña. */}
+      <AvisoLimite espacio={espacio} c={c} />
       <div
         // Una pestaña de archivo soltada sobre la caja queda como @ruta (en vez de moverse).
         onDragOver={(e) => {
