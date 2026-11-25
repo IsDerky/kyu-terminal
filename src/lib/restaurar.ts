@@ -16,7 +16,8 @@ type ItemGuardado =
   | { tipo: "archivo"; ruta: string; linea: number; columna: number }
   | { tipo: "arbol" }
   /** Conversación en una pestaña de panel (sin `conv`: estaba vacía, vuelve vacía). */
-  | { tipo: "claude"; conv?: ConversacionGuardada };
+  | { tipo: "claude"; conv?: ConversacionGuardada }
+  | { tipo: "cambios"; raiz: string };
 
 type NodoGuardado =
   | { tipo: "panel"; items: ItemGuardado[]; activo: number; foco?: boolean }
@@ -33,6 +34,7 @@ interface ConversacionGuardada {
 interface EspacioGuardado {
   nombre: string | null;
   raiz: NodoGuardado;
+  worktree?: { raiz: string; ruta: string };
   /** Del panel lateral de antes (se sigue leyendo: pasan a pestañas a la derecha). */
   claude?: ConversacionGuardada;
 
@@ -73,6 +75,7 @@ function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGu
       const it = items[i];
       if (it.tipo === "arbol") return { tipo: "arbol" };
       if (it.tipo === "claude") return { tipo: "claude", conv: guardarConversacion(it.cid) ?? undefined };
+      if (it.tipo === "cambios") return { tipo: "cambios", raiz: it.raiz };
       return it.tipo === "terminal"
         ? { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo }
         : { tipo: "archivo", ruta: it.ruta, linea: it.linea, columna: it.columna };
@@ -96,7 +99,7 @@ function foto(): SesionGuardada {
     const raiz = guardarNodo(e.raiz, k.items, e.foco);
     if (!raiz) continue;
     if (e.id === k.activo) activo = espacios.length;
-    espacios.push({ nombre: e.nombre, raiz });
+    espacios.push({ nombre: e.nombre, raiz, worktree: e.worktree });
   }
   return { version: 1, activo, espacios };
 }
@@ -205,6 +208,8 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
         let it: Item;
         if (i.tipo === "arbol") {
           it = { id: nuevoId("r"), tipo: "arbol" };
+        } else if (i.tipo === "cambios") {
+          it = { id: nuevoId("g"), tipo: "cambios", raiz: i.raiz };
         } else if (i.tipo === "claude") {
           const cid = nuevaDePanel(espacio);
           if (i.conv) dePanel.push({ cid, conv: i.conv });
@@ -254,7 +259,7 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
       const panel: Nodo = { tipo: "panel", id: nuevoId("p"), items: ids, activo: ids[Math.min(g.claudeActiva ?? 0, ids.length - 1)] };
       raiz = { tipo: "division", id: nuevoId("d"), dir: "horizontal", hijos: [raiz, panel], tamanos: [60, 40] };
     }
-    const esp: Espacio = { id, nombre: g.nombre, raiz, foco: foco.id ?? paneles(raiz)[0].id };
+    const esp: Espacio = { id, nombre: g.nombre, raiz, foco: foco.id ?? paneles(raiz)[0].id, worktree: g.worktree };
     espacios.push(esp);
     if (k === s.activo || !activo) activo = esp.id;
   });

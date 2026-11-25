@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { ChevronDown, Columns2, FolderTree, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
+import { ChevronDown, Columns2, FolderTree, GitCommitHorizontal, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
@@ -9,6 +9,7 @@ const VistaArchivo = lazy(() => import("./VistaArchivo"));
 import VistaArbol from "./VistaArbol";
 // El panel de Claude ya va aparte (carga diferida): se reutiliza para las pestañas.
 const PanelClaude = lazy(() => import("./PanelClaude"));
+const VistaCambios = lazy(() => import("./VistaCambios"));
 import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
 import { ARRASTRE_RUTA, espacioDe, useClaude } from "../lib/claude";
@@ -29,6 +30,8 @@ interface Props {
 
 export default function Panel({ panel, conFoco, varios, config, maximizado = false }: Props) {
   const items = useKyu((s) => s.items);
+  // Solo se pinta el espacio activo: es el de este panel.
+  const espacioDeItem = useKyu((s) => s.activo);
   const { activar, enfocar, nuevaPestana, dividir, moverItem } = useKyu.getState();
   const [zona, setZona] = useState<Zona | null>(null);
   const [menu, setMenu] = useState(false);
@@ -83,7 +86,9 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                   ? "Archivos"
                   : it.tipo === "claude"
                     ? <NombreConversacion cid={it.cid} />
-                    : it.ruta.split(/[\\/]/).pop()!;
+                    : it.tipo === "cambios"
+                      ? "Cambios"
+                      : it.ruta.split(/[\\/]/).pop()!;
             const esActivo = id === panel.activo;
             return (
               <div
@@ -104,7 +109,9 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                       ? "Archivos (Ctrl+Mayús+B)"
                       : it.tipo === "claude"
                         ? "Conversación con Claude"
-                        : it.carpeta ?? it.perfil
+                        : it.tipo === "cambios"
+                          ? `Cambios sin commit en ${it.raiz}`
+                          : it.carpeta ?? it.perfil
                 }
                 className={`group flex h-[22px] min-w-0 max-w-48 cursor-default items-center gap-1.5 rounded-[5px] pl-2 pr-1 text-[12px] ${
                   esActivo ? "bg-hover text-texto" : "text-tenue hover:text-texto"
@@ -122,6 +129,8 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                   <FolderTree size={12} strokeWidth={1.8} className="flex-none" />
                 ) : it.tipo === "claude" ? (
                   <Mascota alto={9} />
+                ) : it.tipo === "cambios" ? (
+                  <GitCommitHorizontal size={12} strokeWidth={1.8} className="flex-none" />
                 ) : (
                   <IconoArchivo size={12} />
                 )}
@@ -213,6 +222,11 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
           </Suspense>
         )}
         {activo?.tipo === "arbol" && <VistaArbol key={activo.id} item={activo.id} />}
+        {activo?.tipo === "cambios" && (
+          <Suspense fallback={null}>
+            <VistaCambios key={activo.id} raiz={activo.raiz} espacio={espacioDeItem} />
+          </Suspense>
+        )}
         {activo?.tipo === "claude" && (
           <Suspense fallback={null}>
             <PanelClaude key={activo.id} espacio={espacioDe(activo.cid)} conversacion={activo.cid} conFoco={conFoco} />

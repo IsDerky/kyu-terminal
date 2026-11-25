@@ -22,7 +22,9 @@ export type Item =
   /** Pestaña «Archivos»: el árbol de la carpeta del terminal con el foco. */
   | { id: string; tipo: "arbol" }
   /** Una conversación de Claude como pestaña (`cid`: su id en claude.ts, «espacio~pN»). */
-  | { id: string; tipo: "claude"; cid: string };
+  | { id: string; tipo: "claude"; cid: string }
+  /** Pestaña «Cambios»: lo que hay sin commit en el repo `raiz`, con su diff y el commit. */
+  | { id: string; tipo: "cambios"; raiz: string };
 
 export type Direccion = "horizontal" | "vertical";
 
@@ -40,6 +42,8 @@ export interface Espacio {
   foco: string;
   /** Panel a pantalla completa (Ctrl+Mayús+X); deja de estarlo en cuanto el foco va a otro. */
   maximizado?: string | null;
+  /** Espacio abierto para un issue en un worktree: al cerrarlo se ofrece quitarlo. */
+  worktree?: { raiz: string; ruta: string };
 }
 
 export type Zona = "centro" | "izquierda" | "derecha" | "arriba" | "abajo";
@@ -79,6 +83,10 @@ interface Estado {
   ponerClaude: (cid: string, opciones?: { panel?: string; alLado?: boolean }) => void;
   /** Ctrl+Mayús+X: el panel con el foco a pantalla completa, o de vuelta. */
   alternarMaximizar: () => void;
+  /** Abre (o enseña) la pestaña «Cambios» del repo en el panel con el foco. */
+  abrirCambios: (raiz: string) => void;
+  /** Apunta en el espacio activo el worktree para el que se abrió. */
+  ponerWorktree: (worktree: { raiz: string; ruta: string }, nombre: string) => void;
   ponerTitulo: (item: string, titulo: string, carpeta?: string | null) => void;
   marcarSucio: (item: string, sucio: boolean) => void;
   ponerBuscando: (item: string | null) => void;
@@ -372,6 +380,27 @@ export const useKyu = create<Estado>((set, get) => {
         };
       });
     },
+
+    abrirCambios: (raiz) => {
+      const s = get();
+      const esp = espacioActivo();
+      for (const p of paneles(esp.raiz)) {
+        const ya = p.items.find((i) => {
+          const it = s.items[i];
+          return it?.tipo === "cambios" && it.raiz.toLowerCase() === raiz.toLowerCase();
+        });
+        if (ya) return get().activar(p.id, ya);
+      }
+      const it: Item = { id: nuevoId("g"), tipo: "cambios", raiz };
+      set({ items: { ...s.items, [it.id]: it } });
+      conEspacio((e) => ({
+        ...e,
+        raiz:
+          cambiar(e.raiz, e.foco, (n) => (n.tipo === "panel" ? { ...n, items: [...n.items, it.id], activo: it.id } : n)) ?? e.raiz,
+      }));
+    },
+
+    ponerWorktree: (worktree, nombre) => conEspacio((e) => ({ ...e, worktree, nombre })),
 
     alternarMaximizar: () =>
       conEspacio((e) => {

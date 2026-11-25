@@ -4,6 +4,8 @@ import Avisos from "./componentes/Avisos";
 import BarraTitulo, { nombreEspacio } from "./componentes/BarraTitulo";
 import Espacio from "./componentes/Espacio";
 import Paleta from "./componentes/Paleta";
+import BarraEstado from "./componentes/BarraEstado";
+import ElegirIssue from "./componentes/ElegirIssue";
 // Se cargan la primera vez que se abren (menos memoria si no se usan).
 const Ajustes = lazy(() => import("./componentes/Ajustes"));
 const Uso = lazy(() => import("./componentes/Uso"));
@@ -19,6 +21,7 @@ import { restaurarSesion, vigilarSesion } from "./lib/restaurar";
 import { configurarLimite } from "./lib/gasto";
 import { preguntarPorSeleccion } from "./lib/seleccion";
 import { vigilarActualizaciones } from "./lib/actualizar";
+import { vigilarGit } from "./lib/git";
 
 /** Panel del que se vino a Claude con Ctrl+Mayús+C (para volver con la misma tecla). */
 let volverA: { espacio: string; panel: string } | null = null;
@@ -47,6 +50,7 @@ function alternarClaude() {
 
 export default function App() {
   const [config, setConfig] = useState<ConfigVista | null>(null);
+  const [issues, setIssues] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const espacios = useKyu((s) => s.espacios);
   const activo = useKyu((s) => s.activo);
@@ -93,6 +97,17 @@ export default function App() {
 
   // Al cerrar un espacio se cierra también su conversación con Claude.
   useEffect(() => limpiar(espacios.map((e) => e.id)), [espacios]);
+
+  // Git del espacio activo (barra de estado y avisos de CI); la paleta abre los issues.
+  useEffect(() => {
+    const dejar = vigilarGit();
+    const abrir = () => setIssues(true);
+    window.addEventListener("kyu-issues", abrir);
+    return () => {
+      dejar();
+      window.removeEventListener("kyu-issues", abrir);
+    };
+  }, []);
 
   // Atajos de Kyu. En fase de captura, para que xterm no se los quede.
   useEffect(() => {
@@ -182,7 +197,9 @@ export default function App() {
         )}
       </div>
       </Suspense>
+      <BarraEstado alIssues={() => setIssues(true)} />
       <Avisos />
+      {issues && <ElegirIssue perfil={config.perfiles[0]?.nombre ?? ""} alCerrar={() => setIssues(false)} />}
       {paleta && <Paleta config={config} />}
     </div>
   );

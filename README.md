@@ -29,6 +29,16 @@ Cada conversación es una pestaña más, al lado de terminales y archivos: Ctrl+
 - Claude puede leer tus terminales y ejecutar órdenes en uno a la vista, siempre con permiso.
 - Uso por día y por proyecto, y límite diario con aviso.
 
+## Git y GitHub
+
+Con el `git` y el `gh` de tu máquina (Kyu no guarda tokens):
+
+- Barra de abajo con la rama del terminal con el foco, lo que llevas por subir o bajar (clic para hacer push), los cambios sin commit y el CI de la rama.
+- Pestaña «Cambios»: el diff de cada archivo, elegir qué entra, mensaje propuesto por Claude (Haiku, sin firmas), «Revisar con Claude», commit y push.
+- Aviso cuando acaba un run de GitHub Actions del repo (también las releases por etiqueta), y de Windows si no estás mirando.
+- Hashes de commit y `#número` en la salida del terminal: Ctrl+Clic los abre en GitHub.
+- «Trabajar en un issue» (barra o paleta): worktree con su rama junto al repo, espacio nuevo y una conversación con el issue escrito. Al cerrar el espacio pregunta si quitar el worktree.
+
 ## Atajos
 
 | Atajo | Qué hace |

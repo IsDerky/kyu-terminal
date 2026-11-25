@@ -17,7 +17,7 @@ import { Bloques, textoSeleccion } from "./bloques";
 import { Autocompletado } from "./autocompletado";
 import { apuntar, cargarHistorial } from "./historial";
 import { avisarSiToca } from "./avisos";
-import { registrarEnlaces } from "./enlaces";
+import { registrarEnlaces, registrarEnlacesGithub } from "./enlaces";
 import { useKyu } from "./estado";
 
 export interface Sesion {
@@ -221,6 +221,7 @@ export async function enganchar(item: string, contenedor: HTMLElement) {
   s.term.open(s.elemento);
   ponerWebgl(s);
   registrarEnlaces(s.term, item);
+  registrarEnlacesGithub(s.term, item);
   // Al dividir, los paneles de al lado cambian de tamaño a la vez. Se espera a que el
   // reparto se asiente para arrancar la shell ya con su tamaño de verdad.
   await asentado();

@@ -5,6 +5,9 @@ import { espacioDe, irAConversacion, panelMuestra, pendiente, responder, sitioDe
 import { useKyu } from "../lib/estado";
 import { herramienta, partirRuta, relativa } from "../lib/herramientas";
 import { nombreEspacio } from "./BarraTitulo";
+import { IconoRun } from "./BarraEstado";
+import { useGit, type AvisoCI } from "../lib/git";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Mascota } from "./iconos";
 
 const DURACION_FIN = 8000;
@@ -47,9 +50,10 @@ export default function Avisos() {
   });
 
   const gasto = useGasto((s) => s.aviso);
-  if (!permisos.length && !fines.length && !gasto) return null;
+  const ci = useGit((s) => s.avisos);
+  if (!permisos.length && !fines.length && !gasto && !ci.length) return null;
   return (
-    <div className="pointer-events-none absolute bottom-3 right-3 z-40 flex w-[330px] flex-col gap-2">
+    <div className="pointer-events-none absolute bottom-8 right-3 z-40 flex w-[330px] flex-col gap-2">
       {permisos.map(({ espacio, p, carpeta }) => {
         const [accion] = herramienta(p.herramienta);
         const resumen = relativa(p.resumen, carpeta);
@@ -122,6 +126,9 @@ export default function Avisos() {
       {fines.map((a) => (
         <AvisoTerminado key={a.id} aviso={a} espacio={nombre(a.espacio)} />
       ))}
+      {ci.map((a) => (
+        <AvisoDeCI key={a.id} aviso={a} />
+      ))}
     </div>
   );
 }
@@ -182,6 +189,51 @@ function Recuadro({
         )}
       </div>
       {children}
+    </div>
+  );
+}
+
+/** Un run de CI que acaba de terminar: en verde se va solo; en rojo se queda hasta cerrarlo. */
+function AvisoDeCI({ aviso: a }: { aviso: AvisoCI }) {
+  const quitar = () => useGit.getState().quitarAviso(a.id);
+  const bien = a.run.conclusion === "success";
+  useEffect(() => {
+    if (!bien) return;
+    const t = setTimeout(quitar, 10_000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const repo = a.repo.replace(/[\/]+$/, "").split(/[\/]/).pop();
+  const titulo = bien ? "en verde" : a.run.conclusion === "cancelled" ? "cancelado" : "en rojo";
+  return (
+    <div
+      onClick={() => void openUrl(a.run.url)}
+      className={`aviso-entra pointer-events-auto cursor-pointer rounded-[10px] border bg-panel px-3 pb-2.5 pt-2 shadow-[0_16px_40px_-12px_#000000cc] ${
+        bien ? "border-borde2 hover:border-ok/50" : "border-mal/50 hover:border-mal/70"
+      }`}
+    >
+      <div className="mb-1 flex items-center gap-2 text-[11.5px] text-tenue">
+        <IconoRun run={a.run} size={12} />
+        <span className="font-semibold text-texto">
+          {a.run.workflowName} {titulo}
+        </span>
+        <span className="truncate">· {repo}</span>
+        <button
+          type="button"
+          title="Cerrar"
+          onClick={(e) => {
+            e.stopPropagation();
+            quitar();
+          }}
+          className="-mr-1 ml-auto grid size-5 place-items-center rounded text-muy hover:bg-hover hover:text-texto"
+        >
+          <X size={12} />
+        </button>
+      </div>
+      <p className="truncate text-[12px] text-tenue">
+        <span className="font-mono text-[11.5px] text-acento2">{a.run.headBranch}</span> · {a.run.displayTitle}
+      </p>
+      <p className="mt-0.5 text-[11px] text-muy">Clic para verlo en GitHub</p>
     </div>
   );
 }

@@ -10,6 +10,8 @@ import { LogoKyu } from "./iconos";
 import CentroClaude from "./CentroClaude";
 import BotonGrabar from "./BotonGrabar";
 import { guardarSesion } from "../lib/restaurar";
+import { ask, message } from "@tauri-apps/plugin-dialog";
+import { worktreeQuitar } from "../lib/git";
 
 const ventana = getCurrentWindow();
 
@@ -67,6 +69,17 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
 
   const cerrarEspacio = async (e: Espacio) => {
     for (const p of paneles(e.raiz)) for (const item of p.items) await cerrarItem(item);
+    // Abierto para un issue: con sus terminales ya cerrados, se ofrece quitar el worktree.
+    if (e.worktree) {
+      const { raiz, ruta } = e.worktree;
+      const si = await ask(`¿Quitar también el worktree?\n${ruta}\n\nLa rama se queda; git no lo quita si hay cambios sin commit.`, {
+        title: "Kyu",
+        kind: "info",
+        okLabel: "Quitar",
+        cancelLabel: "Dejarlo",
+      });
+      if (si) await worktreeQuitar(raiz, ruta).catch((err) => void message(String(err), { title: "Kyu", kind: "error" }));
+    }
   };
 
   return (

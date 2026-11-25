@@ -9,6 +9,7 @@ mod autocompletar;
 mod claude;
 mod config;
 mod cuentas;
+mod git;
 mod grabar;
 mod mcp;
 mod memoria;
@@ -71,6 +72,17 @@ pub fn run() {
             archivos::archivo_borrar,
             arbol::arbol_listar,
             arbol::git_estado,
+            git::git_resumen,
+            git::git_cambios,
+            git::git_diff,
+            git::git_commit,
+            git::git_subir,
+            git::gh_runs,
+            git::gh_issues,
+            git::git_worktree_nuevo,
+            git::git_worktree_quitar,
+            git::git_es_commit,
+            git::claude_mensaje_commit,
             autocompletar::carpeta_listar,
             autocompletar::git_ramas,
             sistema::ram_uso,
