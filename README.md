@@ -25,9 +25,17 @@ Cada conversación es una pestaña más, al lado de terminales y archivos: Ctrl+
 - Varias conversaciones a la vez, mensajes en cola mientras trabaja, reanudar las anteriores y volver a un mensaje (conversación, archivos o las dos cosas).
 - Los archivos que cambia Claude se abren con lo cambiado marcado, y se puede deshacer.
 - Respuesta sugerida en gris tras cada turno (Tab la usa).
-- Varias cuentas: cada una con su sesión y el mismo historial; se cambia desde el pie del panel y la conversación sigue con la otra. El pie enseña cuánto lleva gastado la cuenta de su sesión de 5 h y de la semana, y al 90 % propone seguir con otra.
+- Varias cuentas: cada una con su sesión y el mismo historial; se cambia desde el pie del panel y la conversación sigue con la otra. El pie enseña cuánto lleva gastado la cuenta de su sesión de 5 h y de la semana, y al 90 % propone seguir con otra. Ver [Cuentas de Claude](#cuentas-de-claude).
 - Claude puede leer tus terminales y ejecutar órdenes en uno a la vista, siempre con permiso.
 - Uso por día y por proyecto, y límite diario con aviso.
+
+### Cuentas de Claude
+
+Las cuentas se añaden, se quitan y se inician **solo desde Ajustes → Claude → Cuentas**. Cada una guarda su sesión en su propia carpeta (`~/.claude-<nombre>`; la principal, en `~/.claude`), y Kyu lanza el inicio de sesión con esa carpeta (`CLAUDE_CONFIG_DIR`). Un `claude auth login` lanzado a mano fuera de Kyu inicia sesión en `~/.claude` y cambia la cuenta principal.
+
+- Quitar una cuenta solo la saca de `kyu.toml`: su carpeta y su sesión se quedan en el disco. Si la vuelves a añadir con el mismo nombre, sigue iniciada.
+- Al abrir Kyu, si ninguna cuenta tiene la sesión iniciada, lo avisa y lleva a Cuentas.
+- En el pie del panel, las cuentas sin sesión salen desactivadas.
 
 ## Git y GitHub
 

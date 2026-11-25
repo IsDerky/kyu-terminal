@@ -27,6 +27,7 @@ import {
   type Comando,
 } from "../lib/claudeOpciones";
 import { agotada, claveCuenta, describir, horaReinicio, peor, porcentaje, useLimites } from "../lib/limites";
+import { useSesiones } from "../lib/sesiones";
 
 const miles = (n: number) => n.toLocaleString("es-ES");
 const k = (n: number) => (n >= 1000 ? `${(n / 1000).toLocaleString("es-ES", { maximumFractionDigits: n < 10_000 ? 1 : 0 })}k` : String(n));
@@ -178,13 +179,14 @@ export function LimiteCuenta({ c }: { c: Conversacion }) {
 export function AvisoLimite({ espacio, c }: { espacio: string; c: Conversacion }) {
   const cuentas = useClaude((s) => s.cuentas);
   const porCuenta = useLimites((s) => s.porCuenta);
+  const sesiones = useSesiones((s) => s.porCuenta);
   const actual = claveCuenta(c.cuenta, cuentas);
   const l = porCuenta[actual];
   if (!agotada(l)) return null;
   const p = peor(l);
-  // La otra cuenta con menos uso (sin datos cuenta como libre).
+  // La otra cuenta con sesión y menos uso (sin datos cuenta como libre).
   const otra = cuentas
-    .filter((n) => n !== actual)
+    .filter((n) => n !== actual && sesiones?.[n] !== false)
     .map((n) => ({ n, uso: peor(porCuenta[n])?.v.uso ?? 0 }))
     .filter((x) => x.uso < 0.9)
     .sort((a, b) => a.uso - b.uso)[0]?.n;
@@ -215,6 +217,7 @@ export function AvisoLimite({ espacio, c }: { espacio: string; c: Conversacion }
 export function SelectorCuenta({ espacio, c }: { espacio: string; c: Conversacion }) {
   const cuentas = useClaude((s) => s.cuentas);
   const porCuenta = useLimites((s) => s.porCuenta);
+  const sesiones = useSesiones((s) => s.porCuenta);
   if (cuentas.length < 2) return null;
   const ocupado = c.estado === "arrancando" || c.estado === "pensando";
   const actual = c.cuenta ?? cuentas[0];
@@ -240,8 +243,15 @@ export function SelectorCuenta({ espacio, c }: { espacio: string; c: Conversacio
       opciones={cuentas.map((n) => ({
         valor: n,
         titulo: n,
-        ayuda: describir(porCuenta[n]) || undefined,
-        desactivada: ocupado && n !== actual ? "Espera a que Claude acabe" : undefined,
+        ayuda: sesiones?.[n] === false ? "Sin sesión" : describir(porCuenta[n]) || undefined,
+        desactivada:
+          n === actual
+            ? undefined
+            : sesiones?.[n] === false
+              ? "Sin sesión: iníciala en Ajustes → Claude → Cuentas"
+              : ocupado
+                ? "Espera a que Claude acabe"
+                : undefined,
       }))}
     />
   );

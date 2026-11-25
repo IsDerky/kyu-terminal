@@ -90,6 +90,20 @@ fn misma(a: &Path, b: &Path) -> bool {
     norm(a) == norm(b)
 }
 
+/// Sin cuentas en kyu.toml está igualmente la de siempre: «Principal», en ~/.claude.
+fn principal_implicita() -> CuentaClaude {
+    CuentaClaude { nombre: "Principal".into(), carpeta: None, compartir: None }
+}
+
+/// Las cuentas de kyu.toml, o la principal implícita si no hay ninguna.
+fn todas(config: &Config) -> Vec<CuentaClaude> {
+    if config.cuentas_claude.is_empty() {
+        vec![principal_implicita()]
+    } else {
+        config.cuentas_claude.clone()
+    }
+}
+
 /// La cuenta con ese nombre (None si no hay o no existe: se usa la de siempre).
 pub fn buscar(config: &Config, nombre: Option<&str>) -> Option<Cuenta> {
     let nombre = nombre?;
@@ -272,8 +286,7 @@ pub struct CuentaVista {
 pub async fn claude_cuentas() -> Result<Vec<CuentaVista>, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let config = Config::cargar();
-        let hilos: Vec<_> = config
-            .cuentas_claude
+        let hilos: Vec<_> = todas(&config)
             .iter()
             .filter_map(resolver)
             .map(|c| {
@@ -320,7 +333,11 @@ pub async fn claude_cuentas() -> Result<Vec<CuentaVista>, String> {
 #[tauri::command]
 pub fn claude_cuenta_entrar(nombre: String) -> Result<(), String> {
     let config = Config::cargar();
-    let c = buscar(&config, Some(&nombre)).ok_or("esa cuenta no está en kyu.toml")?;
+    let c = todas(&config)
+        .iter()
+        .find(|c| c.nombre == nombre)
+        .and_then(resolver)
+        .ok_or("esa cuenta no está en kyu.toml")?;
     preparar(&c)?;
     let mut cmd = orden_claude(&config, &c)?;
     cmd.args(["auth", "login"]);

@@ -7,6 +7,9 @@ import Paleta from "./componentes/Paleta";
 import BarraEstado from "./componentes/BarraEstado";
 import ElegirIssue from "./componentes/ElegirIssue";
 import Entorno from "./componentes/Entorno";
+import { Mascota } from "./componentes/iconos";
+import { cargarSesiones } from "./lib/sesiones";
+import { abrirAjustesEn } from "./lib/irAjustes";
 // Se cargan la primera vez que se abren (menos memoria si no se usan).
 const Ajustes = lazy(() => import("./componentes/Ajustes"));
 const Uso = lazy(() => import("./componentes/Uso"));
@@ -53,6 +56,7 @@ export default function App() {
   const [config, setConfig] = useState<ConfigVista | null>(null);
   const [issues, setIssues] = useState(false);
   const [entorno, setEntorno] = useState(false);
+  const [sinSesion, setSinSesion] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const espacios = useKyu((s) => s.espacios);
   const activo = useKyu((s) => s.activo);
@@ -78,6 +82,11 @@ export default function App() {
       if (!restaurada) useKyu.getState().iniciar(porDefecto);
       setConfig(c);
       dejar = vigilarSesion();
+      // Sin ninguna cuenta de Claude con sesión, el panel no sirve: se avisa una vez al abrir.
+      void cargarSesiones().then((p) => {
+        const v = Object.values(p);
+        if (v.length && v.every((s) => !s)) setSinSesion(true);
+      });
     }, (e) => setError(String(e)));
     return () => dejar?.();
   }, []);
@@ -206,6 +215,31 @@ export default function App() {
       <Avisos />
       {issues && <ElegirIssue perfil={config.perfiles[0]?.nombre ?? ""} alCerrar={() => setIssues(false)} />}
       {entorno && <Entorno carpeta={carpetaDelEspacio(activo)} alCerrar={() => setEntorno(false)} />}
+      {sinSesion && !ajustes && (
+        <div className="absolute inset-0 z-50 grid place-items-center bg-black/50">
+          <div className="w-[420px] rounded-[10px] border border-borde2 bg-tarjeta p-5 text-[12.5px] shadow-[0_24px_60px_-16px_#000]">
+            <div className="mb-2 flex items-center gap-2 text-[14px] font-semibold">
+              <Mascota alto={12} /> No hay ninguna cuenta de Claude iniciada
+            </div>
+            <p className="mb-4 text-tenue">
+              Inicia sesión desde Ajustes → Claude → Cuentas. Así la sesión queda en la carpeta de esa cuenta y no la pisa un `claude auth login` lanzado fuera de Kyu.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setSinSesion(false)} className="rounded-md px-3 py-1.5 text-tenue hover:bg-hover hover:text-texto">
+                Ahora no
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => (setSinSesion(false), abrirAjustesEn("claude"))}
+                className="rounded-md bg-acento px-3 py-1.5 font-medium text-fondo hover:bg-acento2"
+              >
+                Ir a Cuentas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {paleta && <Paleta config={config} />}
     </div>
   );

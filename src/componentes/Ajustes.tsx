@@ -27,10 +27,12 @@ import {
   type CuentaClaude,
 } from "../lib/nucleo";
 import { useKyu } from "../lib/estado";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { useSesiones } from "../lib/sesiones";
 import { buscarActualizacion, instalarActualizacion, useActualizar } from "../lib/actualizar";
 import { IconoPerfil, Mascota } from "./iconos";
 
-type Seccion = "general" | "perfiles" | "aspecto" | "claude" | "atajos" | "avisos";
+import { tomarSeccion, type Seccion } from "../lib/irAjustes";
 
 const SECCIONES: { id: Seccion; nombre: string; icono: LucideIcon | "claude" }[] = [
   { id: "general", nombre: "General", icono: SlidersHorizontal },
@@ -68,7 +70,7 @@ const ATAJOS: [string, string][] = [
  * que sigue siendo la fuente: sus comentarios y el resto de claves no se tocan.
  */
 export default function Ajustes({ config, alCambiar }: { config: ConfigVista; alCambiar: () => void }) {
-  const [seccion, setSeccion] = useState<Seccion>("general");
+  const [seccion, setSeccion] = useState<Seccion>(() => tomarSeccion() ?? "general");
   const [a, setA] = useState<AjustesVista | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardado, setGuardado] = useState(false);
@@ -288,7 +290,13 @@ function Cuentas({ alCambiar }: { alCambiar: () => void }) {
 
   const leer = () => {
     setLista(null);
-    cuentasClaude().then(setLista, (e) => (setError(String(e)), setLista([])));
+    cuentasClaude().then(
+      (l) => {
+        setLista(l);
+        useSesiones.setState({ porCuenta: Object.fromEntries(l.map((c) => [c.nombre, c.sesion])) });
+      },
+      (e) => (setError(String(e)), setLista([])),
+    );
   };
   useEffect(leer, []);
 
@@ -357,7 +365,13 @@ function Cuentas({ alCambiar }: { alCambiar: () => void }) {
                 <button
                   type="button"
                   title="Quitarla de kyu.toml (su carpeta y su sesión se quedan en el disco)"
-                  onClick={() => void hacer(() => quitarCuenta(c.nombre))}
+                  onClick={async () => {
+                    const si = await ask(
+                      `¿Quitar «${c.nombre}» de Kyu?\n\nSu carpeta (${c.carpeta}) y su sesión se quedan en el disco: no se borran. Si la vuelves a añadir con el mismo nombre, sigue iniciada.`,
+                      { title: "Quitar cuenta", kind: "warning", okLabel: "Quitar", cancelLabel: "Cancelar" },
+                    );
+                    if (si) void hacer(() => quitarCuenta(c.nombre));
+                  }}
                   className="grid size-6 place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
                 >
                   <X size={13} />
