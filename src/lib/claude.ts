@@ -18,6 +18,7 @@ import { leerArchivo } from "./nucleo";
 import { contar, diffLineas } from "./diff";
 import { recargarRuta } from "./editores";
 import { refrescarGasto } from "./gasto";
+import { apuntarLimite, claveCuenta } from "./limites";
 import type { TextoBloque } from "./bloques";
 import type { ImagenAdjunta } from "./imagenes";
 import {
@@ -39,6 +40,7 @@ export type Entrada =
       tipo: "tu";
       texto: string;
       adjunto?: TextoBloque;
+      seleccion?: Seleccion;
       imagenes?: string[];
       /** Uuid del mensaje en Claude Code (punto de control) y la pieza anterior de la cadena
        *  (por donde se corta al volver aquí; null = era el primero). */
@@ -79,6 +81,18 @@ export type Entrada =
   | { id: number; tipo: "cambios"; archivos: ArchivoCambiado[] }
   /** Línea tenue: «Conversación compactada», «Unknown command: /x»… */
   | { id: number; tipo: "aviso"; texto: string };
+
+/** Texto seleccionado en un terminal (`ruta` null) o en un archivo, para preguntar sobre él (Alt+K). */
+export interface Seleccion {
+  texto: string;
+  ruta: string | null;
+  /** Líneas del archivo (1 = la primera); 0 en el terminal. */
+  desde: number;
+  hasta: number;
+  /** Líneas que tenía (aunque se recorte). */
+  lineas: number;
+  recortada: boolean;
+}
 
 /** id de la caja de texto del panel de Claude (para darle el foco desde fuera). */
 export const ID_ENTRADA = "entrada-claude";
@@ -167,6 +181,8 @@ interface EstadoClaude {
   avisos: AvisoFin[];
   /** Orden del terminal adjunta a lo próximo que se escriba, por espacio. */
   adjuntos: Record<string, TextoBloque>;
+  /** Texto seleccionado (Alt+K) para lo próximo que se escriba, por conversación. */
+  selecciones: Record<string, Seleccion>;
   /** Imágenes pegadas o soltadas para lo próximo que se escriba, por espacio. */
   imagenes: Record<string, ImagenAdjunta[]>;
   /** Comandos y modelos de Claude Code (del último initialize). */
@@ -219,6 +235,7 @@ export const useClaude = create<EstadoClaude>((set) => ({
   activas: {},
   avisos: [],
   adjuntos: {},
+  selecciones: {},
   imagenes: {},
   catalogo: catalogoGuardado(),
   prefs: prefsGuardadas(),
@@ -436,6 +453,15 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
     case "contexto":
       cambiar(espacio, () => ({ tokens: ev.tokens }));
       return;
+    case "limite": {
+      const s = useClaude.getState();
+      apuntarLimite(claveCuenta(s.conversaciones[espacio]?.cuenta ?? null, s.cuentas), {
+        estado: ev.estado,
+        sesion: ev.sesion,
+        semana: ev.semana,
+      });
+      return;
+    }
     case "sugerencia":
       // Llega después del fin del turno; si ya se ha escrito otro mensaje, no sirve.
       cambiar(espacio, (c) => (c.estado === "listo" ? { sugerencia: ev.texto } : {}));
@@ -514,6 +540,44 @@ export function adjuntar(espacio: string, bloque: TextoBloque) {
   // Se llama con el espacio (desde un bloque del terminal): va a la conversación que se ve.
   const cid = activaDe(espacio);
   useClaude.setState((s) => ({ adjuntos: { ...s.adjuntos, [cid]: bloque }, visible: true }));
+}
+
+/** Adjunta texto seleccionado a lo próximo que se escriba en la conversación que se ve. */
+export function adjuntarSeleccion(espacio: string, s: Seleccion) {
+  const cid = activaDe(espacio);
+  useClaude.setState((x) => ({ selecciones: { ...x.selecciones, [cid]: s }, visible: true }));
+}
+
+export function quitarSeleccion(cid: string) {
+  useClaude.setState((x) => {
+    const { [cid]: _, ...resto } = x.selecciones;
+    return { selecciones: resto };
+  });
+}
+
+/** «src/main.rs:10-24», «Terminal · 12 líneas». */
+export function nombreSeleccion(s: Seleccion) {
+  if (!s.ruta) return `Terminal · ${s.lineas} ${s.lineas === 1 ? "línea" : "líneas"}`;
+  const nombre = s.ruta.split(/[\\/]/).pop() ?? s.ruta;
+  return s.desde === s.hasta ? `${nombre}:${s.desde}` : `${nombre}:${s.desde}-${s.hasta}`;
+}
+
+const PREGUNTA_SELECCION = "Explícame esto.";
+
+/** El mensaje con la selección debajo, en un bloque de código. */
+function conSeleccion(texto: string, s: Seleccion) {
+  const valla = "`".repeat(Math.max(3, ...[...s.texto.matchAll(/`+/g)].map((m) => m[0].length + 1)));
+  const lenguaje = s.ruta ? (s.ruta.match(/\.([a-z0-9]+)$/i)?.[1] ?? "") : "";
+  const de = s.ruta
+    ? `Selección de ${s.ruta}, ${s.desde === s.hasta ? `línea ${s.desde}` : `líneas ${s.desde}-${s.hasta}`}`
+    : "Selección del terminal";
+  const aviso = s.recortada ? ` (recortada: eran ${s.lineas} líneas)` : "";
+  return `${texto || PREGUNTA_SELECCION}
+
+${de}${aviso}:
+${valla}${lenguaje}
+${s.texto}
+${valla}`;
 }
 
 export function quitarAdjunto(espacio: string) {
@@ -717,11 +781,15 @@ export async function enviar(espacio: string, texto: string) {
   if (adjunto) quitarAdjunto(espacio);
   const imagenes = useClaude.getState().imagenes[espacio] ?? [];
   if (imagenes.length) useClaude.setState((s) => ({ imagenes: { ...s.imagenes, [espacio]: [] } }));
-  const mensaje = adjunto ? conAdjunto(texto, adjunto) : texto;
+  const seleccion = useClaude.getState().selecciones[espacio];
+  if (seleccion) quitarSeleccion(espacio);
+  let mensaje = adjunto ? conAdjunto(texto, adjunto) : texto;
+  if (seleccion) mensaje = conSeleccion(mensaje, seleccion);
   añadir(espacio, {
     tipo: "tu",
-    texto: texto || (adjunto ? PREGUNTA_POR_DEFECTO : ""),
+    texto: texto || (adjunto ? PREGUNTA_POR_DEFECTO : seleccion ? PREGUNTA_SELECCION : ""),
     adjunto,
+    seleccion,
     imagenes: imagenes.length ? imagenes.map((i) => i.url) : undefined,
     esperaEco: true,
   });

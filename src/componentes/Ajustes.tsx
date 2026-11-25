@@ -27,6 +27,7 @@ import {
   type CuentaClaude,
 } from "../lib/nucleo";
 import { useKyu } from "../lib/estado";
+import { buscarActualizacion, instalarActualizacion, useActualizar } from "../lib/actualizar";
 import { IconoPerfil, Mascota } from "./iconos";
 
 type Seccion = "general" | "perfiles" | "aspecto" | "claude" | "atajos" | "avisos";
@@ -44,6 +45,7 @@ const ATAJOS: [string, string][] = [
   ["Paleta de órdenes", "Ctrl+Mayús+P"],
   ["Ajustes", "Ctrl+,"],
   ["Panel de Claude", "Ctrl+Mayús+C"],
+  ["Preguntar a Claude por la selección", "Alt+K"],
   ["Nueva pestaña", "Ctrl+Mayús+T"],
   ["Nuevo espacio", "Ctrl+Mayús+N"],
   ["Dividir a la derecha", "Ctrl+Mayús+D"],
@@ -146,6 +148,7 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
               <Campo titulo="Restaurar la sesión" detalle="Al abrir Kyu, vuelven los espacios, paneles, pestañas (en su carpeta), archivos y conversaciones de Claude de la última vez.">
                 <Interruptor valor={a.restaurar_sesion} alCambiar={(v) => void guardar("restaurar_sesion", v ? null : false)} />
               </Campo>
+              <Actualizaciones a={a} alCambiar={(v) => void guardar("buscar_actualizaciones", v ? null : false)} />
             </>
           )}
 
@@ -394,6 +397,57 @@ function Cuentas({ alCambiar }: { alCambiar: () => void }) {
         </button>
       </form>
     </div>
+  );
+}
+
+function Actualizaciones({ a, alCambiar }: { a: AjustesVista; alCambiar: (v: boolean) => void }) {
+  const e = useActualizar((s) => s.estado);
+  if (a.portable) {
+    return (
+      <Campo titulo="Actualizaciones" detalle={`Versión ${a.version}. La portable no se actualiza sola: baja el zip nuevo de las releases de GitHub.`}>
+        <span />
+      </Campo>
+    );
+  }
+  const estado =
+    e.tipo === "buscando"
+      ? "Buscando…"
+      : e.tipo === "al-dia"
+        ? "Está al día"
+        : e.tipo === "nueva"
+          ? `Hay versión nueva: ${e.version}`
+          : e.tipo === "bajando"
+            ? "Bajando…"
+            : e.tipo === "error"
+              ? `No se pudo mirar: ${e.texto}`
+              : "";
+  return (
+    <Campo
+      titulo="Actualizaciones"
+      detalle={`Versión ${a.version}. Al abrir (y cada 6 h) mira si hay versión nueva en GitHub y avisa en la barra de arriba.${estado ? ` ${estado}.` : ""}`}
+    >
+      <span className="flex items-center gap-3">
+        {e.tipo === "nueva" ? (
+          <button
+            type="button"
+            onClick={() => void instalarActualizacion()}
+            className="rounded-full border border-acento/40 bg-acento/10 px-2.5 py-0.5 text-[11.5px] text-acento2 hover:bg-acento/20"
+          >
+            Actualizar
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={e.tipo === "buscando" || e.tipo === "bajando"}
+            onClick={() => void buscarActualizacion(true)}
+            className="rounded-full border border-borde2 px-2.5 py-0.5 text-[11.5px] text-tenue hover:text-texto disabled:opacity-40"
+          >
+            Buscar ahora
+          </button>
+        )}
+        <Interruptor valor={a.buscar_actualizaciones} alCambiar={alCambiar} />
+      </span>
+    </Campo>
   );
 }
 

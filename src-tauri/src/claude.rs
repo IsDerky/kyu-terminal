@@ -92,6 +92,13 @@ pub enum Evento {
     Contexto {
         tokens: u64,
     },
+    /// Uso de la cuenta (`rate_limit_event`): sesión de 5 h y semana, de 0 a 1, y cuándo se
+    /// reinician (segundos Unix). `estado`: allowed, allowed_warning o rejected.
+    Limite {
+        estado: String,
+        sesion: Option<Ventana>,
+        semana: Option<Ventana>,
+    },
     /// Lo que Claude Code cree que vas a escribir ahora (`--prompt-suggestions`). Llega tras
     /// el turno, a partir del segundo.
     Sugerencia {
@@ -108,6 +115,23 @@ pub enum Evento {
         texto: String,
     },
     Cerrado,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct Ventana {
+    uso: f64,
+    reinicio: u64,
+    estado: String,
+}
+
+impl Ventana {
+    fn de(v: &Value) -> Option<Self> {
+        Some(Self {
+            uso: v["utilization"].as_f64()?,
+            reinicio: v["resetsAt"].as_u64().unwrap_or(0),
+            estado: v["status"].as_str().unwrap_or("allowed").to_string(),
+        })
+    }
 }
 
 struct Sesion {
@@ -585,6 +609,15 @@ fn traducir(v: &Value) -> Vec<Evento> {
                 input: r["input"].clone(),
             });
         }
+        "rate_limit_event" => {
+            let info = &v["rate_limit_info"];
+            let ventanas = &info["unifiedWindows"];
+            sal.push(Evento::Limite {
+                estado: info["status"].as_str().unwrap_or("allowed").to_string(),
+                sesion: Ventana::de(&ventanas["five_hour"]),
+                semana: Ventana::de(&ventanas["seven_day"]),
+            });
+        }
         "prompt_suggestion" => {
             let t = texto(&v["suggestion"]);
             if !t.trim().is_empty() {
@@ -699,4 +732,26 @@ pub(crate) fn buscar_programa(configurado: Option<&str>) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn lee_el_limite_de_la_cuenta() {
+        let v: Value = serde_json::from_str(r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1795584600,"rateLimitType":"five_hour","unifiedWindows":{"five_hour":{"utilization":0.31,"resetsAt":1795584600,"status":"allowed"},"seven_day":{"utilization":0.04,"resetsAt":1796133600,"status":"allowed"}}}}"#).unwrap();
+        let ev = traducir(&v);
+        let Some(Evento::Limite {
+            estado,
+            sesion: Some(s),
+            semana: Some(w),
+        }) = ev.first()
+        else {
+            panic!("no es un límite: {ev:?}");
+        };
+        assert_eq!(estado, "allowed");
+        assert_eq!((s.uso, s.reinicio), (0.31, 1795584600));
+        assert_eq!(w.uso, 0.04);
+    }
 }

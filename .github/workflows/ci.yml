@@ -60,6 +60,30 @@ jobs:
         if: runner.os == 'Windows'
         run: powershell -NoProfile -File scripts/portable.ps1
 
+      # Arranca Kyu en una pantalla virtual: tiene que seguir abierto a los 15 s y haber
+      # abierto su shell con el prompt de Kyu (eso ya lo pide la interfaz).
+      - name: Arranca en Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb imagemagick
+          xvfb-run -a -s "-screen 0 1280x800x24" bash -c '
+            src-tauri/target/release/kyu > kyu.log 2>&1 &
+            pid=$!
+            sleep 15
+            import -window root kyu-linux.png || true
+            if ! kill -0 $pid 2>/dev/null; then echo "Kyu se ha cerrado"; cat kyu.log; exit 1; fi
+            if ! pgrep -f "kyu.bash" > /dev/null; then echo "Kyu no ha abierto la shell"; cat kyu.log; kill $pid; exit 1; fi
+            echo "Kyu abierto y con su shell a los 15 s"
+            kill $pid'
+          tail -20 kyu.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux' && always()
+        with:
+          name: kyu-linux-captura
+          path: kyu-linux.png
+          if-no-files-found: ignore
+
       - uses: actions/upload-artifact@v4
         with:
           name: kyu-${{ runner.os }}

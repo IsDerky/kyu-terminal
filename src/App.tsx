@@ -18,6 +18,8 @@ import { configurarEditores, editor } from "./lib/editores";
 import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
 import { restaurarSesion, vigilarSesion } from "./lib/restaurar";
 import { configurarLimite } from "./lib/gasto";
+import { preguntarPorSeleccion } from "./lib/seleccion";
+import { vigilarActualizaciones } from "./lib/actualizar";
 
 /**
  * Ctrl+Mayús+C: oculto → se abre con el cursor en la caja; abierto sin foco → le da el
@@ -66,6 +68,7 @@ export default function App() {
       configurarEditores(c.fuente, c.tema.fuente_tamano);
       configurarLimite(c.limite_diario);
       configurarClaude(c);
+      vigilarActualizaciones(c.actualizaciones);
       const porDefecto = c.perfiles[0]?.nombre ?? "";
       // Lo de la última vez; si no hay (o está apagado en Ajustes), un espacio nuevo.
       const restaurada = c.restaurar_sesion && (await restaurarSesion(c.perfiles.map((p) => p.nombre), porDefecto).catch(() => false));
@@ -140,6 +143,8 @@ export default function App() {
         const dir = { ArrowLeft: "izquierda", ArrowRight: "derecha", ArrowUp: "arriba", ArrowDown: "abajo" }[e.code] as
           | "izquierda" | "derecha" | "arriba" | "abajo" | undefined;
         if (dir) return (hecho(), moverFoco(dir));
+        // Alt+K: la selección a Claude. Sin selección, la tecla sigue a la shell.
+        if (e.code === "KeyK" && preguntarPorSeleccion()) return hecho();
       }
     };
     window.addEventListener("keydown", teclas, true);
@@ -169,6 +174,7 @@ export default function App() {
                 aplicarFuente(c.fuente, c.tema.fuente_tamano);
                 configurarLimite(c.limite_diario);
                 configurarClaude(c);
+                vigilarActualizaciones(c.actualizaciones);
                 setConfig(c);
               })
             }

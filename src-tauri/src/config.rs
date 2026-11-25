@@ -44,6 +44,8 @@ pub struct Config {
     pub sugerencias_claude: Option<bool>,
     /// Cuentas de Claude entre las que elegir en el panel. Sin ninguna = la de siempre.
     pub cuentas_claude: Vec<CuentaClaude>,
+    /// Mirar al abrir si hay versión nueva en GitHub. Sin poner = sí (nunca en la portable).
+    pub buscar_actualizaciones: Option<bool>,
     pub tema: Tema,
 }
 
@@ -68,6 +70,10 @@ impl Config {
 
     pub fn sugerencias_claude(&self) -> bool {
         self.sugerencias_claude.unwrap_or(true)
+    }
+
+    pub fn buscar_actualizaciones(&self) -> bool {
+        self.buscar_actualizaciones.unwrap_or(true)
     }
 
     pub fn restaurar_sesion(&self) -> bool {
@@ -159,6 +165,9 @@ pub struct ConfigVista {
     /// Nombres de las cuentas de Claude (vacío = solo la de siempre, sin selector).
     cuentas_claude: Vec<String>,
     sugerencias_claude: bool,
+    /// Buscar versión nueva al abrir (false en la portable: se actualiza a mano).
+    actualizaciones: bool,
+    portable: bool,
     tema: Tema,
     perfiles: Vec<PerfilVista>,
 }
@@ -207,6 +216,8 @@ pub fn config() -> ConfigVista {
             .map(|c| c.nombre.clone())
             .collect(),
         sugerencias_claude: config.sugerencias_claude(),
+        actualizaciones: config.buscar_actualizaciones() && carpeta_portable().is_none(),
+        portable: carpeta_portable().is_some(),
         perfiles,
         tema: config.tema,
     }

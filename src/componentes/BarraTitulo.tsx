@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { BarChart3, ChevronDown, FolderTree, Layers, Minus, Plus, SlidersHorizontal, Square, X } from "lucide-react";
+import { ArrowDownToLine, BarChart3, ChevronDown, FolderTree, Layers, Loader2, Minus, Plus, SlidersHorizontal, Square, X } from "lucide-react";
+import { instalarActualizacion, useActualizar } from "../lib/actualizar";
 import { paneles, useKyu, type Espacio } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
@@ -11,6 +12,25 @@ import { useClaude } from "../lib/claude";
 import { guardarSesion } from "../lib/restaurar";
 
 const ventana = getCurrentWindow();
+
+/** Solo con versión nueva: «Actualizar a 0.3.1»; mientras baja, el porcentaje. */
+function BotonActualizar() {
+  const e = useActualizar((s) => s.estado);
+  if (e.tipo !== "nueva" && e.tipo !== "bajando") return null;
+  const bajando = e.tipo === "bajando";
+  return (
+    <button
+      type="button"
+      disabled={bajando}
+      title={e.tipo === "nueva" ? `Kyu ${e.version} disponible${e.notas ? `\n\n${e.notas}` : ""}` : "Bajando la versión nueva"}
+      onClick={() => void instalarActualizacion()}
+      className="mr-1 flex h-7 items-center gap-1.5 rounded-md border border-acento/40 bg-acento/10 px-2 text-[12px] text-acento2 hover:bg-acento/20 disabled:opacity-70"
+    >
+      {bajando ? <Loader2 size={13} className="animate-spin" /> : <ArrowDownToLine size={13} strokeWidth={2} />}
+      {e.tipo === "nueva" ? `Actualizar a ${e.version}` : e.progreso !== null ? `${Math.round(e.progreso * 100)} %` : "Bajando…"}
+    </button>
+  );
+}
 
 /**
  * Nombre del espacio: el que le pusiste o, si no, la carpeta de su terminal (el del
@@ -169,6 +189,7 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
       <div data-tauri-drag-region className="h-full flex-1" />
 
       <BotonGrabar />
+      <BotonActualizar />
 
       <button
         type="button"

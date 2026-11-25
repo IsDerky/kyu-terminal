@@ -20,11 +20,12 @@ Estado: en desarrollo (0.2). La primera versión, con egui, está en la etiqueta
 Panel a la derecha (Ctrl+Mayús+C, o a pantalla grande con Ctrl+Mayús+X) que arranca Claude Code en la carpeta del terminal con el foco.
 
 - Modelo, esfuerzo y modo de permisos (Mayús+Tab), comandos con `/`, `@archivo`, imágenes pegadas o soltadas y desglose del contexto.
+- Alt+K manda lo seleccionado en el terminal o en el editor (con su archivo y líneas) para preguntar sobre ello.
 - Permisos con el diff del cambio; los planes se aprueban desde el panel.
 - Varias conversaciones por espacio, reanudar las anteriores y volver a un mensaje (conversación, archivos o las dos cosas).
 - Los archivos que cambia Claude se abren con lo cambiado marcado, y se puede deshacer.
 - Respuesta sugerida en gris tras cada turno (Tab la usa).
-- Varias cuentas: cada una con su sesión y el mismo historial; se cambia desde el pie del panel y la conversación sigue con la otra.
+- Varias cuentas: cada una con su sesión y el mismo historial; se cambia desde el pie del panel y la conversación sigue con la otra. El pie enseña cuánto lleva gastado la cuenta de su sesión de 5 h y de la semana, y al 90 % propone seguir con otra.
 - Claude puede leer tus terminales y ejecutar órdenes en uno a la vista, siempre con permiso.
 - Uso por día y por proyecto, y límite diario con aviso.
 
@@ -36,6 +37,7 @@ Panel a la derecha (Ctrl+Mayús+C, o a pantalla grande con Ctrl+Mayús+X) que ar
 | Ctrl+, | Ajustes |
 | Ctrl+Mayús+C / Ctrl+Mayús+X | Panel de Claude / Claude a pantalla grande |
 | Mayús+Tab (en el panel) | Siguiente modo de permisos |
+| Alt+K | Lo seleccionado (terminal o archivo) a la caja de Claude |
 | Ctrl+Mayús+D / Ctrl+Mayús+E | Dividir el panel a la derecha / abajo |
 | Ctrl+Mayús+T | Nueva pestaña en el panel |
 | Ctrl+Mayús+N | Nuevo espacio |
@@ -48,6 +50,17 @@ Panel a la derecha (Ctrl+Mayús+C, o a pantalla grande con Ctrl+Mayús+X) que ar
 | Ctrl+F | Buscar en el terminal |
 | → · Ctrl+→ | Aceptar la sugerencia · palabra a palabra |
 | Ctrl+Clic / Mayús+Clic en una ruta | Abrir en Kyu / en VS Code |
+
+## Instalar
+
+En las [releases](https://github.com/IsDerky/kyu-terminal/releases):
+
+- **Windows**: el instalador `.exe` (para tu usuario, sin permisos de administrador) o el `.msi`. También hay un zip portable. Los instaladores no van firmados, así que SmartScreen avisa la primera vez («Más información» → «Ejecutar de todas formas»).
+- **Linux**: la `.AppImage` (`chmod +x` y a ejecutar) o el `.deb`.
+
+Lo instalado mira al abrir si hay versión nueva y avisa en la barra de arriba (se puede apagar en Ajustes). La portable y el `.deb` se actualizan a mano.
+
+Para publicar una versión: subir la versión en `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`, y empujar la etiqueta `vX.Y.Z`; el flujo `release` hace el resto.
 
 ## Compilar
 

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Check, FolderOpen, History, ImageIcon, Info, Loader2, Maximize2, Minimize2, Plus, Square, SquarePen, SquareTerminal, X } from "lucide-react";
+import { ArrowUp, Check, FolderOpen, History, ImageIcon, Info, Loader2, Maximize2, Minimize2, Plus, Square, SquarePen, SquareTerminal, TextQuote, X } from "lucide-react";
 import {
   activarPestana,
   añadirImagenes,
@@ -13,8 +13,10 @@ import {
   limiteContexto,
   parar,
   pendiente,
+  nombreSeleccion,
   quitarAdjunto,
   quitarImagen,
+  quitarSeleccion,
   refrescarContexto,
   responder,
   siguienteModo,
@@ -24,9 +26,18 @@ import {
   ID_ENTRADA,
   type Conversacion,
   type Entrada,
+  type Seleccion,
 } from "../lib/claude";
 import type { Comando } from "../lib/claudeOpciones";
-import { BarraOpciones, DesgloseContexto, filtrarComandos, MenuComandos, SelectorCuenta } from "./ControlesClaude";
+import {
+  AvisoLimite,
+  BarraOpciones,
+  DesgloseContexto,
+  filtrarComandos,
+  LimiteCuenta,
+  MenuComandos,
+  SelectorCuenta,
+} from "./ControlesClaude";
 import { ListaSesiones, mencionEnCursor, MenuArchivos, Miniaturas, Recientes } from "./AdjuntosClaude";
 import { imagenesDe, type ImagenAdjunta } from "../lib/imagenes";
 import { buscarArchivos } from "../lib/nucleo";
@@ -186,13 +197,15 @@ export default function PanelClaude({ espacio: espacioReal }: { espacio: string 
 
       <ListaEntradas espacio={espacio} c={c} carpeta={carpeta} grande={grande} />
 
+      <AvisoLimite espacio={espacio} c={c} />
+
       <CajaEntrada grande={grande} espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} />
 
       <footer className="relative flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
         <EstadoTurno c={c} />
         <span className="ml-auto" />
         <SelectorCuenta espacio={espacio} c={c} />
-        <span className="truncate" title="Modelo que contesta">{c.modelo.replace(/^claude-/, "")}</span>
+        <LimiteCuenta c={c} />
         <BarraGasto />
         {c.coste > 0 && <span title="Coste de la conversación">{dolares(c.coste)}</span>}
       </footer>
@@ -363,6 +376,7 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
           {e.uuid && <VolverAqui espacio={espacio} entrada={e.id} tieneUuid />}
           <div className="flex min-w-0 flex-col items-end gap-1.5">
             {e.adjunto && <RecuadroOrden a={e.adjunto} />}
+            {e.seleccion && <RecuadroSeleccion s={e.seleccion} />}
             {e.imagenes && (
               <div className="flex flex-wrap justify-end gap-1.5">
                 {e.imagenes.map((u, i) => (
@@ -460,6 +474,31 @@ function RecuadroOrden({ a, onQuitar }: { a: TextoBloque; onQuitar?: () => void 
   );
 }
 
+function RecuadroSeleccion({ s, onQuitar }: { s: Seleccion; onQuitar?: () => void }) {
+  return (
+    <div
+      title={(s.ruta ? `${s.ruta}\n\n` : "") + s.texto.split("\n").slice(0, 14).join("\n")}
+      className="flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-borde bg-tarjeta py-1 pl-2 pr-1 text-[11.5px] text-tenue"
+    >
+      <TextQuote size={13} strokeWidth={1.8} className="flex-none text-acento" />
+      <span className="min-w-0 truncate font-mono text-texto">{nombreSeleccion(s)}</span>
+      {s.ruta && <span className="flex-none text-muy">· {s.lineas} {s.lineas === 1 ? "línea" : "líneas"}</span>}
+      {onQuitar ? (
+        <button
+          type="button"
+          title="Quitar"
+          onClick={onQuitar}
+          className="grid size-5 flex-none place-items-center rounded text-muy hover:bg-hover hover:text-texto"
+        >
+          <X size={12} />
+        </button>
+      ) : (
+        <span className="w-1" />
+      )}
+    </div>
+  );
+}
+
 function CajaEntrada({
   grande,
   espacio,
@@ -502,7 +541,8 @@ function CajaEntrada({
   const consulta = mencion?.[1] ?? null;
   const selA = Math.min(elegidoA, Math.max(0, rutas.length - 1));
   // La respuesta que propone Claude, solo con la caja vacía y nada pendiente.
-  const sugerencia = permiso === null && !ocupado && !adjunto && !imagenes.length ? c.sugerencia : null;
+  const seleccion = useClaude((s) => s.selecciones[espacio]);
+  const sugerencia = permiso === null && !ocupado && !adjunto && !seleccion && !imagenes.length ? c.sugerencia : null;
 
   useEffect(() => {
     if (consulta === null || !carpeta) return;
@@ -575,7 +615,7 @@ function CajaEntrada({
 
   const mandar = () => {
     const t = texto.trim();
-    if ((!t && !adjunto && !imagenes.length) || ocupado) return;
+    if ((!t && !adjunto && !seleccion && !imagenes.length) || ocupado) return;
     setTexto("");
     void enviar(espacio, t);
   };
@@ -594,6 +634,11 @@ function CajaEntrada({
             <RecuadroOrden a={adjunto} onQuitar={() => quitarAdjunto(espacio)} />
           </div>
         )}
+        {seleccion && (
+          <div className="flex px-2 pt-2">
+            <RecuadroSeleccion s={seleccion} onQuitar={() => quitarSeleccion(espacio)} />
+          </div>
+        )}
         <textarea
           id={ID_ENTRADA}
           ref={area}
@@ -607,7 +652,9 @@ function CajaEntrada({
                 : "Intro permite · Esc deniega · o escribe qué hacer en su lugar"
               : adjunto
                 ? "Pregunta sobre esta orden, o Intro para que la revise"
-                : imagenes.length
+                : seleccion
+                  ? "Pregunta sobre la selección, o Intro para que la explique"
+                  : imagenes.length
                   ? "Pregunta sobre la imagen"
                   : sugerencia
                     ? `${sugerencia}  · Tab`
@@ -737,7 +784,7 @@ function CajaEntrada({
             type="button"
             title="Enviar (Intro)"
             onClick={mandar}
-            disabled={!texto.trim() && !adjunto && !imagenes.length}
+            disabled={!texto.trim() && !adjunto && !seleccion && !imagenes.length}
             className="absolute bottom-1 right-1.5 grid size-6 place-items-center rounded-lg bg-texto text-fondo disabled:bg-hover disabled:text-muy"
           >
             <ArrowUp size={15} strokeWidth={2.2} />

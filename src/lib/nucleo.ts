@@ -1,6 +1,7 @@
 // Órdenes al núcleo en Rust (src-tauri). Un sitio único para los nombres y los tipos.
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { Ventana } from "./limites";
 
 export interface Tema {
   fuente_tamano: number;
@@ -35,6 +36,9 @@ export interface ConfigVista {
   cuentas_claude: string[];
   /** Respuesta propuesta por Claude tras cada turno. */
   sugerencias_claude: boolean;
+  /** Buscar versión nueva al abrir (false en la portable). */
+  actualizaciones: boolean;
+  portable: boolean;
   tema: Tema;
   /** El primero es el predeterminado. */
   perfiles: Perfil[];
@@ -100,6 +104,9 @@ export interface AjustesVista {
   perfiles_ssh: boolean;
   limite_diario: number;
   sugerencias_claude: boolean;
+  buscar_actualizaciones: boolean;
+  portable: boolean;
+  version: string;
   fuente: string | null;
   fuente_tamano: number;
   fuentes_conocidas: string[];
@@ -145,6 +152,7 @@ export type EventoClaude =
   | { tipo: "permiso"; idPeticion: string; herramienta: string; resumen: string; input: unknown }
   | { tipo: "contexto"; tokens: number }
   | { tipo: "sugerencia"; texto: string }
+  | { tipo: "limite"; estado: string; sesion: Ventana | null; semana: Ventana | null }
   | { tipo: "fin"; coste: number; error: boolean; duracion: number; resultado: string | null }
   | { tipo: "error"; texto: string }
   | { tipo: "cerrado" };

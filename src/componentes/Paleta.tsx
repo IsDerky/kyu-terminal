@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { BarChart3, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { preguntarPorSeleccion } from "../lib/seleccion";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
 import { textoBloque } from "../lib/bloques";
@@ -64,6 +65,15 @@ export default function Paleta({ config }: { config: ConfigVista }) {
           adjuntar(k.activo, t);
           requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
         },
+      },
+      {
+        id: "claude-seleccion",
+        grupo: "Claude",
+        titulo: "Preguntar a Claude por la selección",
+        detalle: "del terminal o del archivo",
+        atajo: "Alt+K",
+        icono: TextQuote,
+        hacer: () => void preguntarPorSeleccion(),
       },
       { id: "gif", grupo: "Kyu", titulo: "Grabar el panel a GIF", detalle: "empezar o parar", atajo: "Ctrl+Mayús+G", icono: Clapperboard, hacer: () => void alternarGrabacion() },
       { id: "uso", grupo: "Kyu", titulo: "Uso de Claude Code", detalle: "tokens por día, proyecto y modelo", icono: BarChart3, hacer: () => k.ponerUso(true) },

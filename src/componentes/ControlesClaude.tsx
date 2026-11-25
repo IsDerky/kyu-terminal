@@ -26,6 +26,7 @@ import {
   partirDescripcion,
   type Comando,
 } from "../lib/claudeOpciones";
+import { agotada, claveCuenta, describir, horaReinicio, peor, porcentaje, useLimites } from "../lib/limites";
 
 const miles = (n: number) => n.toLocaleString("es-ES");
 const k = (n: number) => (n >= 1000 ? `${(n / 1000).toLocaleString("es-ES", { maximumFractionDigits: n < 10_000 ? 1 : 0 })}k` : String(n));
@@ -152,9 +153,68 @@ const Separador = () => <div className="mx-3 my-1 border-t border-borde" />;
 
 // ---------- Cuenta (pie del panel) ----------
 
+const colorUso = (uso: number) => (uso >= 0.9 ? "var(--color-mal)" : uso >= 0.7 ? "var(--color-aviso)" : "var(--color-claude2)");
+
+/** «5 h 31 %» con su barrita: lo que más aprieta de la cuenta (sesión de 5 h o semana). */
+export function LimiteCuenta({ c }: { c: Conversacion }) {
+  const cuentas = useClaude((s) => s.cuentas);
+  const l = useLimites((s) => s.porCuenta[claveCuenta(c.cuenta, cuentas)]);
+  const p = peor(l);
+  if (!p) return null;
+  const color = colorUso(p.v.uso);
+  return (
+    <span className="flex flex-none items-center gap-1.5" title={`Uso de la cuenta · ${describir(l)}`}>
+      <span style={{ color: p.v.uso >= 0.7 ? color : undefined }}>
+        {p.nombre === "sesion" ? "5 h" : "Sem."} {porcentaje(p.v)} %
+      </span>
+      <span className="h-[5px] w-8 overflow-hidden rounded-full bg-hover">
+        <span className="block h-full rounded-full" style={{ width: `${porcentaje(p.v)}%`, background: color }} />
+      </span>
+    </span>
+  );
+}
+
+/** Encima de la caja, con la cuenta al 90 % o rechazada: cuándo se reinicia y pasar a otra. */
+export function AvisoLimite({ espacio, c }: { espacio: string; c: Conversacion }) {
+  const cuentas = useClaude((s) => s.cuentas);
+  const porCuenta = useLimites((s) => s.porCuenta);
+  const actual = claveCuenta(c.cuenta, cuentas);
+  const l = porCuenta[actual];
+  if (!agotada(l)) return null;
+  const p = peor(l);
+  // La otra cuenta con menos uso (sin datos cuenta como libre).
+  const otra = cuentas
+    .filter((n) => n !== actual)
+    .map((n) => ({ n, uso: peor(porCuenta[n])?.v.uso ?? 0 }))
+    .filter((x) => x.uso < 0.9)
+    .sort((a, b) => a.uso - b.uso)[0]?.n;
+  const ocupado = c.estado === "arrancando" || c.estado === "pensando";
+  return (
+    <div className="mx-3 mb-2 flex items-center gap-2 rounded-lg border border-aviso/30 bg-aviso/[0.06] px-3 py-2 text-[12px] text-tenue">
+      <span className="min-w-0 flex-1">
+        {cuentas.length > 1 ? `«${actual}» está` : "La cuenta está"}{" "}
+        {p ? `al ${porcentaje(p.v)} % de la ${p.nombre === "sesion" ? "sesión de 5 h" : "semana"}` : "en su límite"}
+        {p?.v.reinicio ? `; se reinicia ${horaReinicio(p.v.reinicio)}` : ""}.
+      </span>
+      {otra && (
+        <button
+          type="button"
+          disabled={ocupado}
+          title={ocupado ? "Espera a que Claude acabe" : "La conversación sigue con la otra cuenta"}
+          onClick={() => cambiarCuenta(espacio, otra)}
+          className="flex-none rounded-full border border-acento/40 bg-acento/10 px-2.5 py-0.5 text-[11.5px] text-acento2 hover:bg-acento/20 disabled:opacity-40"
+        >
+          Seguir con «{otra}»
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Selector de cuenta de Claude; solo sale con dos o más cuentas en kyu.toml. */
 export function SelectorCuenta({ espacio, c }: { espacio: string; c: Conversacion }) {
   const cuentas = useClaude((s) => s.cuentas);
+  const porCuenta = useLimites((s) => s.porCuenta);
   if (cuentas.length < 2) return null;
   const ocupado = c.estado === "arrancando" || c.estado === "pensando";
   const actual = c.cuenta ?? cuentas[0];
@@ -180,6 +240,7 @@ export function SelectorCuenta({ espacio, c }: { espacio: string; c: Conversacio
       opciones={cuentas.map((n) => ({
         valor: n,
         titulo: n,
+        ayuda: describir(porCuenta[n]) || undefined,
         desactivada: ocupado && n !== actual ? "Espera a que Claude acabe" : undefined,
       }))}
     />
