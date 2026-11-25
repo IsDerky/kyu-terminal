@@ -2,7 +2,7 @@
 // qué espacios, paneles y pestañas hay, y la conversación de Claude de cada espacio; al
 // abrir Kyu se vuelve a montar todo. Las shells son nuevas (en su carpeta), no las de antes.
 import { nuevoId, paneles, useKyu, type Direccion, type Espacio, type Item, type Nodo } from "./estado";
-import { activarPestana, nuevaPestana, pestanasDe, reanudar, useClaude } from "./claude";
+import { activarPestana, nuevaDePanel, nuevaPestana, pestanasDe, reanudar, useClaude } from "./claude";
 import { leerArchivo } from "./nucleo";
 
 const CLAVE = "kyu:sesion";
@@ -14,7 +14,9 @@ export const tamanos = new Map<string, Record<string, number>>();
 type ItemGuardado =
   | { tipo: "terminal"; perfil: string; carpeta: string | null; titulo: string }
   | { tipo: "archivo"; ruta: string; linea: number; columna: number }
-  | { tipo: "arbol" };
+  | { tipo: "arbol" }
+  /** Conversación en una pestaña de panel (sin `conv`: estaba vacía, vuelve vacía). */
+  | { tipo: "claude"; conv?: ConversacionGuardada };
 
 type NodoGuardado =
   | { tipo: "panel"; items: ItemGuardado[]; activo: number; foco?: boolean }
@@ -48,6 +50,19 @@ interface SesionGuardada {
 
 // ---------- Guardar ----------
 
+/** Lo que hace falta para volver a cargar una conversación; null si no tiene nada dentro. */
+function guardarConversacion(cid: string, c = useClaude.getState()): ConversacionGuardada | null {
+  const conv = c.conversaciones[cid];
+  const primero = conv?.entradas.find((x) => x.tipo === "tu");
+  if (!conv?.sesion || !conv.carpeta || primero?.tipo !== "tu") return null;
+  return {
+    sesion: conv.sesion,
+    carpeta: conv.carpeta,
+    titulo: primero.texto.split("\n")[0].slice(0, 60),
+    cuenta: conv.cuenta ?? undefined,
+  };
+}
+
 function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGuardado | null {
   if (n.tipo === "panel") {
     // Los terminales que abre Claude (MCP) son de esa conversación: no vuelven.
@@ -56,6 +71,7 @@ function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGu
     const lista = ids.map((i): ItemGuardado => {
       const it = items[i];
       if (it.tipo === "arbol") return { tipo: "arbol" };
+      if (it.tipo === "claude") return { tipo: "claude", conv: guardarConversacion(it.cid) ?? undefined };
       return it.tipo === "terminal"
         ? { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo }
         : { tipo: "archivo", ruta: it.ruta, linea: it.linea, columna: it.columna };
@@ -84,16 +100,10 @@ function foto(): SesionGuardada {
     const claudes: ConversacionGuardada[] = [];
     let claudeActiva = 0;
     for (const cid of pestanasDe(e.id, c)) {
-      const conv = c.conversaciones[cid];
-      const primero = conv?.entradas.find((x) => x.tipo === "tu");
-      if (!conv?.sesion || !conv.carpeta || primero?.tipo !== "tu") continue;
+      const g = guardarConversacion(cid, c);
+      if (!g) continue;
       if (cid === (c.activas[e.id] ?? e.id)) claudeActiva = claudes.length;
-      claudes.push({
-        sesion: conv.sesion,
-        carpeta: conv.carpeta,
-        titulo: primero.texto.split("\n")[0].slice(0, 60),
-        cuenta: conv.cuenta ?? undefined,
-      });
+      claudes.push(g);
     }
     espacios.push({ nombre: e.nombre, raiz, claudes: claudes.length ? claudes : undefined, claudeActiva });
   }
@@ -194,8 +204,10 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
   if (!s) return false;
   const perdidos = await archivosPerdidos(s);
   const items: Record<string, Item> = {};
+  // Conversaciones de pestaña que hay que volver a cargar cuando ya estén los espacios.
+  const dePanel: { cid: string; conv: ConversacionGuardada }[] = [];
 
-  const montar = (g: NodoGuardado, foco: { id: string | null }): Nodo | null => {
+  const montar = (g: NodoGuardado, foco: { id: string | null }, espacio: string): Nodo | null => {
     if (g.tipo === "panel") {
       const ids: string[] = [];
       let activo: string | null = null;
@@ -203,6 +215,10 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
         let it: Item;
         if (i.tipo === "arbol") {
           it = { id: nuevoId("r"), tipo: "arbol" };
+        } else if (i.tipo === "claude") {
+          const cid = nuevaDePanel(espacio);
+          if (i.conv) dePanel.push({ cid, conv: i.conv });
+          it = { id: nuevoId("c"), tipo: "claude", cid };
         } else if (i.tipo === "terminal") {
           const perfil = perfiles.includes(i.perfil) ? i.perfil : porDefecto;
           it = { id: nuevoId("t"), tipo: "terminal", perfil, titulo: i.titulo || perfil, carpeta: i.carpeta };
@@ -219,7 +235,7 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
       if (g.foco) foco.id = panel.id;
       return panel;
     }
-    const pares = g.hijos.map((h, k) => ({ n: montar(h, foco), t: g.tamanos?.[k] })).filter((x) => x.n !== null);
+    const pares = g.hijos.map((h, k) => ({ n: montar(h, foco, espacio), t: g.tamanos?.[k] })).filter((x) => x.n !== null);
     if (!pares.length) return null;
     if (pares.length === 1) return pares[0].n;
     const total = pares.reduce((a, x) => a + (x.t ?? 0), 0);
@@ -232,9 +248,10 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
   let activo = "";
   s.espacios.forEach((g, k) => {
     const foco = { id: null as string | null };
-    const raiz = montar(g.raiz, foco);
+    const id = nuevoId("e");
+    const raiz = montar(g.raiz, foco, id);
     if (!raiz) return;
-    const esp: Espacio = { id: nuevoId("e"), nombre: g.nombre, raiz, foco: foco.id ?? paneles(raiz)[0].id };
+    const esp: Espacio = { id, nombre: g.nombre, raiz, foco: foco.id ?? paneles(raiz)[0].id };
     espacios.push(esp);
     if (k === s.activo || !activo) activo = esp.id;
     const lista = g.claudes ?? (g.claude ? [g.claude] : []);
@@ -250,6 +267,7 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
     lista.forEach((d, i) => void reanudar(ids[i], d.carpeta, d.sesion, d.titulo, d.cuenta ?? null).catch(() => {}));
     activarPestana(ids[Math.min(activa, ids.length - 1)]);
   }
+  for (const { cid, conv } of dePanel) void reanudar(cid, conv.carpeta, conv.sesion, conv.titulo, conv.cuenta ?? null).catch(() => {});
   if (s.expandido) useClaude.setState({ expandido: true });
   if (s.claudeVisible) useClaude.getState().mostrar(true);
   return true;

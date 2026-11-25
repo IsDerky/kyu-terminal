@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Check, FolderOpen, History, ImageIcon, Info, Loader2, Maximize2, Minimize2, Plus, Square, SquarePen, SquareTerminal, TextQuote, X } from "lucide-react";
+import { ArrowUp, Check, FolderOpen, History, ImageIcon, Info, Loader2, Maximize2, Minimize2, Plus, Square, SquarePen, SquareSplitHorizontal, SquareTerminal, TextQuote, X } from "lucide-react";
 import {
   activarPestana,
   añadirImagenes,
+  conversacionEnPanel,
+  sacarAPanel,
   cargarCatalogo,
   cerrarPestana,
   nuevaPestana,
@@ -65,14 +67,30 @@ const segundos = (ms: number) => (ms / 1000).toLocaleString("es-ES", { maximumFr
  * Panel de Claude: la conversación que se ve del espacio activo (puede tener varias, en
  * pestañas). A la derecha o, en modo expandido, delante y los terminales en una columna.
  */
-export default function PanelClaude({ espacio: espacioReal }: { espacio: string }) {
+export default function PanelClaude({
+  espacio: espacioReal,
+  conversacion: fija,
+  conFoco = false,
+}: {
+  espacio: string;
+  /** Conversación de una pestaña de panel: se enseña esa, sin el marco del panel lateral. */
+  conversacion?: string;
+  /** En una pestaña: su panel tiene el foco (entonces el cursor va a la caja). */
+  conFoco?: boolean;
+}) {
   // Desde aquí, `espacio` es el id de la conversación que se ve (las funciones de Claude
   // trabajan con él); `espacioReal` es el espacio de trabajo.
-  const espacio = useClaude((s) => s.activas[espacioReal] ?? espacioReal);
-  const grande = useClaude((s) => s.expandido);
+  const enPanel = fija !== undefined;
+  const lateral = useClaude((s) => s.activas[espacioReal] ?? espacioReal);
+  const espacio = fija ?? lateral;
+  const expandido = useClaude((s) => s.expandido);
+  const grande = enPanel || expandido;
   const conv = useClaude((s) => s.conversaciones[espacio]);
   const prefs = useClaude((s) => s.prefs);
-  const verContexto = useClaude((s) => s.verContexto);
+  const verContextoLateral = useClaude((s) => s.verContexto);
+  const [verContextoPropio, setVerContextoPropio] = useState(false);
+  const verContexto = enPanel ? verContextoPropio : verContextoLateral;
+  const ponerVerContexto = (v: boolean) => (enPanel ? setVerContextoPropio(v) : useClaude.setState({ verContexto: v }));
   // Antes de arrancar, la carpeta que se usará (sigue al terminal con el foco).
   const carpetaFoco = useKyu(() => carpetaDelEspacio(espacioReal));
   const c: Conversacion = conv ?? vacia(prefs);
@@ -129,14 +147,18 @@ export default function PanelClaude({ espacio: espacioReal }: { espacio: string 
         setSoltando(false);
         void imagenesDe(e.dataTransfer.files).then((l) => añadirImagenes(espacio, l));
       }}
-      className={`group/claude relative m-2 flex flex-col overflow-hidden rounded-[10px] border border-claude/40 bg-panel shadow-[0_0_0_3px_#d977570a,0_20px_50px_-25px_#d9775733] ${
-        grande ? "order-first min-w-0 flex-1" : "ml-0 w-[380px] flex-none"
-      }`}>
+      className={
+        enPanel
+          ? "group/claude relative flex h-full w-full flex-col overflow-hidden bg-panel"
+          : `group/claude relative m-2 flex flex-col overflow-hidden rounded-[10px] border border-claude/40 bg-panel shadow-[0_0_0_3px_#d977570a,0_20px_50px_-25px_#d9775733] ${
+              grande ? "order-first min-w-0 flex-1" : "ml-0 w-[380px] flex-none"
+            }`
+      }>
       <header className="flex h-11 flex-none items-center gap-2 border-b border-borde pl-3.5 pr-2">
         <span className="flex items-center gap-2 text-[13px] font-semibold">
           <Mascota alto={15} />
           {/* En el panel estrecho, solo la mascota: el sitio es para la carpeta. */}
-          {grande && "Claude"}
+          {grande && !enPanel && "Claude"}
         </span>
         <span
           title={carpeta ?? "Carpeta personal"}
@@ -150,9 +172,8 @@ export default function PanelClaude({ espacio: espacioReal }: { espacio: string 
           data-boton-contexto
           title={`Contexto: ${c.tokens.toLocaleString("es-ES")} de ${limite.toLocaleString("es-ES")} tokens · clic para el desglose`}
           onClick={() => {
-            const ver = !useClaude.getState().verContexto;
-            useClaude.setState({ verContexto: ver });
-            if (ver) void refrescarContexto(espacio);
+            ponerVerContexto(!verContexto);
+            if (!verContexto) void refrescarContexto(espacio);
           }}
           className={`ml-auto flex h-7 flex-none items-center gap-1.5 rounded-md px-1.5 text-[11px] text-tenue hover:bg-hover ${verContexto ? "bg-hover" : ""}`}
         >
@@ -166,21 +187,35 @@ export default function PanelClaude({ espacio: espacioReal }: { espacio: string 
             <History size={14} strokeWidth={1.8} />
           </BotonCabecera>
         </span>
-        <BotonCabecera titulo="Nueva conversación, en otra pestaña" onClick={() => nuevaPestana(espacioReal)}>
-          <SquarePen size={14} strokeWidth={1.8} />
-        </BotonCabecera>
-        <BotonCabecera
-          titulo={grande ? "Volver al panel lateral (Ctrl+Mayús+X)" : "Expandir: Claude delante (Ctrl+Mayús+X)"}
-          onClick={() => useClaude.setState({ expandido: !grande })}
-        >
-          {grande ? <Minimize2 size={14} strokeWidth={1.8} /> : <Maximize2 size={14} strokeWidth={1.8} />}
-        </BotonCabecera>
-        <BotonCabecera titulo="Ocultar (Ctrl+Mayús+C)" onClick={() => useClaude.getState().mostrar(false)}>
-          <X size={15} strokeWidth={1.8} />
-        </BotonCabecera>
+        {enPanel ? (
+          <BotonCabecera titulo="Otra conversación en una pestaña de este panel (Ctrl+Mayús+K)" onClick={() => conversacionEnPanel(espacioReal)}>
+            <SquarePen size={14} strokeWidth={1.8} />
+          </BotonCabecera>
+        ) : (
+          <>
+            <BotonCabecera titulo="Nueva conversación, en otra pestaña" onClick={() => nuevaPestana(espacioReal)}>
+              <SquarePen size={14} strokeWidth={1.8} />
+            </BotonCabecera>
+            <BotonCabecera
+              titulo={ocupado ? "Espera a que Claude acabe para moverla" : "Abrir esta conversación en un panel, al lado de los terminales"}
+              onClick={() => !ocupado && void sacarAPanel(espacioReal)}
+            >
+              <SquareSplitHorizontal size={14} strokeWidth={1.8} className={ocupado ? "opacity-40" : ""} />
+            </BotonCabecera>
+            <BotonCabecera
+              titulo={grande ? "Volver al panel lateral (Ctrl+Mayús+X)" : "Expandir: Claude delante (Ctrl+Mayús+X)"}
+              onClick={() => useClaude.setState({ expandido: !grande })}
+            >
+              {grande ? <Minimize2 size={14} strokeWidth={1.8} /> : <Maximize2 size={14} strokeWidth={1.8} />}
+            </BotonCabecera>
+            <BotonCabecera titulo="Ocultar (Ctrl+Mayús+C)" onClick={() => useClaude.getState().mostrar(false)}>
+              <X size={15} strokeWidth={1.8} />
+            </BotonCabecera>
+          </>
+        )}
       </header>
 
-      <PestanasConversacion espacio={espacioReal} actual={espacio} />
+      {!enPanel && <PestanasConversacion espacio={espacioReal} actual={espacio} />}
 
       {verSesiones && (
         <ListaSesiones espacio={espacio} carpeta={carpeta} actual={c.sesion} alCerrar={() => setVerSesiones(false)} />
@@ -193,13 +228,13 @@ export default function PanelClaude({ espacio: espacioReal }: { espacio: string 
         </div>
       )}
 
-      {verContexto && <DesgloseContexto espacio={espacio} c={c} alCerrar={() => useClaude.setState({ verContexto: false })} />}
+      {verContexto && <DesgloseContexto espacio={espacio} c={c} alCerrar={() => ponerVerContexto(false)} />}
 
       <ListaEntradas espacio={espacio} c={c} carpeta={carpeta} grande={grande} />
 
       <AvisoLimite espacio={espacio} c={c} />
 
-      <CajaEntrada grande={grande} espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} />
+      <CajaEntrada principal={!enPanel} enfocar={enPanel && conFoco} grande={grande} espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} />
 
       <footer className="relative flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
         <EstadoTurno c={c} />
@@ -500,6 +535,8 @@ function RecuadroSeleccion({ s, onQuitar }: { s: Seleccion; onQuitar?: () => voi
 }
 
 function CajaEntrada({
+  principal,
+  enfocar = false,
   grande,
   espacio,
   c,
@@ -508,6 +545,10 @@ function CajaEntrada({
   permiso,
   esPlan,
 }: {
+  /** La del panel lateral: lleva el id al que los atajos dan el foco. */
+  principal: boolean;
+  /** Al pasar a true (su panel gana el foco), el cursor va a la caja. */
+  enfocar?: boolean;
   espacio: string;
   c: Conversacion;
   carpeta: string | null;
@@ -528,7 +569,11 @@ function CajaEntrada({
       area.current?.setSelectionRange(t.length, t.length);
     });
   }, [borrador, espacio]);
-  const adjunto = useClaude((s) => s.adjuntos[espacio]);
+  useEffect(() => {
+    // Sin robarle el foco a lo que ya esté dentro de este panel (texto seleccionado, botones).
+    if (enfocar && !area.current?.closest("[data-panel]")?.contains(document.activeElement)) area.current?.focus();
+  }, [enfocar]);
+  const adjunto =useClaude((s) => s.adjuntos[espacio]);
   const imagenes = useClaude((s) => s.imagenes[espacio] ?? SIN_IMAGENES);
   const selector = useRef<HTMLInputElement>(null);
   // @archivo: lo escrito tras la @ del cursor, los archivos que encajan y cuál está elegido.
@@ -640,7 +685,7 @@ function CajaEntrada({
           </div>
         )}
         <textarea
-          id={ID_ENTRADA}
+          id={principal ? ID_ENTRADA : undefined}
           ref={area}
           rows={2}
           value={texto}

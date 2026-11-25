@@ -4,6 +4,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { focoActual, useKyu } from "./estado";
 import { destruir } from "./terminales";
 import { destruirEditor } from "./editores";
+import { cerrarConversacion } from "./claude";
 import { guardarSesion } from "./restaurar";
 
 /** Cierra una pestaña. Si es un archivo con cambios sin guardar, pregunta antes. */
@@ -21,6 +22,7 @@ export async function cerrarItem(item: string, preguntar = true) {
     if (!seguro) return;
   }
   if (it.tipo === "terminal") destruir(item);
+  else if (it.tipo === "claude") cerrarConversacion(it.cid);
   else destruirEditor(item);
   useKyu.getState().quitarItem(item);
   // Sin espacios no queda nada que mostrar: se cierra la ventana, como cualquier terminal.

@@ -7,8 +7,11 @@ import VistaTerminal from "./VistaTerminal";
 // CodeMirror se carga al abrir el primer archivo.
 const VistaArchivo = lazy(() => import("./VistaArchivo"));
 import VistaArbol from "./VistaArbol";
+// El panel de Claude ya va aparte (carga diferida): se reutiliza para las pestañas.
+const PanelClaude = lazy(() => import("./PanelClaude"));
 import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
+import { espacioDe, useClaude } from "../lib/claude";
 
 type PanelNodo = Extract<Nodo, { tipo: "panel" }>;
 
@@ -71,7 +74,14 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
           {panel.items.map((id) => {
             const it = items[id];
             if (!it) return null;
-            const nombre = it.tipo === "terminal" ? it.titulo : it.tipo === "arbol" ? "Archivos" : it.ruta.split(/[\\/]/).pop()!;
+            const nombre =
+              it.tipo === "terminal"
+                ? it.titulo
+                : it.tipo === "arbol"
+                  ? "Archivos"
+                  : it.tipo === "claude"
+                    ? <NombreConversacion cid={it.cid} />
+                    : it.ruta.split(/[\\/]/).pop()!;
             const esActivo = id === panel.activo;
             return (
               <div
@@ -83,7 +93,15 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
                 }}
                 onClick={() => activar(panel.id, id)}
                 onAuxClick={(e) => e.button === 1 && void cerrarItem(id)}
-                title={it.tipo === "archivo" ? it.ruta : it.tipo === "arbol" ? "Archivos (Ctrl+Mayús+B)" : it.carpeta ?? it.perfil}
+                title={
+                  it.tipo === "archivo"
+                    ? it.ruta
+                    : it.tipo === "arbol"
+                      ? "Archivos (Ctrl+Mayús+B)"
+                      : it.tipo === "claude"
+                        ? "Conversación con Claude"
+                        : it.carpeta ?? it.perfil
+                }
                 className={`group flex h-[22px] min-w-0 max-w-48 cursor-default items-center gap-1.5 rounded-[5px] pl-2 pr-1 text-[12px] ${
                   esActivo ? "bg-hover text-texto" : "text-tenue hover:text-texto"
                 }`}
@@ -98,6 +116,8 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
                   )
                 ) : it.tipo === "arbol" ? (
                   <FolderTree size={12} strokeWidth={1.8} className="flex-none" />
+                ) : it.tipo === "claude" ? (
+                  <Mascota alto={9} />
                 ) : (
                   <IconoArchivo size={12} />
                 )}
@@ -178,10 +198,24 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
           </Suspense>
         )}
         {activo?.tipo === "arbol" && <VistaArbol key={activo.id} item={activo.id} />}
+        {activo?.tipo === "claude" && (
+          <Suspense fallback={null}>
+            <PanelClaude key={activo.id} espacio={espacioDe(activo.cid)} conversacion={activo.cid} conFoco={conFoco} />
+          </Suspense>
+        )}
         {zona && <ZonaSoltar zona={zona} />}
       </div>
     </div>
   );
+}
+
+/** Nombre de la pestaña de una conversación: su primer mensaje, o «Claude» si está vacía. */
+function NombreConversacion({ cid }: { cid: string }) {
+  const titulo = useClaude((s) => {
+    const primero = s.conversaciones[cid]?.entradas.find((e) => e.tipo === "tu");
+    return primero?.tipo === "tu" ? primero.texto.split("\n")[0].slice(0, 40) : "";
+  });
+  return <>{titulo || "Claude"}</>;
 }
 
 function ZonaSoltar({ zona }: { zona: Zona }) {

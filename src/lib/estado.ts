@@ -20,7 +20,9 @@ export type Item =
       diff?: { antes: string | null };
     }
   /** Pestaña «Archivos»: el árbol de la carpeta del terminal con el foco. */
-  | { id: string; tipo: "arbol" };
+  | { id: string; tipo: "arbol" }
+  /** Una conversación de Claude como pestaña (`cid`: su id en claude.ts, «espacio~pN»). */
+  | { id: string; tipo: "claude"; cid: string };
 
 export type Direccion = "horizontal" | "vertical";
 
@@ -70,6 +72,9 @@ interface Estado {
   quitarDiff: (item: string) => void;
   /** Ctrl+Mayús+B: abre la pestaña «Archivos» en el panel con el foco, la enfoca o la cierra. */
   alternarArbol: () => void;
+  /** Pone la conversación `cid` como pestaña: en el panel `panel` (o el del foco) o, con
+   *  `alLado`, en un panel nuevo a la derecha del foco. */
+  ponerClaude: (cid: string, opciones?: { panel?: string; alLado?: boolean }) => void;
   ponerTitulo: (item: string, titulo: string, carpeta?: string | null) => void;
   marcarSucio: (item: string, sucio: boolean) => void;
   ponerBuscando: (item: string | null) => void;
@@ -338,6 +343,26 @@ export const useKyu = create<Estado>((set, get) => {
           cambiar(e.raiz, e.foco, (n) => (n.tipo === "panel" ? { ...n, items: [arbol.id, ...n.items], activo: arbol.id } : n)) ??
           e.raiz,
       }));
+    },
+
+    ponerClaude: (cid, opciones = {}) => {
+      const it: Item = { id: nuevoId("c"), tipo: "claude", cid };
+      set((s) => ({ items: { ...s.items, [it.id]: it } }));
+      if (opciones.alLado) {
+        const nuevo = nuevoPanel([it.id]);
+        conEspacio((e) => ({ ...e, foco: nuevo.id, raiz: ponerAlLado(e.raiz, e.foco, nuevo, "derecha") }));
+        return;
+      }
+      conEspacio((e) => {
+        const destino = opciones.panel ?? e.foco;
+        return {
+          ...e,
+          foco: destino,
+          raiz:
+            cambiar(e.raiz, destino, (n) => (n.tipo === "panel" ? { ...n, items: [...n.items, it.id], activo: it.id } : n)) ??
+            e.raiz,
+        };
+      });
     },
 
     ponerTitulo: (item, titulo, carpeta) =>

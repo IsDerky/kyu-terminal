@@ -9,7 +9,7 @@ const PanelClaude = lazy(() => import("./componentes/PanelClaude"));
 const Ajustes = lazy(() => import("./componentes/Ajustes"));
 const Uso = lazy(() => import("./componentes/Uso"));
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
-import { configurarClaude, ID_ENTRADA, limpiar, useClaude } from "./lib/claude";
+import { configurarClaude, conversacionEnPanel, ID_ENTRADA, limpiar, useClaude } from "./lib/claude";
 import { escucharMcp } from "./lib/mcp";
 import { alternarGrabacion } from "./lib/grabar";
 import { focoActual, useKyu } from "./lib/estado";
@@ -127,6 +127,8 @@ export default function App() {
           }
           case "KeyG": hecho(); void alternarGrabacion(); return;
           case "KeyB": hecho(); k.alternarArbol(); return;
+          // En el editor, Ctrl+Mayús+K es borrar línea (como en VS Code): se le deja.
+          case "KeyK": if (enEditor) return; hecho(); conversacionEnPanel(k.activo); return;
         }
       }
       if (e.ctrlKey && !e.shiftKey && !e.altKey) {

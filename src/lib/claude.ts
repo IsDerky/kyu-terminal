@@ -256,11 +256,68 @@ export const activaDe = (espacio: string) => useClaude.getState().activas[espaci
 /** Conversaciones (pestañas) del espacio, en orden. */
 export const pestanasDe = (espacio: string, s = useClaude.getState()) => s.pestanas[espacio] ?? [espacio];
 
-/** ¿El panel está enseñando ahora esta conversación? */
+/** Conversaciones que viven en una pestaña de panel («espacio~pN»), no en el panel lateral. */
+export const esDePanel = (cid: string) => /~p\d+$/.test(cid);
+
+/** ¿Se está viendo ahora esta conversación (en el panel lateral o en su pestaña)? */
 export const panelMuestra = (cid: string) => {
   const espacio = espacioDe(cid);
-  return useClaude.getState().visible && useKyu.getState().activo === espacio && activaDe(espacio) === cid;
+  const k = useKyu.getState();
+  if (k.activo !== espacio || k.ajustes || k.uso) return false;
+  if (esDePanel(cid)) {
+    const esp = k.espacios.find((e) => e.id === espacio);
+    return !!esp && paneles(esp.raiz).some((p) => p.activo && (k.items[p.activo] as { cid?: string } | undefined)?.cid === cid);
+  }
+  return useClaude.getState().visible && activaDe(espacio) === cid;
 };
+
+let siguientePanel = 0;
+
+/** Abre una conversación nueva como pestaña de un panel (con `alLado`, en un panel nuevo a la
+ *  derecha). Devuelve su id. */
+export function conversacionEnPanel(espacio: string, opciones: { panel?: string; alLado?: boolean } = {}): string {
+  const cid = nuevaDePanel(espacio);
+  useKyu.getState().ponerClaude(cid, opciones);
+  return cid;
+}
+
+/** Crea (vacía) una conversación de pestaña de panel del espacio, sin colocarla. */
+export function nuevaDePanel(espacio: string): string {
+  let cid: string;
+  do cid = `${espacio}~p${++siguientePanel}`;
+  while (useClaude.getState().conversaciones[cid]);
+  useClaude.setState((s) => ({ conversaciones: { ...s.conversaciones, [cid]: vacia() } }));
+  return cid;
+}
+
+/**
+ * Saca la conversación que se ve en el panel lateral a una pestaña al lado: allí sigue (con
+ * `--resume`, como al reanudar) y el panel lateral se queda con una nueva.
+ */
+export async function sacarAPanel(espacio: string) {
+  const origen = activaDe(espacio);
+  const c = conversacion(origen);
+  if (c.estado === "arrancando" || c.estado === "pensando") return;
+  const destino = conversacionEnPanel(espacio, { alLado: true });
+  if (c.sesion && c.carpeta) {
+    const primero = c.entradas.find((e) => e.tipo === "tu");
+    const titulo = primero?.tipo === "tu" ? primero.texto.split("\n")[0].slice(0, 60) : "conversación";
+    await reanudar(destino, c.carpeta, c.sesion, titulo, c.cuenta).catch(() => {});
+    cambiar(destino, () => ({ eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo }));
+  }
+  nueva(origen);
+}
+
+/** Cierra una conversación de pestaña de panel (para su Claude y la olvida). */
+export function cerrarConversacion(cid: string) {
+  const c = useClaude.getState().conversaciones[cid];
+  if (c?.claudeId != null) void cerrarClaude(c.claudeId);
+  useClaude.setState((s) => {
+    const { [cid]: _, ...conversaciones } = s.conversaciones;
+    const { [cid]: __, ...selecciones } = s.selecciones;
+    return { conversaciones, selecciones };
+  });
+}
 
 let siguientePestana = 1;
 
