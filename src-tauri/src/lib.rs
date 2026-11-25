@@ -14,6 +14,7 @@ mod grabar;
 mod mcp;
 mod memoria;
 mod pty;
+mod puertos;
 mod sesiones;
 mod sistema;
 mod uso;
@@ -70,6 +71,8 @@ pub fn run() {
             archivos::archivo_leer,
             archivos::archivo_guardar,
             archivos::archivo_borrar,
+            puertos::puerto_quien,
+            puertos::proceso_matar,
             arbol::arbol_listar,
             arbol::git_estado,
             git::git_resumen,

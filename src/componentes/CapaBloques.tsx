@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import type { Terminal } from "@xterm/xterm";
-import { ArrowUpRight, Check, Copy, GitBranch, MemoryStick, X } from "lucide-react";
+import { ArrowUpRight, Ban, Check, Copy, GitBranch, MemoryStick, X } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { matarProceso, quienEnPuerto } from "../lib/nucleo";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
 import type { Autocompletado } from "../lib/autocompletado";
@@ -237,6 +239,7 @@ function Titulo({
             {url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
           </button>
         ))}
+        {b.ocupado && <PuertoOcupado puerto={b.ocupado} />}
         {(terminado || b.estado === "corre") && b.orden?.trim() && <CopiarOrden orden={b.orden.trim()} />}
         {terminado && (
           // La mascota fija en cada bloque terminado; al pasar por encima se despliega.
@@ -257,6 +260,59 @@ function Titulo({
         <span className="tabular-nums text-muy">{b.hora}</span>
       </span>
     </div>
+  );
+}
+
+/** «:3000 ocupado»: dice quién lo tiene y, tras confirmar, lo cierra. */
+function PuertoOcupado({ puerto }: { puerto: number }) {
+  const [estado, setEstado] = useState<"" | "buscando" | "libre" | "cerrado" | "error">("");
+  useEffect(() => {
+    if (estado !== "libre" && estado !== "error") return;
+    const t = setTimeout(() => setEstado(""), 2500);
+    return () => clearTimeout(t);
+  }, [estado]);
+
+  const cerrar = async () => {
+    setEstado("buscando");
+    const p = await quienEnPuerto(puerto).catch(() => null);
+    if (!p) return setEstado("libre");
+    const si = await ask(`El puerto ${puerto} lo tiene ${p.nombre} (PID ${p.pid}).\n\n¿Cerrarlo? Se cierran también los procesos que lanzó.`, {
+      title: "Puerto ocupado",
+      kind: "warning",
+      okLabel: "Cerrar proceso",
+      cancelLabel: "Cancelar",
+    });
+    if (!si) return setEstado("");
+    try {
+      await matarProceso(p.pid);
+      setEstado("cerrado");
+    } catch {
+      setEstado("error");
+    }
+  };
+
+  const texto =
+    estado === "buscando" ? "buscando…"
+    : estado === "libre" ? `:${puerto} ya está libre`
+    : estado === "cerrado" ? `:${puerto} libre, vuelve a lanzarlo`
+    : estado === "error" ? "no se pudo cerrar"
+    : `:${puerto} ocupado · cerrar`;
+  return (
+    <button
+      type="button"
+      title={`Ver quién usa el puerto ${puerto} y cerrarlo`}
+      disabled={estado === "buscando" || estado === "cerrado"}
+      onClick={() => void cerrar()}
+      onMouseDown={(e) => e.preventDefault()}
+      className={`pointer-events-auto flex h-[19px] items-center gap-1 rounded-full border px-2 text-[11.5px] transition-colors ${
+        estado === "cerrado"
+          ? "border-ok/40 bg-ok/10 text-ok"
+          : "border-mal/40 bg-mal/10 text-mal hover:border-mal hover:bg-mal/20"
+      }`}
+    >
+      {estado === "cerrado" ? <Check size={12} strokeWidth={2} /> : <Ban size={12} strokeWidth={2} />}
+      {texto}
+    </button>
   );
 }
 

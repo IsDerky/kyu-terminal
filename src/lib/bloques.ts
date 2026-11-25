@@ -35,6 +35,8 @@ export interface Bloque {
   codigo?: number;
   /** Direcciones locales que han salido en la salida (servidores de desarrollo). */
   locales?: string[];
+  /** Puerto que la orden no pudo usar porque ya estaba ocupado (EADDRINUSE y parecidos). */
+  ocupado?: number;
 }
 
 interface DatosShell {
@@ -163,6 +165,7 @@ export class Bloques {
             : performance.now() - (ultimo.tInicio ?? performance.now());
           ultimo.fin = this.term.registerMarker(0);
           ultimo.locales = undefined;
+          ultimo.ocupado = codigo !== 0 ? puertoOcupado(this.textoSalida(ultimo)) ?? undefined : undefined;
           if (ultimo.orden) this.alTerminarOrden?.(ultimo);
           this.alAcabar?.(ultimo);
         }
@@ -246,9 +249,9 @@ export class Bloques {
     }, 1000);
   }
 
-  /** Busca en la salida del bloque (las últimas 400 filas) direcciones locales con puerto. */
-  private buscarLocales(b: Bloque) {
-    if (b.inicio.line < 0) return;
+  /** Las últimas 400 filas de salida del bloque, con las líneas partidas ya unidas. */
+  private textoSalida(b: Bloque): string {
+    if (b.inicio.line < 0) return "";
     const buf = this.term.buffer.normal;
     const hasta = b.fin && b.fin.line >= 0 ? b.fin.line : buf.baseY + buf.cursorY + 1;
     const desde = Math.max(b.inicio.line + 2, hasta - 400);
@@ -257,8 +260,15 @@ export class Bloques {
       const l = buf.getLine(y);
       if (l) texto += (l.isWrapped ? "" : "\n") + l.translateToString(true);
     }
+    return texto;
+  }
+
+  /** Mientras corre: direcciones locales con puerto y, si sale, el puerto ocupado. */
+  private buscarLocales(b: Bloque) {
+    const texto = this.textoSalida(b);
     const nuevas = direccionesLocales(texto);
     if (nuevas.join() !== (b.locales ?? []).join()) b.locales = nuevas.length ? nuevas : undefined;
+    b.ocupado = puertoOcupado(texto) ?? undefined;
   }
 
   dispose() {
@@ -287,6 +297,25 @@ export function direccionesLocales(texto: string): string[] {
     vistos.set(clave, `${esquema?.toLowerCase() ?? "http"}://${anfitrion}:${puerto}${(ruta ?? "/").replace(/[.,;:]+$/, "")}`);
   }
   return [...vistos.values()].slice(0, 3);
+}
+
+// Cómo dicen los programas que el puerto está cogido (el número, en el primer grupo).
+const OCUPADO = [
+  /EADDRINUSE\b[^\n]*?[:\s](\d{2,5})\b/, // Node: listen EADDRINUSE: address already in use :::3000
+  /:(\d{2,5}):?\s*bind: address already in use/i, // Go: listen tcp :8080: bind: address already in use
+  /address already in use[^\n]*?(?:port\s+|[:\s])(\d{2,5})\b/i, // Python, uvicorn, Rust…
+  /\bport (\d{2,5}) is (?:already )?in use/i, // Next, Vite, Astro, Angular
+  /(?:puerto|port) (\d{2,5})[^\n]*(?:ya está en uso|already in use|ocupado)/i,
+];
+
+/** El puerto que una salida dice que está ocupado, o null. */
+export function puertoOcupado(texto: string): number | null {
+  for (const re of OCUPADO) {
+    const m = texto.match(re);
+    const n = m ? Number(m[1]) : 0;
+    if (n > 0 && n <= 65535) return n;
+  }
+  return null;
 }
 
 /** Lo que se le manda a Claude de un bloque terminado. */

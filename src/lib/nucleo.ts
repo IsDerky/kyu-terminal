@@ -72,6 +72,11 @@ export const cerrarTodasPty = () => invoke("pty_cerrar_todas");
 /** Carpeta actual de la shell (solo si su prompt la apunta: PowerShell con el prompt de Kyu). */
 export const carpetaPty = (id: number) => invoke<string | null>("pty_carpeta", { id });
 
+/** Quién escucha en un puerto TCP (null si nadie o no se sabe). */
+export const quienEnPuerto = (puerto: number) => invoke<{ pid: number; nombre: string } | null>("puerto_quien", { puerto });
+/** Cierra un proceso (en Windows, con sus hijos). */
+export const matarProceso = (pid: number) => invoke<void>("proceso_matar", { pid });
+
 /** Avisa cuando la shell `id` termina (el usuario escribió `exit`, se cerró…). */
 export const alTerminarPty = (alTerminar: (id: number) => void): Promise<UnlistenFn> =>
   listen<number>("pty:fin", (e) => alTerminar(e.payload));
