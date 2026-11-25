@@ -20,9 +20,19 @@ const COMPARTIDAS: &[&str] = &[
     "commands",
     "plugins",
 ];
-/// Archivos que se copian la primera vez (Claude Code los reescribe enteros: un enlace se
-/// rompería al primer cambio).
+/// Archivos que se copian de la principal cada vez que allí son más nuevos (Claude Code los
+/// reescribe enteros: un enlace se rompería al primer cambio).
 const COPIADOS: &[&str] = &["settings.json", "CLAUDE.md", "keybindings.json"];
+
+/// ¿`origen` es más nuevo que `destino` (o `destino` no existe)?
+fn mas_nuevo(origen: &Path, destino: &Path) -> bool {
+    let fecha = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    match (fecha(origen), fecha(destino)) {
+        (Some(o), Some(d)) => o > d,
+        (_, None) => true,
+        (None, Some(_)) => false,
+    }
+}
 
 /// La carpeta de siempre: la de `CLAUDE_CONFIG_DIR` si Kyu arrancó con ella, si no ~/.claude.
 pub fn carpeta_principal() -> Option<PathBuf> {
@@ -121,7 +131,7 @@ pub fn preparar(c: &Cuenta) -> Result<(), String> {
     for nombre in COPIADOS {
         let destino = c.carpeta.join(nombre);
         let origen = principal.join(nombre);
-        if !destino.exists() && origen.is_file() {
+        if origen.is_file() && mas_nuevo(&origen, &destino) {
             let _ = std::fs::copy(&origen, &destino);
         }
     }
@@ -440,6 +450,23 @@ mod pruebas {
         assert!(v["projects"]["C:/p1"]["x"].is_null());
         assert!(v["projects"]["C:/p2"].is_null());
         assert_eq!(v["projects"]["C:/p3"]["y"], 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn copia_solo_si_es_mas_nuevo() {
+        let dir = std::env::temp_dir().join(format!("kyu-prueba-nuevo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join("a");
+        let b = dir.join("b");
+        std::fs::write(&a, "1").unwrap();
+        assert!(mas_nuevo(&a, &b));
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        std::fs::write(&b, "2").unwrap();
+        assert!(!mas_nuevo(&a, &b));
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        std::fs::write(&a, "3").unwrap();
+        assert!(mas_nuevo(&a, &b));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -13,7 +13,7 @@ import { ImageAddon } from "@xterm/addon-image";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { abrirPty, cerrarPty, escribirPty, redimensionarPty, type ConfigVista } from "./nucleo";
-import { Bloques } from "./bloques";
+import { Bloques, textoSeleccion } from "./bloques";
 import { Autocompletado } from "./autocompletado";
 import { apuntar, cargarHistorial } from "./historial";
 import { avisarSiToca } from "./avisos";
@@ -157,7 +157,7 @@ export function obtener(item: string): Sesion {
     if (e.type !== "keydown" || !e.ctrlKey || e.shiftKey || e.altKey) return true;
     const tecla = e.key.toLowerCase();
     if (tecla === "c" && term.hasSelection()) {
-      void writeText(term.getSelection());
+      void writeText(textoSeleccion(term, bloques));
       term.clearSelection();
       return false;
     }
@@ -173,7 +173,7 @@ export function obtener(item: string): Sesion {
   elemento.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     if (term.hasSelection()) {
-      void writeText(term.getSelection());
+      void writeText(textoSeleccion(term, bloques));
       term.clearSelection();
     } else {
       void readText().then((t) => t && term.paste(t));

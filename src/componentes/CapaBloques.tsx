@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import type { Terminal } from "@xterm/xterm";
-import { ArrowUpRight, Check, GitBranch, MemoryStick, X } from "lucide-react";
+import { ArrowUpRight, Check, Copy, GitBranch, MemoryStick, X } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
 import type { Autocompletado } from "../lib/autocompletado";
 import { adjuntar, ID_ENTRADA } from "../lib/claude";
@@ -237,6 +238,7 @@ function Titulo({
             {url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
           </button>
         ))}
+        {(terminado || b.estado === "corre") && b.orden?.trim() && <CopiarOrden orden={b.orden.trim()} />}
         {terminado && (
           // La mascota fija en cada bloque terminado; al pasar por encima se despliega.
           <button
@@ -256,6 +258,41 @@ function Titulo({
         <span className="tabular-nums text-muy">{b.hora}</span>
       </span>
     </div>
+  );
+}
+
+/** Copia la orden del bloque al portapapeles; un momento «Copiada» para saber que ha ido. */
+function CopiarOrden({ orden }: { orden: string }) {
+  const [copiada, setCopiada] = useState(false);
+  useEffect(() => {
+    if (!copiada) return;
+    const t = setTimeout(() => setCopiada(false), 1400);
+    return () => clearTimeout(t);
+  }, [copiada]);
+  return (
+    <button
+      type="button"
+      title={`Copiar la orden: ${orden}`}
+      onClick={() => void writeText(orden).then(() => setCopiada(true))}
+      onMouseDown={(e) => e.preventDefault()}
+      className={`group/copiar pointer-events-auto flex h-[19px] items-center gap-1.5 rounded-full border px-1.5 text-[11.5px] transition-colors ${
+        copiada ? "border-ok/40 bg-ok/10 text-ok" : "border-transparent text-tenue hover:border-borde2 hover:bg-hover hover:text-texto"
+      }`}
+    >
+      {copiada ? (
+        <>
+          <Check size={12} strokeWidth={2} />
+          Copiada
+        </>
+      ) : (
+        <>
+          <span className="opacity-55 transition-opacity group-hover/copiar:opacity-100">
+            <Copy size={12} strokeWidth={1.9} />
+          </span>
+          <span className="hidden group-hover/copiar:inline">Copiar orden</span>
+        </>
+      )}
+    </button>
   );
 }
 

@@ -3,6 +3,7 @@
 import { focoActual, useKyu } from "./estado";
 import { sesion } from "./terminales";
 import { editor } from "./editores";
+import { textoSeleccion } from "./bloques";
 import { adjuntarSeleccion, ID_ENTRADA, type Seleccion } from "./claude";
 
 const MAX_CARACTERES = 40_000;
@@ -12,7 +13,7 @@ export function seleccionActual(): Seleccion | null {
   const item = focoActual()?.item;
   if (item?.tipo === "terminal") {
     const s = sesion(item.id);
-    const texto = s?.term.getSelection().replace(/\s+$/g, "") ?? "";
+    const texto = s ? textoSeleccion(s.term, s.bloques).replace(/\s+$/g, "") : "";
     if (!texto.trim()) return null;
     return recortar({ texto, ruta: null, desde: 0, hasta: 0 });
   }

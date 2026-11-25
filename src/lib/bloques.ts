@@ -304,6 +304,47 @@ const MAX_CARACTERES = 24_000;
  * salida hasta donde quedó el cursor al terminar. null si el bloque no ha terminado o
  * ya no está en el historial.
  */
+/** El título de un bloque en texto: «Aleks ~\Documents (main ±2)». */
+export function tituloEnTexto(b: Bloque) {
+  const rama = b.rama ? ` (${b.rama}${b.cambios > 0 ? ` ±${b.cambios}` : ""})` : "";
+  return `${b.hoja || "…"}${b.padre ? ` ${b.padre.replace(/[\\/]$/, "")}` : ""}${rama}`;
+}
+
+/**
+ * Lo seleccionado en el terminal tal como se ve: el título de cada bloque (que es una capa
+ * encima, en la línea en blanco que deja el prompt) y la flecha «›» delante de cada orden.
+ * Sin bloques en la selección es lo mismo que `term.getSelection()`.
+ */
+export function textoSeleccion(term: Terminal, bloques: Bloques): string {
+  const pos = term.getSelectionPosition();
+  const buf = term.buffer.active;
+  if (!pos || buf.type !== "normal") return term.getSelection();
+  const titulos = new Map<number, Bloque>();
+  const prompts = new Map<number, number>();
+  for (const b of bloques.lista) {
+    if (b.inicio.line >= 0) titulos.set(b.inicio.line, b);
+    if (b.entrada && b.entrada.marca.line >= 0) prompts.set(b.entrada.marca.line, b.entrada.x);
+  }
+  const lineas: string[] = [];
+  for (let y = pos.start.y; y <= pos.end.y; y++) {
+    const l = buf.getLine(y);
+    if (!l) continue;
+    const desde = y === pos.start.y ? pos.start.x : 0;
+    const hasta = y === pos.end.y ? pos.end.x : undefined;
+    let t = l.translateToString(true, desde, hasta);
+    const b = titulos.get(y);
+    if (b && !t.trim()) t = tituloEnTexto(b);
+    const x = prompts.get(y);
+    // Los espacios donde Kyu pinta la flecha pasan a «› ».
+    if (x !== undefined && desde < x && !l.translateToString(false, 0, x).trim()) {
+      t = `› ${l.translateToString(true, x, hasta)}`;
+    }
+    if (l.isWrapped && lineas.length) lineas[lineas.length - 1] += t;
+    else lineas.push(t);
+  }
+  return lineas.join("\n");
+}
+
 export function textoBloque(term: Terminal, b: Bloque): TextoBloque | null {
   if ((b.estado !== "ok" && b.estado !== "mal") || !b.fin || b.inicio.line < 0 || b.fin.line < 0) return null;
   const buf = term.buffer.normal;
