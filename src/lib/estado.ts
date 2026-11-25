@@ -5,6 +5,7 @@
 // (terminales.ts, editores.ts): así, al dividir o mover un panel, React lo vuelve a
 // montar pero la shell y el texto sin guardar siguen intactos.
 import { create } from "zustand";
+import { aplanar, heredar } from "./tamanos";
 
 export type Item =
   | { id: string; tipo: "terminal"; perfil: string; titulo: string; carpeta: string | null; deClaude?: boolean }
@@ -126,10 +127,17 @@ function cambiar(nodo: Nodo, id: string, f: (n: Nodo) => Nodo | null): Nodo | nu
   if (nodo.tipo === "panel") return nodo;
   const hijos = nodo.hijos.map((h) => cambiar(h, id, f)).filter((h): h is Nodo => h !== null);
   if (hijos.length === 0) return null;
-  // Una división con un solo hijo sobra: se queda el hijo.
-  if (hijos.length === 1) return hijos[0];
+  // Una división con un solo hijo sobra: se queda el hijo (con el sitio que tenía ella arriba).
+  if (hijos.length === 1) {
+    heredar(nodo.id, hijos[0].id);
+    return hijos[0];
+  }
   // Hijos que son divisiones en la misma dirección se juntan con la de arriba.
-  const planos = hijos.flatMap((h) => (h.tipo === "division" && h.dir === nodo.dir ? h.hijos : [h]));
+  const planos = hijos.flatMap((h) => {
+    if (h.tipo !== "division" || h.dir !== nodo.dir) return [h];
+    aplanar(nodo.id, h.id, h.hijos.map((n) => n.id), h.tamanos);
+    return h.hijos;
+  });
   return { ...nodo, hijos: planos };
 }
 
@@ -138,13 +146,18 @@ function ponerAlLado(raiz: Nodo, id: string, nuevo: Nodo, zona: Exclude<Zona, "c
   const dir: Direccion = zona === "izquierda" || zona === "derecha" ? "horizontal" : "vertical";
   const antes = zona === "izquierda" || zona === "arriba";
   return (
-    cambiar(raiz, id, (n) => ({
-      tipo: "division",
-      id: nuevoId("d"),
-      dir,
-      hijos: antes ? [nuevo, n] : [n, nuevo],
-      tamanos: parte ? (antes ? [parte, 100 - parte] : [100 - parte, parte]) : undefined,
-    })) ?? nuevo
+    cambiar(raiz, id, (n) => {
+      const division: Nodo = {
+        tipo: "division",
+        id: nuevoId("d"),
+        dir,
+        hijos: antes ? [nuevo, n] : [n, nuevo],
+        tamanos: parte ? (antes ? [parte, 100 - parte] : [100 - parte, parte]) : undefined,
+      };
+      // La división nueva ocupa el sitio de `n`: el resto de su grupo no se reparte de nuevo
+      heredar(n.id, division.id);
+      return division;
+    }) ?? nuevo
   );
 }
 

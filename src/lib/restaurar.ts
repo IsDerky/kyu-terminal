@@ -4,12 +4,10 @@
 import { nuevoId, paneles, useKyu, type Direccion, type Espacio, type Item, type Nodo } from "./estado";
 import { nuevaDePanel, reanudar, useClaude } from "./claude";
 import { leerArchivo } from "./nucleo";
+import { tamanos } from "./tamanos";
 
 const CLAVE = "kyu:sesion";
 const ESPERA = 800;
-
-/** Tamaños de cada división (id → {id del hijo: %}), según los va dejando el ratón. */
-export const tamanos = new Map<string, Record<string, number>>();
 
 type ItemGuardado =
   | { tipo: "terminal"; perfil: string; carpeta: string | null; titulo: string }

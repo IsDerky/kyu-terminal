@@ -4,6 +4,7 @@ import { paneles, type Espacio as EspacioT, type Nodo } from "../lib/estado";
 import type { ConfigVista } from "../lib/nucleo";
 import Panel from "./Panel";
 import { alCambiarTamano } from "../lib/restaurar";
+import { repartoInicial } from "../lib/tamanos";
 
 interface Props {
   espacio: EspacioT;
@@ -32,10 +33,17 @@ function Arbol({ nodo, foco, varios, config }: { nodo: Nodo; foco: string; vario
     return <Panel panel={nodo} conFoco={nodo.id === foco} varios={varios} config={config} />;
   }
   const horizontal = nodo.dir === "horizontal";
-  // Tamaños guardados (al restaurar) si siguen encajando con los hijos; si no, a partes iguales.
-  const guardados = nodo.tamanos?.length === nodo.hijos.length ? nodo.tamanos : null;
+  // Lo último que dejó el ratón (heredado si un hijo cambió de id al dividir o cerrar), lo
+  // guardado al restaurar, o a partes iguales para lo que no tenga tamaño.
+  const reparto = repartoInicial(nodo.id, nodo.hijos.map((h) => h.id), nodo.tamanos);
   return (
-    <Group key={nodo.id} orientation={nodo.dir} className="h-full w-full" onLayoutChanged={(l) => alCambiarTamano(nodo.id, l)}>
+    <Group
+      key={nodo.id}
+      orientation={nodo.dir}
+      className="h-full w-full"
+      defaultLayout={reparto}
+      onLayoutChanged={(l) => alCambiarTamano(nodo.id, l)}
+    >
       {nodo.hijos.map((hijo, i) => (
         <Fragment key={hijo.id}>
           {i > 0 && (
@@ -45,7 +53,7 @@ function Arbol({ nodo, foco, varios, config }: { nodo: Nodo; foco: string; vario
               }`}
             />
           )}
-          <Hueco id={hijo.id} defaultSize={`${guardados ? guardados[i] : 100 / nodo.hijos.length}`} minSize={horizontal ? 180 : 90}>
+          <Hueco id={hijo.id} defaultSize={`${reparto[hijo.id]}`} minSize={horizontal ? 180 : 90}>
             <Arbol nodo={hijo} foco={foco} varios={varios} config={config} />
           </Hueco>
         </Fragment>
