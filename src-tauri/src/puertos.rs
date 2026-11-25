@@ -23,7 +23,9 @@ fn sin_ventana(cmd: &mut Command) -> &mut Command {
 
 fn salida(cmd: &mut Command) -> Option<String> {
     let s = sin_ventana(cmd).output().ok()?;
-    s.status.success().then(|| String::from_utf8_lossy(&s.stdout).into_owned())
+    s.status
+        .success()
+        .then(|| String::from_utf8_lossy(&s.stdout).into_owned())
 }
 
 /// PID que escucha en `puerto` según la salida de `netstat -ano -p TCP` (y TCPv6).
@@ -33,7 +35,11 @@ fn pid_en_netstat(texto: &str, puerto: u16) -> Option<u32> {
     texto.lines().find_map(|l| {
         let c: Vec<&str> = l.split_whitespace().collect();
         // TCP  0.0.0.0:3000  0.0.0.0:0  LISTENING  1234   (el estado va traducido: ESCUCHANDO…)
-        if c.len() == 5 && c[0].eq_ignore_ascii_case("TCP") && c[1].ends_with(&fin) && c[2].ends_with(":0") {
+        if c.len() == 5
+            && c[0].eq_ignore_ascii_case("TCP")
+            && c[1].ends_with(&fin)
+            && c[2].ends_with(":0")
+        {
             c[4].parse().ok().filter(|p| *p != 0)
         } else {
             None
@@ -53,7 +59,13 @@ fn pid_en_ss(texto: &str, puerto: u16) -> Option<Proceso> {
         }
         let usuarios = l.split("users:((\"").nth(1)?;
         let nombre = usuarios.split('"').next()?.to_string();
-        let pid = usuarios.split("pid=").nth(1)?.split(|ch: char| !ch.is_ascii_digit()).next()?.parse().ok()?;
+        let pid = usuarios
+            .split("pid=")
+            .nth(1)?
+            .split(|ch: char| !ch.is_ascii_digit())
+            .next()?
+            .parse()
+            .ok()?;
         Some(Proceso { pid, nombre })
     })
 }
@@ -61,20 +73,31 @@ fn pid_en_ss(texto: &str, puerto: u16) -> Option<Proceso> {
 /// Quién escucha en `puerto` (TCP). `None` si nadie o no se puede saber.
 #[tauri::command]
 pub async fn puerto_quien(puerto: u16) -> Option<Proceso> {
-    tauri::async_runtime::spawn_blocking(move || quien(puerto)).await.ok().flatten()
+    tauri::async_runtime::spawn_blocking(move || quien(puerto))
+        .await
+        .ok()
+        .flatten()
 }
 
 #[cfg(windows)]
 fn quien(puerto: u16) -> Option<Proceso> {
     let texto = salida(Command::new("netstat").args(["-ano", "-p", "TCP"]))
         .into_iter()
-        .chain(salida(Command::new("netstat").args(["-ano", "-p", "TCPv6"])))
+        .chain(salida(
+            Command::new("netstat").args(["-ano", "-p", "TCPv6"]),
+        ))
         .collect::<Vec<_>>()
         .join("\n");
     let pid = pid_en_netstat(&texto, puerto)?;
     // "node.exe","1234","Console","1","45.000 KB"
-    let lista = salida(Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]))
-        .unwrap_or_default();
+    let lista = salida(Command::new("tasklist").args([
+        "/FI",
+        &format!("PID eq {pid}"),
+        "/FO",
+        "CSV",
+        "/NH",
+    ]))
+    .unwrap_or_default();
     let nombre = lista
         .lines()
         .next()
@@ -110,7 +133,11 @@ pub async fn proceso_matar(pid: u32) -> Result<(), String> {
             Ok(())
         } else {
             let err = String::from_utf8_lossy(&s.stderr).trim().to_string();
-            Err(if err.is_empty() { format!("no se pudo cerrar el proceso {pid}") } else { err })
+            Err(if err.is_empty() {
+                format!("no se pudo cerrar el proceso {pid}")
+            } else {
+                err
+            })
         }
     })
     .await
@@ -132,7 +159,13 @@ mod pruebas {
     #[test]
     fn ss() {
         let t = "LISTEN 0 511 *:3000 *:* users:((\"node\",pid=1234,fd=20))\nLISTEN 0 4096 127.0.0.1:631 0.0.0.0:* ";
-        assert_eq!(pid_en_ss(t, 3000), Some(Proceso { pid: 1234, nombre: "node".into() }));
+        assert_eq!(
+            pid_en_ss(t, 3000),
+            Some(Proceso {
+                pid: 1234,
+                nombre: "node".into()
+            })
+        );
         assert_eq!(pid_en_ss(t, 631), None);
     }
 }

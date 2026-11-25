@@ -92,7 +92,11 @@ fn misma(a: &Path, b: &Path) -> bool {
 
 /// Sin cuentas en kyu.toml está igualmente la de siempre: «Principal», en ~/.claude.
 fn principal_implicita() -> CuentaClaude {
-    CuentaClaude { nombre: "Principal".into(), carpeta: None, compartir: None }
+    CuentaClaude {
+        nombre: "Principal".into(),
+        carpeta: None,
+        compartir: None,
+    }
 }
 
 /// Las cuentas de kyu.toml, o la principal implícita si no hay ninguna.
