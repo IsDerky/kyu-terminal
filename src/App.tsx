@@ -10,6 +10,7 @@ import Entorno from "./componentes/Entorno";
 import { Mascota } from "./componentes/iconos";
 import { cargarSesiones } from "./lib/sesiones";
 import { abrirAjustesEn } from "./lib/irAjustes";
+import { abrirCarpeta, arrancarEnUltima } from "./lib/carpetas";
 // Se cargan la primera vez que se abren (menos memoria si no se usan).
 const Ajustes = lazy(() => import("./componentes/Ajustes"));
 const Uso = lazy(() => import("./componentes/Uso"));
@@ -79,7 +80,8 @@ export default function App() {
       const porDefecto = c.perfiles[0]?.nombre ?? "";
       // Lo de la última vez; si no hay (o está apagado en Ajustes), un espacio nuevo.
       const restaurada = c.restaurar_sesion && (await restaurarSesion(c.perfiles.map((p) => p.nombre), porDefecto).catch(() => false));
-      if (!restaurada) useKyu.getState().iniciar(porDefecto);
+      // Sin sesión que restaurar: la última carpeta abierta con «Abrir carpeta…», o un espacio en ~.
+      if (!restaurada && !(await arrancarEnUltima(porDefecto).catch(() => false))) useKyu.getState().iniciar(porDefecto);
       setConfig(c);
       dejar = vigilarSesion();
       // Sin ninguna cuenta de Claude con sesión, el panel no sirve: se avisa una vez al abrir.
@@ -142,6 +144,7 @@ export default function App() {
           case "KeyE": hecho(); k.dividir("vertical", perfil); return;
           case "KeyT": hecho(); k.nuevaPestana(perfil); return;
           case "KeyN": hecho(); k.nuevoEspacio(config.perfiles[0]?.nombre ?? ""); return;
+          case "KeyO": hecho(); void abrirCarpeta(config.perfiles[0]?.nombre ?? ""); return;
           case "KeyW": hecho(); cerrarActual(); return;
           case "Tab": hecho(); k.siguientePestana(-1); return;
           case "KeyC": hecho(); alternarClaude(); return;

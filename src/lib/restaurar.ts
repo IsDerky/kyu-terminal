@@ -35,6 +35,7 @@ interface EspacioGuardado {
   nombre: string | null;
   raiz: NodoGuardado;
   worktree?: { raiz: string; ruta: string };
+  carpeta?: string;
   /** Del panel lateral de antes (se sigue leyendo: pasan a pestañas a la derecha). */
   claude?: ConversacionGuardada;
 
@@ -100,7 +101,7 @@ function foto(): SesionGuardada {
     const raiz = guardarNodo(e.raiz, k.items, e.foco);
     if (!raiz) continue;
     if (e.id === k.activo) activo = espacios.length;
-    espacios.push({ nombre: e.nombre, raiz, worktree: e.worktree });
+    espacios.push({ nombre: e.nombre, raiz, worktree: e.worktree, carpeta: e.carpeta });
   }
   return { version: 1, activo, espacios };
 }
@@ -260,7 +261,7 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
       const panel: Nodo = { tipo: "panel", id: nuevoId("p"), items: ids, activo: ids[Math.min(g.claudeActiva ?? 0, ids.length - 1)] };
       raiz = { tipo: "division", id: nuevoId("d"), dir: "horizontal", hijos: [raiz, panel], tamanos: [60, 40] };
     }
-    const esp: Espacio = { id, nombre: g.nombre, raiz, foco: foco.id ?? paneles(raiz)[0].id, worktree: g.worktree };
+    const esp: Espacio = { id, nombre: g.nombre, raiz, foco: foco.id ?? paneles(raiz)[0].id, worktree: g.worktree, carpeta: g.carpeta };
     espacios.push(esp);
     if (k === s.activo || !activo) activo = esp.id;
   });

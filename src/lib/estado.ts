@@ -46,6 +46,8 @@ export interface Espacio {
   maximizado?: string | null;
   /** Espacio abierto para un issue en un worktree: al cerrarlo se ofrece quitarlo. */
   worktree?: { raiz: string; ruta: string };
+  /** Carpeta del espacio («Abrir carpeta…»): los terminales nuevos sin otra carpeta arrancan aquí. */
+  carpeta?: string;
 }
 
 export type Zona = "centro" | "izquierda" | "derecha" | "arriba" | "abajo";
@@ -63,7 +65,8 @@ interface Estado {
   uso: boolean;
 
   iniciar: (perfil: string) => void;
-  nuevoEspacio: (perfil: string, carpeta?: string | null) => void;
+  /** Con `fija`, la carpeta queda como la del espacio y le da nombre («Abrir carpeta…»). */
+  nuevoEspacio: (perfil: string, carpeta?: string | null, fija?: boolean) => void;
   cambiarEspacio: (id: string) => void;
   renombrarEspacio: (id: string, nombre: string | null) => void;
   nuevaPestana: (perfil: string, panel?: string) => void;
@@ -175,10 +178,16 @@ export const useKyu = create<Estado>((set, get) => {
       get().nuevoEspacio(perfil);
     },
 
-    nuevoEspacio: (perfil, carpeta = null) => {
+    nuevoEspacio: (perfil, carpeta = null, fija = false) => {
       const t = terminal(perfil, carpeta);
       const panel = nuevoPanel([t.id]);
-      const espacio: Espacio = { id: nuevoId("e"), nombre: null, raiz: panel, foco: panel.id };
+      const espacio: Espacio = {
+        id: nuevoId("e"),
+        nombre: fija && carpeta ? carpeta.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || null : null,
+        raiz: panel,
+        foco: panel.id,
+        ...(fija && carpeta ? { carpeta } : {}),
+      };
       set((s) => ({ espacios: [...s.espacios, espacio], activo: espacio.id, items: { ...s.items, [t.id]: t } }));
     },
 
@@ -470,7 +479,7 @@ export const useKyu = create<Estado>((set, get) => {
         if (t?.tipo === "terminal" && t.carpeta) return t.carpeta;
       }
     }
-    return null;
+    return esp.carpeta ?? null;
   }
 });
 

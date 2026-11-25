@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ArrowDownToLine, BarChart3, ChevronDown, FolderTree, Layers, Loader2, Minus, Plus, SlidersHorizontal, Square, X } from "lucide-react";
+import { abrirCarpeta, abrirEnCarpeta, recientes } from "../lib/carpetas";
+import { ArrowDownToLine, BarChart3, ChevronDown, Folder, FolderOpen, FolderTree, Layers, Loader2, Minus, Plus, SlidersHorizontal, Square, X } from "lucide-react";
 import { instalarActualizacion, useActualizar } from "../lib/actualizar";
 import { paneles, useKyu, type Espacio } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
@@ -194,6 +195,32 @@ export default function BarraTitulo({ config }: { config: ConfigVista }) {
               nuevoEspacio(p);
             }}
             alCerrar={() => setMenu(false)}
+            pie={
+              <>
+                <div className="mt-1 border-t border-borde px-2 pb-1 pt-2 text-[11px] uppercase tracking-wider text-muy">Carpetas</div>
+                <button
+                  type="button"
+                  onClick={() => (setMenu(false), void abrirCarpeta(config.perfiles[0]?.nombre ?? ""))}
+                  className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12.5px] text-texto hover:bg-hover"
+                >
+                  <FolderOpen size={14} strokeWidth={1.8} className="flex-none text-tenue" />
+                  <span className="flex-1">Abrir carpeta…</span>
+                  <span className="text-[11px] text-muy">Ctrl+Mayús+O</span>
+                </button>
+                {recientes().map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    title={r}
+                    onClick={() => (setMenu(false), void abrirEnCarpeta(r, config.perfiles[0]?.nombre ?? ""))}
+                    className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12.5px] text-tenue hover:bg-hover hover:text-texto"
+                  >
+                    <Folder size={14} strokeWidth={1.8} className="flex-none" />
+                    <span className="flex-1 truncate">{r.replace(/[\\/]+$/, "").split(/[\\/]/).pop()}</span>
+                  </button>
+                ))}
+              </>
+            }
           />
         )}
       </div>

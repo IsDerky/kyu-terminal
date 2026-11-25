@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Braces, CircleDot, ListX, FileDiff, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquarePen, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { abrirCarpeta, abrirEnCarpeta, recientes } from "../lib/carpetas";
+import { BarChart3, Braces, CircleDot, Folder, FolderOpen, ListX, FileDiff, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquarePen, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { preguntarPorSeleccion } from "../lib/seleccion";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
@@ -46,7 +47,17 @@ export default function Paleta({ config }: { config: ConfigVista }) {
     const k = useKyu.getState();
     const f = focoActual();
     const perfilFoco = f?.item?.tipo === "terminal" ? f.item.perfil : config.perfiles[0]?.nombre ?? "";
+    const porDefecto = config.perfiles[0]?.nombre ?? "";
     const lista: Orden[] = [
+      { id: "carpeta", grupo: "Espacios", titulo: "Abrir carpeta…", detalle: "un espacio fijo en ella; Kyu la recuerda", atajo: "Ctrl+Mayús+O", icono: FolderOpen, hacer: () => void abrirCarpeta(porDefecto) },
+      ...recientes().map((r) => ({
+        id: `reciente:${r}`,
+        grupo: "Espacios",
+        titulo: r.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? r,
+        detalle: r,
+        icono: Folder,
+        hacer: () => void abrirEnCarpeta(r, porDefecto),
+      })),
       { id: "div-d", grupo: "Paneles", titulo: "Dividir a la derecha", atajo: "Ctrl+Mayús+D", icono: Columns2, hacer: () => k.dividir("horizontal", perfilFoco) },
       { id: "div-a", grupo: "Paneles", titulo: "Dividir abajo", atajo: "Ctrl+Mayús+E", icono: Rows2, hacer: () => k.dividir("vertical", perfilFoco) },
       { id: "arbol", grupo: "Paneles", titulo: "Archivos", detalle: "árbol de la carpeta del terminal", atajo: "Ctrl+Mayús+B", icono: FolderTree, hacer: () => k.alternarArbol() },

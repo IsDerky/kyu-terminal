@@ -11,10 +11,12 @@ interface Props {
   alCerrar: () => void;
   /** Hacia dónde se abre respecto al botón. */
   alinear?: "izquierda" | "derecha";
+  /** Lo que va debajo de los perfiles (en el de espacios: abrir carpeta y recientes). */
+  pie?: React.ReactNode;
 }
 
 /** Menú desplegable con los perfiles de shell. */
-export default function MenuPerfiles({ perfiles, alElegir, alCerrar, alinear = "izquierda" }: Props) {
+export default function MenuPerfiles({ perfiles, alElegir, alCerrar, alinear = "izquierda", pie }: Props) {
   const caja = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const fuera = (e: MouseEvent) => {
@@ -56,6 +58,7 @@ export default function MenuPerfiles({ perfiles, alElegir, alCerrar, alinear = "
         </Fragment>
         );
       })}
+      {pie}
     </div>
   );
 }
