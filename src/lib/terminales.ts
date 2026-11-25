@@ -16,7 +16,7 @@ import { abrirPty, cerrarPty, escribirPty, redimensionarPty, type ConfigVista } 
 import { Bloques, textoSeleccion } from "./bloques";
 import { Autocompletado } from "./autocompletado";
 import { apuntar, cargarHistorial } from "./historial";
-import { avisarSiToca } from "./avisos";
+import { avisarSiToca, avisarVisto } from "./avisos";
 import { registrarEnlaces, registrarEnlacesGithub } from "./enlaces";
 import { useKyu } from "./estado";
 import { aLaVista, nombreCorto, useActividad } from "./actividad";
@@ -118,6 +118,7 @@ export function obtener(item: string): Sesion {
     apuntar(b.orden ?? "", b.ruta, b.codigo ?? 0);
     void avisarSiToca(b, configuracion?.aviso_segundos ?? 10);
   };
+  bloques.alVer = (b, tipo, linea) => void avisarVisto(b, tipo, linea, configuracion?.aviso_segundos ?? 10, aLaVista(item));
   // Pestaña: el nombre de lo que corre (solo si dura más de 1 s, para que no parpadee
   // con cada `ls`) y, si acaba sin estar a la vista, cómo acabó.
   let esperaNombre: number | undefined;

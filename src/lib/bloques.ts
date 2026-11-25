@@ -37,7 +37,11 @@ export interface Bloque {
   locales?: string[];
   /** Puerto que la orden no pudo usar porque ya estaba ocupado (EADDRINUSE y parecidos). */
   ocupado?: number;
+  /** Lo que ya se avisó mientras corría (una vez por tipo). */
+  vigilado?: Set<Vigia>;
 }
+
+export type Vigia = "listo" | "error";
 
 interface DatosShell {
   ruta?: string;
@@ -64,6 +68,8 @@ export class Bloques {
   /** Empieza a correr una orden / acaba (también sin orden leída). Para la pestaña. */
   alEmpezar: ((b: Bloque) => void) | null = null;
   alAcabar: ((b: Bloque) => void) | null = null;
+  /** Mientras corre, la salida dice que ya está listo o que algo ha fallado (una vez por tipo). */
+  alVer: ((b: Bloque, tipo: Vigia, linea: string) => void) | null = null;
 
   constructor(private term: Terminal) {
     term.parser.registerOscHandler(133, (d) => this.marca(d));
@@ -269,6 +275,14 @@ export class Bloques {
     const nuevas = direccionesLocales(texto);
     if (nuevas.join() !== (b.locales ?? []).join()) b.locales = nuevas.length ? nuevas : undefined;
     b.ocupado = puertoOcupado(texto) ?? undefined;
+    // Lo de los primeros 3 s no se avisa: si acaba enseguida, ya avisa el final.
+    if (this.alVer && b.tInicio !== undefined && performance.now() - b.tInicio > 3000) {
+      for (const [tipo, linea] of vigilar(texto)) {
+        if (b.vigilado?.has(tipo)) continue;
+        (b.vigilado ??= new Set()).add(tipo);
+        this.alVer(b, tipo, linea);
+      }
+    }
   }
 
   dispose() {
@@ -316,6 +330,24 @@ export function puertoOcupado(texto: string): number | null {
     if (n > 0 && n <= 65535) return n;
   }
   return null;
+}
+
+// Frases de «ya está» de los servidores y herramientas de desarrollo más comunes.
+const LISTO = /\b(ready\b|compiled successfully|compiled\b.*\bin \d|listening (?:on|at)\b|server (?:is )?(?:running|started|listening)|running on https?:\/\/|local:\s+https?:\/\/|watching for (?:file )?changes|started server on)/i;
+// Errores de verdad (no «0 errors» ni «no errors found»): «error:», «error TS2322:»,
+// «error[E0308]:», «npm ERR!», FAILED, panics, trazas de Python…
+const ERROR = /(?:^|\s)(?:error(?:\s?[A-Z]+\d+|\[\w+\])?[:!]|err!)|\bFAILED\b|\bfailed to\b|panicked at|Traceback \(most recent call last\)|Unhandled (?:exception|rejection)|\bFATAL\b/i;
+const NO_ERROR = /\b(?:0|no) errors?\b/i;
+
+/** Primera línea de «listo» y de «error» que haya en el texto. */
+export function vigilar(texto: string): [Vigia, string][] {
+  const r: [Vigia, string][] = [];
+  const lineas = texto.split("\n");
+  const listo = lineas.find((l) => LISTO.test(l));
+  if (listo) r.push(["listo", listo.trim()]);
+  const error = lineas.find((l) => ERROR.test(l) && !NO_ERROR.test(l));
+  if (error) r.push(["error", error.trim()]);
+  return r;
 }
 
 /** Lo que se le manda a Claude de un bloque terminado. */
