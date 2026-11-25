@@ -103,7 +103,7 @@ Con el `git` y el `gh` de tu máquina (Kyu no guarda tokens):
 | Alt+flechas | Pasar al panel de al lado |
 | Ctrl+Mayús+B | Árbol de archivos |
 | Ctrl+F | Buscar en el terminal |
-| → · Ctrl+→ | Aceptar la sugerencia · palabra a palabra |
+| Tab · Ctrl+→ | Aceptar la sugerencia · palabra a palabra |
 | Ctrl+Clic / Mayús+Clic en una ruta | Abrir en Kyu / en VS Code |
 | Ctrl+Mayús+C | Ir a la última conversación con Claude / volver |
 | Ctrl+Mayús+K | Nueva conversación con Claude |

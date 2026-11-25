@@ -176,7 +176,7 @@ export function obtener(item: string): Sesion {
 
   // Ctrl+C copia si hay selección (si no, va a la shell); Ctrl+V pega.
   term.attachCustomKeyEventHandler((e) => {
-    // →, Ctrl+→, ↓, ↑ y Esc son del autocompletado mientras hay sugerencia.
+    // Tab, Ctrl+→, ↓, ↑ y Esc son del autocompletado mientras hay sugerencia.
     if (auto?.tecla(e)) {
       e.preventDefault();
       return false;

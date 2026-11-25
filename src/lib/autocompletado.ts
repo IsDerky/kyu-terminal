@@ -1,5 +1,5 @@
 // Autocompletado propio de Kyu: una sugerencia en gris detrás del cursor, sin menú.
-//   →      acepta la sugerencia entera        Ctrl+→  palabra a palabra
+//   Tab    acepta la sugerencia entera        Ctrl+→  palabra a palabra
 //   ↓ / ↑  siguiente / anterior sugerencia    Esc     la quita
 // Por orden: lo del historial usado en esta carpeta; luego lo que sale de aquí (scripts
 // del package.json, ramas, carpetas y archivos de la última palabra), y al final el resto
@@ -168,7 +168,8 @@ export class Autocompletado {
     const f = this.fantasma();
     if (!f) return false;
     const sin = !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey;
-    if (e.key === "ArrowRight" && sin) {
+    // Tab acepta la sugerencia; sin sugerencia, Tab sigue siendo el completado de la shell.
+    if (e.key === "Tab" && sin) {
       this.aceptar(f.resto);
       return true;
     }

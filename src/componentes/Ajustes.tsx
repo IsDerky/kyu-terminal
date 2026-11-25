@@ -60,7 +60,7 @@ const ATAJOS: [string, string][] = [
   ["Mover el foco entre paneles", "Alt+flechas"],
   ["Buscar en el terminal", "Ctrl+F"],
   ["Grabar el panel a GIF (empezar / parar)", "Ctrl+Mayús+G"],
-  ["Aceptar sugerencia · palabra a palabra", "→ · Ctrl+→"],
+  ["Aceptar sugerencia · palabra a palabra", "Tab · Ctrl+→"],
   ["Otra sugerencia · quitarla", "↓ ↑ · Esc"],
   ["Abrir archivo:línea en Kyu · en VS Code", "Ctrl+clic · Mayús+clic"],
 ];
