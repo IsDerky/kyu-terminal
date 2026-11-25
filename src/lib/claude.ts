@@ -249,6 +249,29 @@ export const useClaude = create<EstadoClaude>((set) => ({
 /** Espacio de una conversación («e3~2» → «e3»). */
 export const espacioDe = (cid: string) => cid.split("~")[0];
 
+/** Tipo de arrastre con una ruta (desde Archivos o una pestaña de archivo): en Claude, @ruta. */
+export const ARRASTRE_RUTA = "text/kyu-ruta";
+
+/**
+ * «@ruta» para la caja: relativa a `carpeta` si está dentro (con /, como en `claude`), si no
+ * absoluta; entre comillas si lleva espacios; las carpetas acaban en /.
+ */
+export function mencionDe(ruta: string, carpeta: string | null): string {
+  const esCarpeta = /[\\/]$/.test(ruta);
+  const limpia = ruta.replace(/[\\/]+$/, "");
+  const base = carpeta?.replace(/[\\/]+$/, "");
+  let r = limpia;
+  if (base && limpia.toLowerCase().startsWith(base.toLowerCase() + "\\")) r = limpia.slice(base.length + 1);
+  else if (base && limpia.toLowerCase().startsWith(base.toLowerCase() + "/")) r = limpia.slice(base.length + 1);
+  r = r.replace(/\\/g, "/") + (esCarpeta ? "/" : "");
+  return `@${/\s/.test(r) ? `"${r}"` : r}`;
+}
+
+/** Mete texto en la caja de una conversación, donde esté el cursor (la caja lo escucha). */
+export function insertarEnCaja(cid: string, texto: string) {
+  document.querySelector(`textarea[data-cid="${cid}"]`)?.dispatchEvent(new CustomEvent("kyu-insertar", { detail: texto }));
+}
+
 /** Dónde está la pestaña de una conversación: su espacio, su panel y su pestaña. */
 export function sitioDe(cid: string) {
   const k = useKyu.getState();

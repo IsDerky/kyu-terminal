@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, File, Folder, FolderOpen, RefreshCw } from "lucide-react";
 import { useKyu } from "../lib/estado";
-import { carpetaDelEspacio, useClaude } from "../lib/claude";
+import { ARRASTRE_RUTA, carpetaDelEspacio, useClaude } from "../lib/claude";
 import { arbolListar, gitEstado, type NodoArbol } from "../lib/nucleo";
 
 /** Carpetas abiertas de cada pestaña de árbol (sobreviven a mover o dividir el panel). */
@@ -82,6 +82,13 @@ export default function VistaArbol({ item }: { item: string }) {
         <button
           type="button"
           title={n.ruta}
+          draggable
+          // Soltado en Claude queda como @ruta.
+          onDragStart={(e) => {
+            e.dataTransfer.setData(ARRASTRE_RUTA, n.carpeta ? `${n.ruta.replace(/[\\/]+$/, "")}\\` : n.ruta);
+            e.dataTransfer.setData("text/plain", n.ruta);
+            e.dataTransfer.effectAllowed = "copy";
+          }}
           onClick={() => (n.carpeta ? alternar(n.ruta) : useKyu.getState().abrirArchivo(n.ruta, 1, 1))}
           className="flex h-6 w-full min-w-0 items-center gap-1.5 pr-2.5 text-left text-[12.5px] text-tenue hover:bg-hover hover:text-texto"
           style={{ paddingLeft: 8 + nivel * 16 }}

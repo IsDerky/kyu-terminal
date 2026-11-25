@@ -11,7 +11,7 @@ import VistaArbol from "./VistaArbol";
 const PanelClaude = lazy(() => import("./PanelClaude"));
 import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
-import { espacioDe, useClaude } from "../lib/claude";
+import { ARRASTRE_RUTA, espacioDe, useClaude } from "../lib/claude";
 
 type PanelNodo = Extract<Nodo, { tipo: "panel" }>;
 
@@ -91,7 +91,9 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.setData(TIPO_ARRASTRE, id);
-                  e.dataTransfer.effectAllowed = "move";
+                  // Un archivo soltado sobre la caja de Claude queda como @ruta.
+                  if (it.tipo === "archivo") e.dataTransfer.setData(ARRASTRE_RUTA, it.ruta);
+                  e.dataTransfer.effectAllowed = "copyMove";
                 }}
                 onClick={() => activar(panel.id, id)}
                 onAuxClick={(e) => e.button === 1 && void cerrarItem(id)}

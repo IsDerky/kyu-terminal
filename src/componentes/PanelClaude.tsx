@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Check, Clock, FolderOpen, History, ImageIcon, Info, ListPlus, Loader2, Pencil, Square, SquarePen, SquareTerminal, TextQuote, X } from "lucide-react";
+import { ArrowUp, AtSign, Check, Clock, FolderOpen, History, ImageIcon, Info, ListPlus, Loader2, Pencil, Square, SquarePen, SquareTerminal, TextQuote, X } from "lucide-react";
 import {
   añadirImagenes,
+  ARRASTRE_RUTA,
+  insertarEnCaja,
+  mencionDe,
   conversacionEnPanel,
   marcarUltima,
   cargarCatalogo,
@@ -87,7 +90,7 @@ export default function PanelClaude({
   const c: Conversacion = conv ?? vacia(prefs);
   const carpeta = c.claudeId !== null || c.estado === "cerrado" || c.reanudar ? c.carpeta : carpetaFoco;
   const [verSesiones, setVerSesiones] = useState(false);
-  const [soltando, setSoltando] = useState(false);
+  const [soltando, setSoltando] = useState<"imagen" | "ruta" | null>(null);
   const limite = limiteContexto(c);
   const porcentaje = Math.min(100, Math.round((c.tokens / limite) * 100));
   const permiso = pendiente(conv);
@@ -127,20 +130,30 @@ export default function PanelClaude({
   return (
     <section
       onKeyDown={teclas}
-      // Soltar imágenes en cualquier parte del panel.
+      // Soltar imágenes (y archivos desde la pestaña Archivos) en cualquier parte del panel.
+      // Las pestañas de archivo solo sobre la caja: en el resto del panel se mueven, como siempre.
       onDragOver={(e) => {
-        if (![...e.dataTransfer.items].some((i) => i.kind === "file")) return;
+        const tipos = e.dataTransfer.types;
+        const ruta = tipos.includes(ARRASTRE_RUTA) && !tipos.includes("text/kyu-item");
+        if (!ruta && ![...e.dataTransfer.items].some((i) => i.kind === "file")) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
-        setSoltando(true);
+        setSoltando(ruta ? "ruta" : "imagen");
       }}
       onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setSoltando(false);
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setSoltando(null);
       }}
       onDrop={(e) => {
+        const ruta = e.dataTransfer.types.includes("text/kyu-item") ? "" : e.dataTransfer.getData(ARRASTRE_RUTA);
+        if (ruta) {
+          e.preventDefault();
+          setSoltando(null);
+          insertarEnCaja(espacio, mencionDe(ruta, carpeta) + " ");
+          return;
+        }
         if (!e.dataTransfer.files.length) return;
         e.preventDefault();
-        setSoltando(false);
+        setSoltando(null);
         void imagenesDe(e.dataTransfer.files).then((l) => añadirImagenes(espacio, l));
       }}
       className="group/claude relative flex h-full w-full flex-col overflow-hidden bg-panel"
@@ -187,7 +200,15 @@ export default function PanelClaude({
       {soltando && (
         <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center border-2 border-dashed border-claude/60 bg-panel/80">
           <span className="flex items-center gap-2 text-[13px] text-texto">
-            <ImageIcon size={15} strokeWidth={1.8} /> Suelta las imágenes para Claude
+            {soltando === "ruta" ? (
+              <>
+                <AtSign size={15} strokeWidth={1.8} /> Suelta para añadirlo como @ruta
+              </>
+            ) : (
+              <>
+                <ImageIcon size={15} strokeWidth={1.8} /> Suelta las imágenes para Claude
+              </>
+            )}
           </span>
         </div>
       )}
@@ -582,11 +603,42 @@ function CajaEntrada({
     requestAnimationFrame(() => area.current?.focus());
   };
 
+  // Rutas soltadas en el panel (insertarEnCaja): van donde esté el cursor.
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    const alInsertar = (e: Event) => insertar((e as CustomEvent<string>).detail);
+    el.addEventListener("kyu-insertar", alInsertar);
+    return () => el.removeEventListener("kyu-insertar", alInsertar);
+  });
+  const [encima, setEncima] = useState(false);
+
   return (
     <div className={`flex-none border-t border-borde px-3 pb-3 pt-2.5 ${grande ? "border-t-0" : ""}`}>
       <div className={grande ? "mx-auto w-full max-w-[780px]" : undefined}>
       <Cola espacio={espacio} alEditar={editarDeCola} />
-      <div className="relative rounded-[10px] border border-borde2 bg-fondo focus-within:border-[#3a3a42]">
+      <div
+        // Una pestaña de archivo soltada sobre la caja queda como @ruta (en vez de moverse).
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes(ARRASTRE_RUTA)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "copy";
+          setEncima(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setEncima(false);
+        }}
+        onDrop={(e) => {
+          const ruta = e.dataTransfer.getData(ARRASTRE_RUTA);
+          setEncima(false);
+          if (!ruta) return;
+          e.preventDefault();
+          e.stopPropagation();
+          insertar(mencionDe(ruta, carpeta) + " ");
+        }}
+        className={`relative rounded-[10px] border bg-fondo focus-within:border-[#3a3a42] ${encima ? "border-acento" : "border-borde2"}`}
+      >
         {comandos && <MenuComandos comandos={comandos} elegido={sel} alElegir={completar} alPasar={setElegido} />}
         {!comandos && mencion && (
           <MenuArchivos rutas={rutas} elegido={selA} buscando={buscando} alElegir={ponerRuta} alPasar={setElegidoA} />

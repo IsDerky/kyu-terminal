@@ -19,7 +19,7 @@ Estado: en desarrollo (0.2). La primera versión, con egui, está en la etiqueta
 
 Cada conversación es una pestaña más, al lado de terminales y archivos: Ctrl+Mayús+C va a la última (o abre una a la derecha), Ctrl+Mayús+K abre otra y el botón «Claude» de la barra enseña todas, con cuál trabaja y cuál espera un permiso. Arranca Claude Code en la carpeta del terminal con el foco.
 
-- Modelo, esfuerzo y modo de permisos (Mayús+Tab), comandos con `/`, `@archivo`, imágenes pegadas o soltadas y desglose del contexto.
+- Modelo, esfuerzo y modo de permisos (Mayús+Tab), comandos con `/`, `@archivo` (también arrastrando desde Archivos o una pestaña), imágenes pegadas o soltadas y desglose del contexto.
 - Alt+K manda lo seleccionado en el terminal o en el editor (con su archivo y líneas) para preguntar sobre ello.
 - Permisos con el diff del cambio; los planes se aprueban desde el panel.
 - Varias conversaciones a la vez, mensajes en cola mientras trabaja, reanudar las anteriores y volver a un mensaje (conversación, archivos o las dos cosas).
