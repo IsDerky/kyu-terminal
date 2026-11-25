@@ -1,6 +1,7 @@
 //! Configuración de `kyu.toml`: perfiles de shell, fuente y colores del tema.
 //!
-//! El archivo vive en `<config>/kyu/kyu.toml` (en Windows `%APPDATA%\kyu\kyu.toml`).
+//! El archivo vive en `<config>/kyu/kyu.toml` (en Windows `%APPDATA%\kyu\kyu.toml`), o en
+//! `datos\kyu.toml` junto al ejecutable en la versión portable (ver `carpeta_kyu`).
 //! Si no existe se usan los valores de aquí: aspecto «Sobrio» y los perfiles que haya
 //! en el equipo (PowerShell, Git Bash, WSL…).
 
@@ -181,7 +182,7 @@ pub fn config() -> ConfigVista {
 
 impl Config {
     pub fn cargar() -> Self {
-        let Some(ruta) = dirs::config_dir().map(|d| d.join("kyu").join("kyu.toml")) else {
+        let Some(ruta) = carpeta_kyu().map(|d| d.join("kyu.toml")) else {
             return Self::default();
         };
         match std::fs::read_to_string(&ruta) {
@@ -328,7 +329,7 @@ fn wslenv() -> String {
 /// Deja el script del prompt de bash en `<config>/kyu/shell/kyu.bash` (sin BOM, en LF).
 fn preparar_prompt_bash() -> Option<std::path::PathBuf> {
     const SCRIPT: &str = include_str!("../../shell/kyu.bash");
-    let carpeta = dirs::config_dir()?.join("kyu").join("shell");
+    let carpeta = carpeta_kyu()?.join("shell");
     std::fs::create_dir_all(&carpeta).ok()?;
     let ruta = carpeta.join("kyu.bash");
     let bytes = SCRIPT.replace("\r\n", "\n").into_bytes();
@@ -459,7 +460,7 @@ fn detectar_perfiles() -> Vec<Perfil> {
 #[cfg(windows)]
 fn preparar_prompt_pwsh() -> Option<std::path::PathBuf> {
     const SCRIPT: &str = include_str!("../../shell/kyu.ps1");
-    let carpeta = dirs::config_dir()?.join("kyu").join("shell");
+    let carpeta = carpeta_kyu()?.join("shell");
     std::fs::create_dir_all(&carpeta).ok()?;
     let ruta = carpeta.join("kyu.ps1");
     let mut bytes = vec![0xEF, 0xBB, 0xBF];
@@ -479,4 +480,28 @@ fn which(programa: &str) -> Option<String> {
             .find(|p| p.is_file())
             .map(|p| p.to_string_lossy().into_owned())
     })
+}
+
+/// Archivo que marca la versión portable: si está junto al ejecutable, todo lo de Kyu
+/// (kyu.toml, scripts del prompt y datos de WebView2) va a `datos\` en esa carpeta.
+const MARCA_PORTABLE: &str = "kyu.portable";
+
+/// Carpeta `datos` de la versión portable, o None si es la instalada.
+pub fn carpeta_portable() -> Option<&'static std::path::Path> {
+    static CARPETA: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    CARPETA
+        .get_or_init(|| {
+            let exe = std::env::current_exe().ok()?;
+            let junto = exe.parent()?;
+            junto.join(MARCA_PORTABLE).is_file().then(|| junto.join("datos"))
+        })
+        .as_deref()
+}
+
+/// Carpeta de Kyu: `datos\` en la portable, `<config>/kyu` en la instalada.
+pub fn carpeta_kyu() -> Option<std::path::PathBuf> {
+    match carpeta_portable() {
+        Some(c) => Some(c.to_path_buf()),
+        None => dirs::config_dir().map(|d| d.join("kyu")),
+    }
 }

@@ -37,7 +37,7 @@ pub struct AjustesVista {
 }
 
 pub fn ruta_config() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join("kyu").join("kyu.toml"))
+    crate::config::carpeta_kyu().map(|d| d.join("kyu.toml"))
 }
 
 #[tauri::command]

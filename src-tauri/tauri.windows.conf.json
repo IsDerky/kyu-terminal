@@ -3,6 +3,13 @@
     "resources": {
       "conpty/conpty.dll": "conpty.dll",
       "conpty/OpenConsole.exe": "OpenConsole.exe"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Spanish", "English"],
+        "displayLanguageSelector": false
+      }
     }
   }
 }

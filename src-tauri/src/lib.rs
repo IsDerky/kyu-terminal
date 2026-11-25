@@ -17,6 +17,12 @@ mod sistema;
 mod uso;
 
 pub fn run() {
+    // Portable: WebView2 guarda sesión, historial y caché en datos\webview, no en
+    // %LOCALAPPDATA%. La variable manda sobre la carpeta que le pasa Tauri.
+    if let Some(datos) = config::carpeta_portable() {
+        // SAFETY: aún no hay más hilos; nadie lee el entorno a la vez.
+        unsafe { std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", datos.join("webview")) };
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
