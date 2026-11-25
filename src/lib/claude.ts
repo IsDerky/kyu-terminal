@@ -193,12 +193,23 @@ interface EstadoClaude {
   verContexto: boolean;
   /** Texto que vuelve a la caja al volver a un punto, por espacio. */
   borradores: Record<string, string>;
+  /** Mensajes escritos mientras Claude trabajaba, por conversación: salen al acabar el turno. */
+  colas: Record<string, EnCola[]>;
   /** Cuentas de Claude de kyu.toml (vacío = solo la de siempre, sin selector). */
   cuentas: string[];
   /** Sugerencias de respuesta activas (kyu.toml). */
   sugerencias: boolean;
   mostrar: (visible: boolean) => void;
   quitarAviso: (id: number) => void;
+}
+
+/** Un mensaje en cola, con lo que llevaba adjunto al escribirlo. */
+export interface EnCola {
+  id: number;
+  texto: string;
+  adjunto?: TextoBloque;
+  seleccion?: Seleccion;
+  imagenes: ImagenAdjunta[];
 }
 
 export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Conversacion => ({
@@ -241,6 +252,7 @@ export const useClaude = create<EstadoClaude>((set) => ({
   prefs: prefsGuardadas(),
   verContexto: false,
   borradores: {},
+  colas: {},
   cuentas: [],
   sugerencias: true,
   mostrar: (visible) => set({ visible }),
@@ -312,6 +324,7 @@ export async function sacarAPanel(espacio: string) {
 export function cerrarConversacion(cid: string) {
   const c = useClaude.getState().conversaciones[cid];
   if (c?.claudeId != null) void cerrarClaude(c.claudeId);
+  olvidarCola(cid);
   useClaude.setState((s) => {
     const { [cid]: _, ...conversaciones } = s.conversaciones;
     const { [cid]: __, ...selecciones } = s.selecciones;
@@ -342,6 +355,7 @@ export function cerrarPestana(cid: string) {
   const espacio = espacioDe(cid);
   const c = useClaude.getState().conversaciones[cid];
   if (c?.claudeId != null) void cerrarClaude(c.claudeId);
+  olvidarCola(cid);
   useClaude.setState((s) => {
     const lista = pestanasDe(espacio, s);
     const i = lista.indexOf(cid);
@@ -549,6 +563,7 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       void refrescarContexto(espacio);
       void resumirCambios(espacio);
       void refrescarGasto();
+      alAcabarTurno(espacio);
       return;
     case "error":
       añadir(espacio, { tipo: "error", texto: ev.texto });
@@ -556,6 +571,9 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
     case "cerrado":
       // Al volver a escribir se sigue la misma conversación (--resume), en la misma carpeta.
       cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, reanudar: c.sesion }));
+      // Cerrado a media respuesta: lo que esperaba en cola vuelve a la caja.
+      parados.delete(espacio);
+      devolverCola(espacio);
       return;
   }
 }
@@ -824,9 +842,13 @@ export async function reanudar(espacio: string, carpeta: string, id: string, tit
   }));
 }
 
-export async function enviar(espacio: string, texto: string) {
+/**
+ * Manda un mensaje con lo adjunto en ese momento (o, con `deCola`, lo que llevaba al ponerlo
+ * en cola). Si Claude está trabajando, se queda en cola y sale al acabar el turno.
+ */
+export async function enviar(espacio: string, texto: string, deCola?: EnCola) {
   let c = conversacion(espacio);
-  if (c.estado === "arrancando" || c.estado === "pensando") return;
+  if (c.estado === "arrancando" || c.estado === "pensando") return encolar(espacio, texto);
   // Comandos que resuelve Kyu sin Claude.
   const orden = texto.trim().toLowerCase();
   if (orden === "/clear" || orden === "/new") return nueva(espacio);
@@ -834,12 +856,19 @@ export async function enviar(espacio: string, texto: string) {
     useClaude.setState({ verContexto: true });
     return void refrescarContexto(espacio);
   }
-  const adjunto = useClaude.getState().adjuntos[espacio];
-  if (adjunto) quitarAdjunto(espacio);
-  const imagenes = useClaude.getState().imagenes[espacio] ?? [];
-  if (imagenes.length) useClaude.setState((s) => ({ imagenes: { ...s.imagenes, [espacio]: [] } }));
-  const seleccion = useClaude.getState().selecciones[espacio];
-  if (seleccion) quitarSeleccion(espacio);
+  let adjunto: TextoBloque | undefined;
+  let seleccion: Seleccion | undefined;
+  let imagenes: ImagenAdjunta[];
+  if (deCola) {
+    ({ adjunto, seleccion, imagenes } = deCola);
+  } else {
+    adjunto = useClaude.getState().adjuntos[espacio];
+    if (adjunto) quitarAdjunto(espacio);
+    imagenes = useClaude.getState().imagenes[espacio] ?? [];
+    if (imagenes.length) useClaude.setState((s) => ({ imagenes: { ...s.imagenes, [espacio]: [] } }));
+    seleccion = useClaude.getState().selecciones[espacio];
+    if (seleccion) quitarSeleccion(espacio);
+  }
   let mensaje = adjunto ? conAdjunto(texto, adjunto) : texto;
   if (seleccion) mensaje = conSeleccion(mensaje, seleccion);
   añadir(espacio, {
@@ -914,13 +943,108 @@ export async function responder(espacio: string, entrada: number, respuesta: Res
 
 export function parar(espacio: string) {
   const c = conversacion(espacio);
-  if (c.claudeId !== null && (c.estado === "pensando" || c.estado === "arrancando")) void pararClaude(c.claudeId);
+  if (c.claudeId !== null && (c.estado === "pensando" || c.estado === "arrancando")) {
+    // Al parar, la cola no sale sola: vuelve a la caja (como en Claude Code).
+    parados.add(espacio);
+    void pararClaude(c.claudeId);
+  }
+}
+
+// ---------- Cola ----------
+
+/** Conversaciones paradas a mano: al llegar su fin, la cola vuelve a la caja. */
+const parados = new Set<string>();
+
+const colaDe = (espacio: string) => useClaude.getState().colas[espacio] ?? [];
+
+function ponerCola(espacio: string, cola: EnCola[]) {
+  useClaude.setState((s) => {
+    const { [espacio]: _, ...resto } = s.colas;
+    return { colas: cola.length ? { ...resto, [espacio]: cola } : resto };
+  });
+}
+
+/** Deja el mensaje en cola, con lo que haya adjunto ahora (eso se quita de la caja). */
+export function encolar(espacio: string, texto: string) {
+  const s = useClaude.getState();
+  const item: EnCola = {
+    id: ++contador,
+    texto,
+    adjunto: s.adjuntos[espacio],
+    seleccion: s.selecciones[espacio],
+    imagenes: s.imagenes[espacio] ?? [],
+  };
+  if (item.adjunto) quitarAdjunto(espacio);
+  if (item.seleccion) quitarSeleccion(espacio);
+  if (item.imagenes.length) useClaude.setState((x) => ({ imagenes: { ...x.imagenes, [espacio]: [] } }));
+  ponerCola(espacio, [...colaDe(espacio), item]);
+}
+
+/** Devuelve lo adjunto de esos mensajes a la caja (la selección y la orden, la última). */
+function devolverAdjuntos(espacio: string, items: EnCola[]) {
+  useClaude.setState((s) => {
+    const adjunto = [...items].reverse().find((i) => i.adjunto)?.adjunto;
+    const seleccion = [...items].reverse().find((i) => i.seleccion)?.seleccion;
+    const imagenes = [...(s.imagenes[espacio] ?? []), ...items.flatMap((i) => i.imagenes)].slice(0, 8);
+    return {
+      adjuntos: adjunto ? { ...s.adjuntos, [espacio]: adjunto } : s.adjuntos,
+      selecciones: seleccion ? { ...s.selecciones, [espacio]: seleccion } : s.selecciones,
+      imagenes: { ...s.imagenes, [espacio]: imagenes },
+    };
+  });
+}
+
+/** Saca un mensaje de la cola para editarlo: devuelve su texto y sus adjuntos vuelven a la caja. */
+export function sacarDeCola(espacio: string, id: number): string {
+  const item = colaDe(espacio).find((i) => i.id === id);
+  if (!item) return "";
+  ponerCola(espacio, colaDe(espacio).filter((i) => i.id !== id));
+  devolverAdjuntos(espacio, [item]);
+  return item.texto;
+}
+
+export function quitarDeCola(espacio: string, id: number) {
+  ponerCola(espacio, colaDe(espacio).filter((i) => i.id !== id));
+}
+
+/** Al acabar un turno: sale el siguiente de la cola o, si se paró a mano, vuelve todo a la caja. */
+function alAcabarTurno(espacio: string) {
+  if (parados.delete(espacio)) return devolverCola(espacio);
+  const [primero, ...resto] = colaDe(espacio);
+  if (!primero) return;
+  ponerCola(espacio, resto);
+  // Un comando que resuelve Kyu (/clear, /context) no abre turno: se sigue con la cola.
+  const orden = primero.texto.trim().toLowerCase();
+  const local = orden === "/clear" || orden === "/new" || (orden === "/context" && conversacion(espacio).claudeId !== null);
+  void enviar(espacio, primero.texto, primero);
+  if (local) alAcabarTurno(espacio);
+}
+
+/** Toda la cola vuelve a la caja (al parar, o si Claude se cierra a media respuesta). */
+function devolverCola(espacio: string) {
+  const cola = colaDe(espacio);
+  if (!cola.length) return;
+  ponerCola(espacio, []);
+  devolverAdjuntos(espacio, cola);
+  const texto = cola.map((i) => i.texto).filter(Boolean).join("\n\n");
+  if (texto) useClaude.setState((s) => ({ borradores: { ...s.borradores, [espacio]: texto } }));
+}
+
+/** Olvida la cola de una conversación que se cierra. */
+function olvidarCola(espacio: string) {
+  parados.delete(espacio);
+  ponerCola(espacio, []);
 }
 
 /** Cierra el proceso y empieza de cero (en la carpeta del terminal con el foco, al escribir). */
 export function nueva(espacio: string) {
   const c = conversacion(espacio);
   if (c.claudeId !== null) void cerrarClaude(c.claudeId);
+  // Si estaba trabajando, lo que esperaba en cola vuelve a la caja (no se manda a la nueva).
+  if (c.estado === "arrancando" || c.estado === "pensando") {
+    parados.delete(espacio);
+    devolverCola(espacio);
+  }
   // Se queda con lo elegido en la conversación que se cierra.
   useClaude.setState((s) => ({
     verContexto: false,
@@ -1081,6 +1205,7 @@ export function limpiar(espacios: string[]) {
     if (!espacios.includes(espacioDe(id))) {
       const c = conversacion(id);
       if (c.claudeId !== null) void cerrarClaude(c.claudeId);
+      olvidarCola(id);
       useClaude.setState((s) => {
         const { [id]: _, ...resto } = s.conversaciones;
         const { [espacioDe(id)]: __, ...pestanas } = s.pestanas;

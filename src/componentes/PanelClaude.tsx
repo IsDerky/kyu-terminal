@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Check, FolderOpen, History, ImageIcon, Info, Loader2, Maximize2, Minimize2, Plus, Square, SquarePen, SquareSplitHorizontal, SquareTerminal, TextQuote, X } from "lucide-react";
+import { ArrowUp, Check, Clock, FolderOpen, History, ImageIcon, Info, ListPlus, Loader2, Maximize2, Minimize2, Pencil, Plus, Square, SquarePen, SquareSplitHorizontal, SquareTerminal, TextQuote, X } from "lucide-react";
 import {
   activarPestana,
   añadirImagenes,
@@ -17,8 +17,10 @@ import {
   pendiente,
   nombreSeleccion,
   quitarAdjunto,
+  quitarDeCola,
   quitarImagen,
   quitarSeleccion,
+  sacarDeCola,
   refrescarContexto,
   responder,
   siguienteModo,
@@ -27,6 +29,7 @@ import {
   vacia,
   ID_ENTRADA,
   type Conversacion,
+  type EnCola,
   type Entrada,
   type Seleccion,
 } from "../lib/claude";
@@ -563,7 +566,10 @@ function CajaEntrada({
   useEffect(() => {
     if (borrador === undefined) return;
     const t = tomarBorrador(espacio) ?? "";
-    setTexto(t);
+    // Lo que ya hubiera escrito en la caja se queda detrás.
+    const antes = area.current?.value.trim() ?? "";
+    const nuevo = antes && t ? `${t}\n\n${antes}` : t || antes;
+    setTexto(nuevo);
     requestAnimationFrame(() => {
       area.current?.focus();
       area.current?.setSelectionRange(t.length, t.length);
@@ -658,16 +664,23 @@ function CajaEntrada({
     el.style.height = `${Math.min(el.scrollHeight, 170)}px`;
   }, [texto]);
 
+  const conAlgo = !!texto.trim() || !!adjunto || !!seleccion || imagenes.length > 0;
+  // Con Claude trabajando, `enviar` lo deja en cola.
   const mandar = () => {
-    const t = texto.trim();
-    if ((!t && !adjunto && !seleccion && !imagenes.length) || ocupado) return;
+    if (!conAlgo) return;
     setTexto("");
-    void enviar(espacio, t);
+    void enviar(espacio, texto.trim());
+  };
+  const editarDeCola = (id: number) => {
+    const t = sacarDeCola(espacio, id);
+    setTexto((antes) => (antes.trim() ? `${antes}\n${t}` : t));
+    requestAnimationFrame(() => area.current?.focus());
   };
 
   return (
     <div className={`flex-none border-t border-borde px-3 pb-3 pt-2.5 ${grande ? "border-t-0" : ""}`}>
       <div className={grande ? "mx-auto w-full max-w-[780px]" : undefined}>
+      <Cola espacio={espacio} alEditar={editarDeCola} />
       <div className="relative rounded-[10px] border border-borde2 bg-fondo focus-within:border-[#3a3a42]">
         {comandos && <MenuComandos comandos={comandos} elegido={sel} alElegir={completar} alPasar={setElegido} />}
         {!comandos && mencion && (
@@ -701,9 +714,11 @@ function CajaEntrada({
                   ? "Pregunta sobre la selección, o Intro para que la explique"
                   : imagenes.length
                   ? "Pregunta sobre la imagen"
-                  : sugerencia
-                    ? `${sugerencia}  · Tab`
-                    : "Escribe a Claude · @ archivos · / comandos"
+                  : ocupado
+                    ? "Lo que escribas queda en cola · Esc para"
+                    : sugerencia
+                      ? `${sugerencia}  · Tab`
+                      : "Escribe a Claude · @ archivos · / comandos"
           }
           onChange={(e) => {
             setTexto(e.target.value);
@@ -816,14 +831,26 @@ function CajaEntrada({
           }}
         />
         {ocupado ? (
-          <button
-            type="button"
-            title="Parar (Esc)"
-            onClick={() => parar(espacio)}
-            className="absolute bottom-1 right-1.5 grid size-6 place-items-center rounded-lg bg-hover text-texto hover:bg-borde2"
-          >
-            <Square size={11} fill="currentColor" />
-          </button>
+          <>
+            {conAlgo && permiso === null && (
+              <button
+                type="button"
+                title="Dejar en cola (Intro): sale al acabar Claude"
+                onClick={mandar}
+                className="absolute bottom-1 right-9 grid size-6 place-items-center rounded-lg bg-texto text-fondo"
+              >
+                <ListPlus size={14} strokeWidth={2.2} />
+              </button>
+            )}
+            <button
+              type="button"
+              title="Parar (Esc)"
+              onClick={() => parar(espacio)}
+              className="absolute bottom-1 right-1.5 grid size-6 place-items-center rounded-lg bg-hover text-texto hover:bg-borde2"
+            >
+              <Square size={11} fill="currentColor" />
+            </button>
+          </>
         ) : (
           <button
             type="button"
@@ -837,6 +864,50 @@ function CajaEntrada({
         )}
       </div>
       </div>
+    </div>
+  );
+}
+
+const SIN_COLA: EnCola[] = [];
+
+/** Mensajes en cola encima de la caja: salen solos al acabar Claude; se pueden editar o quitar. */
+function Cola({ espacio, alEditar }: { espacio: string; alEditar: (id: number) => void }) {
+  const cola = useClaude((s) => s.colas[espacio] ?? SIN_COLA);
+  if (!cola.length) return null;
+  return (
+    <div className="mb-1.5 flex flex-col gap-1">
+      {cola.map((m, i) => {
+        const extra = [m.adjunto && "orden", m.seleccion && "selección", m.imagenes.length && `${m.imagenes.length} img`].filter(Boolean);
+        return (
+          <div
+            key={m.id}
+            className="group flex h-7 items-center gap-2 rounded-md border border-dashed border-borde2 bg-fondo/60 pl-2 pr-1 text-[12px] text-tenue"
+          >
+            <Clock size={11} className="flex-none text-muy" />
+            <span className="flex-none text-[10.5px] uppercase tracking-wide text-muy">{i === 0 ? "Siguiente" : `En cola ${i + 1}`}</span>
+            <span className="min-w-0 flex-1 truncate text-texto/80" title={m.texto}>
+              {m.texto.split("\n")[0] || "(solo lo adjunto)"}
+            </span>
+            {extra.length > 0 && <span className="flex-none text-[10.5px] text-muy">+ {extra.join(", ")}</span>}
+            <button
+              type="button"
+              title="Editar: vuelve a la caja"
+              onClick={() => alEditar(m.id)}
+              className="grid size-5 flex-none place-items-center rounded text-muy hover:bg-hover hover:text-texto"
+            >
+              <Pencil size={11} />
+            </button>
+            <button
+              type="button"
+              title="Quitar de la cola"
+              onClick={() => quitarDeCola(espacio, m.id)}
+              className="grid size-5 flex-none place-items-center rounded text-muy hover:bg-hover hover:text-texto"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
