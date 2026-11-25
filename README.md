@@ -2,22 +2,40 @@
 
 Terminal para Windows y Linux con Claude Code integrado. Núcleo en Rust con Tauri 2; la interfaz es React y el terminal lo dibuja xterm.js.
 
-Estado: en desarrollo. La versión anterior, con egui (shell y panel de Claude), está en la etiqueta `v0-egui`.
+Estado: en desarrollo (0.2). La primera versión, con egui, está en la etiqueta `v0-egui`.
 
-## Qué hace ahora
+## Terminal
 
-- **Espacios de trabajo** (las pestañas de arriba, uno por proyecto). Dentro, los paneles que quieras, divididos a la derecha o abajo y redimensionables; cada panel tiene sus propias pestañas de terminales y archivos. Las pestañas se arrastran a otro panel o al borde de uno para dividirlo.
-- **Perfiles**: PowerShell, Git Bash, WSL y Símbolo del sistema se detectan solos; se pueden definir otros en `kyu.toml`.
-- **Bloques**: cada orden lleva encima un título con la carpeta, la rama de git, la RAM del equipo y, a la derecha, el resultado, lo que tardó y la hora; en el lateral, una franja verde, roja o morada. De momento con PowerShell (el prompt de Kyu).
-- **Archivos dentro de Kyu**: Ctrl+Clic en una ruta de la salida (`src/main.rs:12:5`) abre el archivo en un editor propio, en esa línea, con colores de código; Ctrl+S guarda. Mayús+Clic lo abre en VS Code.
-- **Buscar** en el terminal (Ctrl+F) y **paleta de órdenes** (Ctrl+Mayús+P).
-- Ctrl+C copia si hay selección (si no, interrumpe), Ctrl+V pega; clic derecho copia o pega. Sugerencias del historial en gris con PSReadLine 2.1 o superior.
+- **Espacios de trabajo** (las pestañas de arriba, uno por proyecto). Dentro, paneles divididos a la derecha o abajo, cada uno con sus pestañas de terminales y archivos; se arrastran de un panel a otro. Al abrir Kyu vuelve todo como estaba (se puede apagar).
+- **Perfiles**: PowerShell, Git Bash, WSL y Símbolo del sistema se detectan solos, y cada `Host` de `~/.ssh/config` sale como perfil SSH. Se pueden definir otros en `kyu.toml`.
+- **Bloques**: cada orden lleva encima un título con la carpeta, la rama de git y la RAM, y a la derecha el resultado, lo que tardó y la hora. Funciona con PowerShell y bash (Git Bash, WSL, Linux).
+- **Autocompletado** en gris mientras escribes: historial de la carpeta, scripts de `package.json`, ramas de git, carpetas y archivos.
+- **Archivos**: Ctrl+Clic en una ruta de la salida (`src/main.rs:12:5`) la abre en el editor de Kyu en esa línea; Mayús+Clic, en VS Code. Pestaña con el árbol de la carpeta y el estado de git (Ctrl+Mayús+B).
+- Botón para abrir en el navegador los `localhost:puerto` que salen mientras corre una orden.
+- Imágenes sixel (Kyu lleva su propio ConPTY, el de Windows se las come).
+- Aviso de Windows cuando acaba una orden larga y no estás mirando, grabación del panel a GIF y pantalla de ajustes (Ctrl+,) que escribe en `kyu.toml` sin perder sus comentarios.
+
+## Claude Code
+
+Panel a la derecha (Ctrl+Mayús+C, o a pantalla grande con Ctrl+Mayús+X) que arranca Claude Code en la carpeta del terminal con el foco.
+
+- Modelo, esfuerzo y modo de permisos (Mayús+Tab), comandos con `/`, `@archivo`, imágenes pegadas o soltadas y desglose del contexto.
+- Permisos con el diff del cambio; los planes se aprueban desde el panel.
+- Varias conversaciones por espacio, reanudar las anteriores y volver a un mensaje (conversación, archivos o las dos cosas).
+- Los archivos que cambia Claude se abren con lo cambiado marcado, y se puede deshacer.
+- Respuesta sugerida en gris tras cada turno (Tab la usa).
+- Varias cuentas: cada una con su sesión y el mismo historial; se cambia desde el pie del panel y la conversación sigue con la otra.
+- Claude puede leer tus terminales y ejecutar órdenes en uno a la vista, siempre con permiso.
+- Uso por día y por proyecto, y límite diario con aviso.
 
 ## Atajos
 
 | Atajo | Qué hace |
 |---|---|
 | Ctrl+Mayús+P | Paleta de órdenes |
+| Ctrl+, | Ajustes |
+| Ctrl+Mayús+C / Ctrl+Mayús+X | Panel de Claude / Claude a pantalla grande |
+| Mayús+Tab (en el panel) | Siguiente modo de permisos |
 | Ctrl+Mayús+D / Ctrl+Mayús+E | Dividir el panel a la derecha / abajo |
 | Ctrl+Mayús+T | Nueva pestaña en el panel |
 | Ctrl+Mayús+N | Nuevo espacio |
@@ -25,7 +43,10 @@ Estado: en desarrollo. La versión anterior, con egui (shell y panel de Claude),
 | Ctrl+Tab / Ctrl+Mayús+Tab | Pestaña siguiente / anterior del panel |
 | Ctrl+1 … Ctrl+9 | Ir al espacio n.º |
 | Alt+flechas | Pasar al panel de al lado |
+| Ctrl+Mayús+B | Árbol de archivos |
+| Ctrl+Mayús+G | Grabar el panel a GIF (empezar / parar) |
 | Ctrl+F | Buscar en el terminal |
+| → · Ctrl+→ | Aceptar la sugerencia · palabra a palabra |
 | Ctrl+Clic / Mayús+Clic en una ruta | Abrir en Kyu / en VS Code |
 
 ## Compilar
@@ -51,40 +72,51 @@ pnpm tauri dev      # en desarrollo, con recarga
 pnpm tauri build    # instaladores en src-tauri/target/release/bundle
 ```
 
-El ejecutable se llama `kyu`.
+Versión portable (Windows), después de `pnpm tauri build`: `powershell -File scripts/portable.ps1`. Con el archivo `kyu.portable` junto a `kyu.exe`, la configuración y los datos van a `datos\` en esa carpeta.
 
 ## Estructura
 
 ```
-src/lib/          estado (espacios, paneles, pestañas), registros de terminales y
-                  editores, bloques, enlaces a archivos, órdenes al núcleo
-src/componentes/  barra de título, espacio, panel, terminal, editor, paleta
-src-tauri/        núcleo en Rust: PTY, perfiles y configuración, archivos, RAM
-shell/            prompt de PowerShell que Kyu carga en cada shell
+src/lib/          estado (espacios, paneles, pestañas), terminales, bloques, editores,
+                  panel de Claude, sesión, órdenes al núcleo
+src/componentes/  barra de título, espacio, panel, terminal, editor, árbol, Claude, ajustes
+src-tauri/src/    núcleo: PTY, configuración, Claude Code (stream-json), cuentas,
+                  servidor MCP de Kyu, archivos, git, GIF, uso
+src-tauri/conpty/ ConPTY oficial de Microsoft (ver LEEME.md)
+shell/            prompts de PowerShell y bash que Kyu carga en cada shell
+bench/            medidas de arranque, memoria y salida frente a Windows Terminal
 ```
 
 ## Configuración
 
-`kyu.toml` en `%APPDATA%\kyu\` (Windows) o `~/.config/kyu/` (Linux). Todo es opcional:
+`kyu.toml` en `%APPDATA%\kyu\` (Windows) o `~/.config/kyu/` (Linux). Casi todo se cambia desde Ajustes; todo es opcional:
 
 ```toml
 fuente = "JetBrainsMono Nerd Font Mono" # nombre de la familia, no la ruta al archivo
 sin_prompt = false                      # true = dejar el prompt de tu perfil (oh-my-posh, starship...)
+perfil_predeterminado = "PowerShell"
+restaurar_sesion = true
+perfiles_ssh = true                     # un perfil por cada Host de ~/.ssh/config
+aviso_segundos = 10                     # 0 = sin avisos
+limite_diario = 0                       # miles de tokens de salida de Claude al día; 0 = sin límite
+sugerencias_claude = true
 
-# Si pones perfiles, sustituyen a los detectados. El primero es el predeterminado.
-[[perfiles]]
-nombre = "PowerShell"
-shell = "powershell.exe"
-argumentos = ["-NoLogo"]
-color = "#a78bfa"
-icono = "powershell"     # powershell, bash, linux, cmd, servidor
-
+# Si pones perfiles, sustituyen a los detectados.
 [[perfiles]]
 nombre = "Ubuntu"
 shell = "wsl.exe"
 argumentos = ["-d", "Ubuntu"]
 color = "#fbbf24"
-icono = "linux"
+icono = "linux"          # powershell, bash, linux, cmd, servidor
+
+# Cuentas de Claude Code. La que no tiene carpeta es la de siempre (~/.claude).
+[[cuentas_claude]]
+nombre = "Personal"
+
+[[cuentas_claude]]
+nombre = "Trabajo"
+carpeta = "~/.claude-trabajo"
+compartir = true         # historial, memoria, agentes, skills y ajustes de la principal
 
 [tema]
 fuente_tamano = 14
