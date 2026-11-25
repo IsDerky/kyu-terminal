@@ -9,6 +9,7 @@ mod autocompletar;
 mod claude;
 mod config;
 mod cuentas;
+mod entorno;
 mod git;
 mod grabar;
 mod mcp;
@@ -71,6 +72,7 @@ pub fn run() {
             archivos::archivo_leer,
             archivos::archivo_guardar,
             archivos::archivo_borrar,
+            entorno::entorno_leer,
             puertos::puerto_quien,
             puertos::proceso_matar,
             arbol::arbol_listar,

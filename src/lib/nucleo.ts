@@ -74,6 +74,15 @@ export const carpetaPty = (id: number) => invoke<string | null>("pty_carpeta", {
 
 /** Quién escucha en un puerto TCP (null si nadie o no se sabe). */
 export const quienEnPuerto = (puerto: number) => invoke<{ pid: number; nombre: string } | null>("puerto_quien", { puerto });
+export interface Variable { nombre: string; valor: string }
+export interface Entorno {
+  proceso: Variable[];
+  path: { ruta: string; existe: boolean }[];
+  ficheros: { nombre: string; variables: Variable[] }[];
+}
+/** Variables que heredan las shells y los .env* de `carpeta`. */
+export const leerEntorno = (carpeta: string | null) => invoke<Entorno>("entorno_leer", { carpeta });
+
 /** Cierra un proceso (en Windows, con sus hijos). */
 export const matarProceso = (pid: number) => invoke<void>("proceso_matar", { pid });
 

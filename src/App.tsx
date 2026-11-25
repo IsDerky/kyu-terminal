@@ -6,11 +6,12 @@ import Espacio from "./componentes/Espacio";
 import Paleta from "./componentes/Paleta";
 import BarraEstado from "./componentes/BarraEstado";
 import ElegirIssue from "./componentes/ElegirIssue";
+import Entorno from "./componentes/Entorno";
 // Se cargan la primera vez que se abren (menos memoria si no se usan).
 const Ajustes = lazy(() => import("./componentes/Ajustes"));
 const Uso = lazy(() => import("./componentes/Uso"));
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
-import { configurarClaude, irAClaude, limpiar, nuevaConversacion } from "./lib/claude";
+import { carpetaDelEspacio, configurarClaude, irAClaude, limpiar, nuevaConversacion } from "./lib/claude";
 import { escucharMcp } from "./lib/mcp";
 import { alternarGrabacion } from "./lib/grabar";
 import { focoActual, paneles, useKyu } from "./lib/estado";
@@ -51,6 +52,7 @@ function alternarClaude() {
 export default function App() {
   const [config, setConfig] = useState<ConfigVista | null>(null);
   const [issues, setIssues] = useState(false);
+  const [entorno, setEntorno] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const espacios = useKyu((s) => s.espacios);
   const activo = useKyu((s) => s.activo);
@@ -102,10 +104,13 @@ export default function App() {
   useEffect(() => {
     const dejar = vigilarGit();
     const abrir = () => setIssues(true);
+    const abrirEntorno = () => setEntorno(true);
     window.addEventListener("kyu-issues", abrir);
+    window.addEventListener("kyu-entorno", abrirEntorno);
     return () => {
       dejar();
       window.removeEventListener("kyu-issues", abrir);
+      window.removeEventListener("kyu-entorno", abrirEntorno);
     };
   }, []);
 
@@ -200,6 +205,7 @@ export default function App() {
       <BarraEstado alIssues={() => setIssues(true)} />
       <Avisos />
       {issues && <ElegirIssue perfil={config.perfiles[0]?.nombre ?? ""} alCerrar={() => setIssues(false)} />}
+      {entorno && <Entorno carpeta={carpetaDelEspacio(activo)} alCerrar={() => setEntorno(false)} />}
       {paleta && <Paleta config={config} />}
     </div>
   );
