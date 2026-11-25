@@ -106,6 +106,16 @@ fn fotografiar(_hwnd: isize) -> Option<Foto> {
     None
 }
 
+#[cfg(windows)]
+fn hwnd_de(ventana: &tauri::WebviewWindow) -> Result<isize, String> {
+    Ok(ventana.hwnd().map_err(|e| e.to_string())?.0 as isize)
+}
+
+#[cfg(not(windows))]
+fn hwnd_de(_ventana: &tauri::WebviewWindow) -> Result<isize, String> {
+    Err("grabar a GIF solo funciona en Windows de momento".into())
+}
+
 /// Asíncrona a propósito: así no corre en el hilo de la ventana, que tiene que atender
 /// el PrintWindow.
 #[tauri::command(async)]
@@ -119,13 +129,7 @@ pub fn grabar_empezar(
     if activa.is_some() {
         return Err("ya se está grabando".into());
     }
-    #[cfg(windows)]
-    let hwnd = ventana.hwnd().map_err(|e| e.to_string())?.0 as isize;
-    #[cfg(not(windows))]
-    let hwnd = {
-        let _ = &ventana;
-        return Err("grabar a GIF solo funciona en Windows de momento".into());
-    };
+    let hwnd = hwnd_de(&ventana)?;
     let carpeta = dirs::video_dir()
         .or_else(dirs::home_dir)
         .ok_or("no encuentro la carpeta de vídeos")?
