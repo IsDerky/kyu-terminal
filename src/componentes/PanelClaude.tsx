@@ -325,12 +325,30 @@ function ListaEntradas({ espacio, c, carpeta, grande }: { espacio: string; c: Co
         {c.entradas.map((e) => (
           <VistaEntrada key={e.id} entrada={e} espacio={espacio} carpeta={c.carpeta} />
         ))}
+        {(c.estado === "arrancando" || c.estado === "pensando") && c.entradas[c.entradas.length - 1]?.tipo === "tu" && (
+          <Esperando arrancando={c.claudeId === null} />
+        )}
         {c.estado === "cerrado" && (
           <p className="text-center text-[11.5px] text-muy">
             Claude se ha cerrado. Al escribir, sigue esta misma conversación.
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+// Entre mandar el mensaje y lo primero de Claude pasan uno o dos segundos (ganchos de
+// UserPromptSubmit, la API): sin esto la conversación parece parada.
+function Esperando({ arrancando }: { arrancando: boolean }) {
+  return (
+    <div className="flex items-center gap-2 text-[12px] text-tenue" aria-live="polite">
+      <span className="flex gap-1">
+        {[0, 150, 300].map((d) => (
+          <span key={d} className="size-1.5 animate-pulse rounded-full bg-claude" style={{ animationDelay: `${d}ms` }} />
+        ))}
+      </span>
+      {arrancando ? "Arrancando Claude…" : "Pensando…"}
     </div>
   );
 }
