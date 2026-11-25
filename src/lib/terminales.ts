@@ -19,7 +19,8 @@ import { apuntar, cargarHistorial } from "./historial";
 import { avisarSiToca, avisarVisto } from "./avisos";
 import { registrarEnlaces, registrarEnlacesGithub } from "./enlaces";
 import { useKyu } from "./estado";
-import { aLaVista, nombreCorto, useActividad } from "./actividad";
+import { aLaVista, espacioDeItem, nombreCorto, useActividad } from "./actividad";
+import { esDeProblemas, useProblemas } from "./problemas";
 
 export interface Sesion {
   term: XTerm;
@@ -132,6 +133,12 @@ export function obtener(item: string): Sesion {
   };
   bloques.alAcabar = (b) => {
     clearTimeout(esperaNombre);
+    // Problemas: lo último de un build o un lint queda para el panel del espacio
+    // (también «sin problemas», si era una orden de las que los dan).
+    const espacio = espacioDeItem(item);
+    if (espacio && (b.problemas || esDeProblemas(b.orden ?? ""))) {
+      useProblemas.getState().poner(espacio, { orden: b.orden ?? "", carpeta: b.ruta, hora: b.hora, lista: b.problemas ?? [] });
+    }
     const act = useActividad.getState();
     // Lo que acaba a la vista (o fue tan corto que ni se enseñó) no deja marca.
     if (aLaVista(item) || !act.porItem[item]) act.quitar(item);

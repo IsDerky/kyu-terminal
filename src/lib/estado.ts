@@ -24,7 +24,9 @@ export type Item =
   /** Una conversación de Claude como pestaña (`cid`: su id en claude.ts, «espacio~pN»). */
   | { id: string; tipo: "claude"; cid: string }
   /** Pestaña «Cambios»: lo que hay sin commit en el repo `raiz`, con su diff y el commit. */
-  | { id: string; tipo: "cambios"; raiz: string };
+  | { id: string; tipo: "cambios"; raiz: string }
+  /** Pestaña «Problemas»: errores y avisos del último build o lint del espacio. */
+  | { id: string; tipo: "problemas" };
 
 export type Direccion = "horizontal" | "vertical";
 
@@ -85,6 +87,8 @@ interface Estado {
   alternarMaximizar: () => void;
   /** Abre (o enseña) la pestaña «Cambios» del repo en el panel con el foco. */
   abrirCambios: (raiz: string) => void;
+  /** Abre (o enseña) la pestaña «Problemas» en el panel con el foco. */
+  abrirProblemas: () => void;
   /** Apunta en el espacio activo el worktree para el que se abrió. */
   ponerWorktree: (worktree: { raiz: string; ruta: string }, nombre: string) => void;
   ponerTitulo: (item: string, titulo: string, carpeta?: string | null) => void;
@@ -392,6 +396,22 @@ export const useKyu = create<Estado>((set, get) => {
         if (ya) return get().activar(p.id, ya);
       }
       const it: Item = { id: nuevoId("g"), tipo: "cambios", raiz };
+      set({ items: { ...s.items, [it.id]: it } });
+      conEspacio((e) => ({
+        ...e,
+        raiz:
+          cambiar(e.raiz, e.foco, (n) => (n.tipo === "panel" ? { ...n, items: [...n.items, it.id], activo: it.id } : n)) ?? e.raiz,
+      }));
+    },
+
+    abrirProblemas: () => {
+      const s = get();
+      const esp = espacioActivo();
+      for (const p of paneles(esp.raiz)) {
+        const ya = p.items.find((i) => s.items[i]?.tipo === "problemas");
+        if (ya) return get().activar(p.id, ya);
+      }
+      const it: Item = { id: nuevoId("x"), tipo: "problemas" };
       set({ items: { ...s.items, [it.id]: it } });
       conEspacio((e) => ({
         ...e,

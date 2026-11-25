@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import type { Terminal } from "@xterm/xterm";
-import { ArrowUpRight, Ban, Check, Copy, GitBranch, MemoryStick, X } from "lucide-react";
+import { ArrowUpRight, Ban, Check, Copy, GitBranch, ListX, MemoryStick, X } from "lucide-react";
+import { useProblemas } from "../lib/problemas";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { matarProceso, quienEnPuerto } from "../lib/nucleo";
@@ -240,6 +241,7 @@ function Titulo({
           </button>
         ))}
         {b.ocupado && <PuertoOcupado puerto={b.ocupado} />}
+        {terminado && b.problemas && <PastillaProblemas b={b} />}
         {(terminado || b.estado === "corre") && b.orden?.trim() && <CopiarOrden orden={b.orden.trim()} />}
         {terminado && (
           // La mascota fija en cada bloque terminado; al pasar por encima se despliega.
@@ -260,6 +262,36 @@ function Titulo({
         <span className="tabular-nums text-muy">{b.hora}</span>
       </span>
     </div>
+  );
+}
+
+/** «3 errores · 1 aviso»: abre el panel de problemas con los de este bloque. */
+function PastillaProblemas({ b }: { b: Bloque }) {
+  const lista = b.problemas ?? [];
+  const errores = lista.filter((p) => p.nivel === "error").length;
+  const avisos = lista.length - errores;
+  const partes = [
+    errores ? `${errores} ${errores === 1 ? "error" : "errores"}` : "",
+    avisos ? `${avisos} ${avisos === 1 ? "aviso" : "avisos"}` : "",
+  ].filter(Boolean);
+  const abrir = () => {
+    const k = useKyu.getState();
+    useProblemas.getState().poner(k.activo, { orden: b.orden ?? "", carpeta: b.ruta, hora: b.hora, lista });
+    k.abrirProblemas();
+  };
+  return (
+    <button
+      type="button"
+      title="Ver los problemas y abrirlos en su línea"
+      onClick={abrir}
+      onMouseDown={(e) => e.preventDefault()}
+      className={`pointer-events-auto flex h-[19px] items-center gap-1 rounded-full border px-2 text-[11.5px] transition-colors ${
+        errores ? "border-mal/40 bg-mal/10 text-mal hover:border-mal" : "border-aviso/40 bg-aviso/10 text-aviso hover:border-aviso"
+      }`}
+    >
+      <ListX size={12} strokeWidth={2} />
+      {partes.join(" · ")}
+    </button>
   );
 }
 

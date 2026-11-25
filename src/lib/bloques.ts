@@ -8,6 +8,7 @@
 // La hora y lo que tarda la orden las mide Kyu; la RAM la da el núcleo.
 import type { IMarker, Terminal } from "@xterm/xterm";
 import { leerRam, type Ram } from "./nucleo";
+import { leerProblemas, type Problema } from "./problemas";
 
 export type Estado = "escribiendo" | "corre" | "ok" | "mal" | "vacio";
 
@@ -39,6 +40,8 @@ export interface Bloque {
   ocupado?: number;
   /** Lo que ya se avisó mientras corría (una vez por tipo). */
   vigilado?: Set<Vigia>;
+  /** Errores y avisos de compiladores y linters que salieron (al acabar). */
+  problemas?: Problema[];
 }
 
 export type Vigia = "listo" | "error";
@@ -171,7 +174,10 @@ export class Bloques {
             : performance.now() - (ultimo.tInicio ?? performance.now());
           ultimo.fin = this.term.registerMarker(0);
           ultimo.locales = undefined;
-          ultimo.ocupado = codigo !== 0 ? puertoOcupado(this.textoSalida(ultimo)) ?? undefined : undefined;
+          const salida = this.textoSalida(ultimo);
+          ultimo.ocupado = codigo !== 0 ? puertoOcupado(salida) ?? undefined : undefined;
+          const problemas = leerProblemas(salida);
+          ultimo.problemas = problemas.length ? problemas : undefined;
           if (ultimo.orden) this.alTerminarOrden?.(ultimo);
           this.alAcabar?.(ultimo);
         }

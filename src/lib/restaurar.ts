@@ -68,17 +68,18 @@ function guardarConversacion(cid: string, c = useClaude.getState()): Conversacio
 
 function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGuardado | null {
   if (n.tipo === "panel") {
-    // Los terminales que abre Claude (MCP) son de esa conversación: no vuelven.
-    const ids = n.items.filter((i) => items[i] && !(items[i].tipo === "terminal" && items[i].deClaude));
+    // Los terminales que abre Claude (MCP) son de esa conversación: no vuelven. Problemas
+    // tampoco: depende de la salida de un bloque que ya no estará.
+    const ids = n.items.filter((i) => items[i] && !(items[i].tipo === "terminal" && items[i].deClaude) && items[i].tipo !== "problemas");
     if (!ids.length) return null;
     const lista = ids.map((i): ItemGuardado => {
       const it = items[i];
       if (it.tipo === "arbol") return { tipo: "arbol" };
       if (it.tipo === "claude") return { tipo: "claude", conv: guardarConversacion(it.cid) ?? undefined };
       if (it.tipo === "cambios") return { tipo: "cambios", raiz: it.raiz };
-      return it.tipo === "terminal"
-        ? { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo }
-        : { tipo: "archivo", ruta: it.ruta, linea: it.linea, columna: it.columna };
+      if (it.tipo === "terminal") return { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo };
+      if (it.tipo === "archivo") return { tipo: "archivo", ruta: it.ruta, linea: it.linea, columna: it.columna };
+      return { tipo: "arbol" }; // no llega: «problemas» se filtra arriba
     });
     return { tipo: "panel", items: lista, activo: Math.max(0, ids.indexOf(n.activo ?? "")), foco: n.id === foco || undefined };
   }

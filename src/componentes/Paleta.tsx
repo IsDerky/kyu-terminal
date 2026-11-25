@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, Braces, CircleDot, FileDiff, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquarePen, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { BarChart3, Braces, CircleDot, ListX, FileDiff, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquarePen, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { preguntarPorSeleccion } from "../lib/seleccion";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
@@ -79,6 +79,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
         hacer: () => void preguntarPorSeleccion(),
       },
       { id: "gif", grupo: "Kyu", titulo: "Grabar el panel a GIF", detalle: "empezar o parar", atajo: "Ctrl+Mayús+G", icono: Clapperboard, hacer: () => void alternarGrabacion() },
+      { id: "problemas", grupo: "Paneles", titulo: "Problemas", detalle: "errores y avisos del último build o lint", icono: ListX, hacer: () => k.abrirProblemas() },
       { id: "entorno", grupo: "Kyu", titulo: "Variables de entorno", detalle: "las de las shells, el PATH y los .env de la carpeta", icono: Braces, hacer: () => window.dispatchEvent(new Event("kyu-entorno")) },
       { id: "uso", grupo: "Kyu", titulo: "Uso de Claude Code", detalle: "tokens por día, proyecto y modelo", icono: BarChart3, hacer: () => k.ponerUso(true) },
       { id: "ajustes", grupo: "Kyu", titulo: "Ajustes", atajo: "Ctrl+,", icono: SlidersHorizontal, hacer: () => k.ponerAjustes(true) },

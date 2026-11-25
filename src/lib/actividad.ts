@@ -51,6 +51,11 @@ export function nombreCorto(orden: string): string {
   return nombre.length > 24 ? `${nombre.slice(0, 23)}…` : nombre;
 }
 
+/** El espacio donde está la pestaña `item`. */
+export function espacioDeItem(item: string): string | null {
+  return useKyu.getState().espacios.find((e) => paneles(e.raiz).some((p) => p.items.includes(item)))?.id ?? null;
+}
+
 /** La pestaña se está viendo: es la activa de su panel y su espacio es el activo. */
 export function aLaVista(item: string): boolean {
   const s = useKyu.getState();

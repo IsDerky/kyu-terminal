@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { ChevronDown, Columns2, FolderTree, GitCommitHorizontal, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
+import { ChevronDown, Columns2, FolderTree, GitCommitHorizontal, ListX, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
@@ -10,6 +10,7 @@ import VistaArbol from "./VistaArbol";
 // El panel de Claude ya va aparte (carga diferida): se reutiliza para las pestañas.
 const PanelClaude = lazy(() => import("./PanelClaude"));
 const VistaCambios = lazy(() => import("./VistaCambios"));
+const VistaProblemas = lazy(() => import("./VistaProblemas"));
 import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
 import { ARRASTRE_RUTA, espacioDe, useClaude } from "../lib/claude";
@@ -107,7 +108,9 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                     ? <NombreConversacion cid={it.cid} />
                     : it.tipo === "cambios"
                       ? "Cambios"
-                      : it.ruta.split(/[\\/]/).pop()!;
+                      : it.tipo === "problemas"
+                        ? "Problemas"
+                        : it.ruta.split(/[\\/]/).pop()!;
             const esActivo = id === panel.activo;
             return (
               <div
@@ -130,7 +133,9 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                         ? "Conversación con Claude"
                         : it.tipo === "cambios"
                           ? `Cambios sin commit en ${it.raiz}`
-                          : it.carpeta ?? it.perfil
+                          : it.tipo === "problemas"
+                            ? "Errores y avisos del último build o lint"
+                            : it.carpeta ?? it.perfil
                 }
                 className={`group flex h-[22px] min-w-0 max-w-48 cursor-default items-center gap-1.5 rounded-[5px] pl-2 pr-1 text-[12px] ${
                   esActivo ? "bg-hover text-texto" : "text-tenue hover:text-texto"
@@ -150,6 +155,8 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                   <Mascota alto={9} />
                 ) : it.tipo === "cambios" ? (
                   <GitCommitHorizontal size={12} strokeWidth={1.8} className="flex-none" />
+                ) : it.tipo === "problemas" ? (
+                  <ListX size={12} strokeWidth={1.8} className="flex-none" />
                 ) : (
                   <IconoArchivo size={12} />
                 )}
@@ -245,6 +252,11 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
         {activo?.tipo === "cambios" && (
           <Suspense fallback={null}>
             <VistaCambios key={activo.id} raiz={activo.raiz} espacio={espacioDeItem} />
+          </Suspense>
+        )}
+        {activo?.tipo === "problemas" && (
+          <Suspense fallback={null}>
+            <VistaProblemas key={activo.id} espacio={espacioDeItem} />
           </Suspense>
         )}
         {activo?.tipo === "claude" && (
