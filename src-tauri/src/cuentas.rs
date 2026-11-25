@@ -135,7 +135,14 @@ pub fn preparar(c: &Cuenta) -> Result<(), String> {
             let _ = std::fs::copy(&origen, &destino);
         }
     }
-    copiar_confianza(&json_de(&principal), &c.carpeta.join(".claude.json"));
+    // La carpeta personal también: con la principal, ~/.claude/settings.json es la configuración
+    // de usuario; con otra cuenta, al arrancar en ~ Claude lo toma como ajustes de proyecto y, sin
+    // confianza, los ignora con un aviso.
+    let casa: Vec<String> = dirs::home_dir()
+        .map(|h| h.to_string_lossy().replace('\\', "/"))
+        .into_iter()
+        .collect();
+    copiar_confianza(&json_de(&principal), &c.carpeta.join(".claude.json"), &casa);
     Ok(())
 }
 
@@ -153,7 +160,7 @@ fn json_de(carpeta: &Path) -> PathBuf {
 /// Las carpetas en las que la principal ya aceptó «confiar en este proyecto» quedan aceptadas
 /// también en la otra cuenta (si no, Claude Code ignora sus permisos y ajustes de proyecto).
 /// Solo añade `hasTrustDialogAccepted`; el resto de ese archivo es de Claude Code.
-fn copiar_confianza(origen: &Path, destino: &Path) {
+fn copiar_confianza(origen: &Path, destino: &Path, extra: &[String]) {
     let leer = |p: &Path| {
         std::fs::read_to_string(p)
             .ok()
@@ -169,6 +176,7 @@ fn copiar_confianza(origen: &Path, destino: &Path) {
         .iter()
         .filter(|(_, v)| v["hasTrustDialogAccepted"].as_bool() == Some(true))
         .map(|(k, _)| k)
+        .chain(extra)
         .collect();
     // Si existe pero no se puede leer, mejor no tocarlo.
     let mut otra = match leer(destino) {
@@ -443,13 +451,14 @@ mod pruebas {
         )
         .unwrap();
         std::fs::write(&destino, r#"{"userID":"u","projects":{"C:/p3":{"y":2}}}"#).unwrap();
-        copiar_confianza(&origen, &destino);
+        copiar_confianza(&origen, &destino, &["C:/casa".to_string()]);
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&destino).unwrap()).unwrap();
         assert_eq!(v["userID"], "u");
         assert_eq!(v["projects"]["C:/p1"]["hasTrustDialogAccepted"], true);
         assert!(v["projects"]["C:/p1"]["x"].is_null());
         assert!(v["projects"]["C:/p2"].is_null());
         assert_eq!(v["projects"]["C:/p3"]["y"], 2);
+        assert_eq!(v["projects"]["C:/casa"]["hasTrustDialogAccepted"], true);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
