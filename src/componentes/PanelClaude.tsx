@@ -45,6 +45,7 @@ import { imagenesDe, type ImagenAdjunta } from "../lib/imagenes";
 import { buscarArchivos } from "../lib/nucleo";
 import type { TextoBloque } from "../lib/bloques";
 import { useKyu } from "../lib/estado";
+import { abrirYPreparar, irATerminal, nombreDestino, usePreparados } from "../lib/comandoClaude";
 import { herramienta, relativa } from "../lib/herramientas";
 import Markdown from "./Markdown";
 import Permiso from "./Permiso";
@@ -330,12 +331,58 @@ function ListaEntradas({ espacio, c, carpeta, grande }: { espacio: string; c: Co
         {(c.estado === "arrancando" || c.estado === "pensando") && c.entradas[c.entradas.length - 1]?.tipo === "tu" && (
           <Esperando arrancando={c.claudeId === null} />
         )}
+        <ComandoPreparado cid={espacio} />
         {c.estado === "cerrado" && (
           <p className="text-center text-[11.5px] text-muy">
             Claude se ha cerrado. Al escribir, sigue esta misma conversación.
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/** El último comando de la respuesta, preparado en gris en su terminal (o la opción de abrirla). */
+function ComandoPreparado({ cid }: { cid: string }) {
+  const p = usePreparados((s) => s.porConv[cid]);
+  const titulo = useKyu((s) => {
+    const it = p?.item ? s.items[p.item] : undefined;
+    return it?.tipo === "terminal" ? it.titulo : undefined;
+  });
+  if (!p) return null;
+  const destino = nombreDestino(p.destino);
+  return (
+    // El botón baja a su propia línea si el panel es estrecho.
+    <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1.5 rounded-lg border border-claude/25 bg-claude/[0.05] px-2.5 py-1.5 text-[12px] text-tenue">
+      <span className="flex min-w-[150px] flex-1 items-start gap-2">
+        <SquareTerminal size={13} strokeWidth={1.8} className="mt-[2px] flex-none text-claude2" />
+        {p.item ? (
+          <span>
+            Preparado en <b className="font-medium text-texto">{titulo ?? destino}</b> · Tab para escribirlo
+          </span>
+        ) : (
+          <span>
+            Va en <b className="font-medium text-texto">{destino}</b> y no hay ninguna abierta
+          </span>
+        )}
+      </span>
+      {p.item ? (
+        <button
+          type="button"
+          onClick={() => irATerminal(p.item!)}
+          className="flex h-6 flex-none items-center rounded-md border border-borde2 px-2 text-[11.5px] text-texto hover:bg-hover"
+        >
+          Ir
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void abrirYPreparar(cid)}
+          className="flex h-6 max-w-full flex-none items-center truncate rounded-md border border-claude bg-claude px-2 text-[11.5px] font-medium text-white hover:brightness-110"
+        >
+          Abrir {destino}
+        </button>
+      )}
     </div>
   );
 }

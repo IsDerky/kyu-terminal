@@ -94,6 +94,21 @@ export interface Fantasma {
   resto: string;
   indice: number;
   total: number;
+  /** Es el comando que dejó preparado Claude (no una sugerencia del historial). */
+  deClaude?: boolean;
+}
+
+/**
+ * Comando de Claude a la espera. Con las marcas del prompt de Kyu (PowerShell, bash, WSL) lo
+ * escrito se lee desde el prompt; sin ellas (dentro de un ssh), desde donde estaba el cursor.
+ */
+interface Propuesta {
+  texto: string;
+  marcas: boolean;
+  linea: number;
+  col: number;
+  /** Órdenes lanzadas al prepararlo: si sale otra, ya no toca. */
+  ordenes: number;
 }
 
 /** Una por terminal: sigue lo que se escribe, pide sugerencias y atiende las teclas. */
@@ -107,9 +122,14 @@ export class Autocompletado {
   private cuadro = 0;
   private versionActual = 0;
   private oyentes = new Set<() => void>();
+  // Comando de Claude: no depende de las marcas del prompt (dentro de un ssh no las hay).
+  // Lo escrito es lo que hay entre donde estaba el cursor al prepararlo y donde está ahora.
+  private propuesta: Propuesta | null = null;
+  /** Lo ya escrito del comando; null = sin prompt todavía (no se pinta). */
+  private escritoPropuesta: string | null = "";
 
   constructor(
-    term: Terminal,
+    private term: Terminal,
     private bloques: Bloques,
     private carpeta: () => string | null,
     private bash: () => boolean,
@@ -133,7 +153,57 @@ export class Autocompletado {
     this.oyentes.forEach((o) => o());
   }
 
+  private ordenes = () => this.bloques.lista.filter((b) => b.orden != null).length;
+
+  /** Deja `texto` en gris en el prompt (o donde está el cursor, sin marcas), para escribirlo con Tab. */
+  proponer(texto: string, marcas: boolean) {
+    const b = this.term.buffer.active;
+    this.propuesta = { texto, marcas, linea: b.baseY + b.cursorY, col: b.cursorX, ordenes: this.ordenes() };
+    this.escritoPropuesta = "";
+    this.revisarPropuesta();
+    this.avisar();
+  }
+
+  quitarPropuesta() {
+    if (!this.propuesta) return;
+    this.propuesta = null;
+    this.avisar();
+  }
+
+  tienePropuesta = () => this.propuesta !== null;
+
+  /** Sigue valiendo si el cursor está en la misma línea y lo escrito es el principio del comando. */
+  private revisarPropuesta() {
+    const p = this.propuesta;
+    if (!p) return;
+    const quitar = () => {
+      this.propuesta = null;
+      this.avisar();
+    };
+    let escrito: string | null;
+    if (p.marcas) {
+      if (this.ordenes() > p.ordenes) return quitar();
+      // null: aún sin prompt (la shell arrancando) o con algo detrás del cursor.
+      escrito = this.bloques.entradaActual();
+    } else {
+      const b = this.term.buffer.active;
+      const linea = b.baseY + b.cursorY;
+      if (linea !== p.linea || b.cursorX < p.col) return quitar();
+      escrito = b.getLine(linea)?.translateToString(false, p.col, b.cursorX) ?? "";
+    }
+    if (escrito !== null && (!p.texto.startsWith(escrito) || (!p.marcas && escrito.length >= p.texto.length))) return quitar();
+    if (escrito !== this.escritoPropuesta) {
+      this.escritoPropuesta = escrito;
+      this.avisar();
+    }
+  }
+
   fantasma(): Fantasma | null {
+    if (this.propuesta) {
+      if (this.escritoPropuesta === null) return null;
+      const resto = this.propuesta.texto.slice(this.escritoPropuesta.length);
+      return resto ? { resto, indice: 0, total: 1, deClaude: true } : null;
+    }
     const texto = this.texto;
     const opcion = this.opciones[this.indice];
     if (texto === null || !opcion || this.oculto === texto) return null;
@@ -141,6 +211,7 @@ export class Autocompletado {
   }
 
   private revisar() {
+    this.revisarPropuesta();
     const texto = this.bloques.entradaActual();
     if (texto === this.texto) return;
     this.texto = texto;
@@ -190,8 +261,11 @@ export class Autocompletado {
       return true;
     }
     if (e.key === "Escape" && sin) {
-      this.oculto = this.texto;
-      this.avisar();
+      if (f.deClaude) this.quitarPropuesta();
+      else {
+        this.oculto = this.texto;
+        this.avisar();
+      }
       return true;
     }
     return false;

@@ -87,6 +87,7 @@ function temaXterm({ tema }: ConfigVista): ITheme {
 }
 
 export const sesion = (item: string) => sesiones.get(item);
+export const perfilesConfigurados = () => configuracion?.perfiles ?? [];
 
 /** Crea (si no existe) la sesión de la pestaña `item`. La shell arranca al engancharla. */
 export function obtener(item: string): Sesion {

@@ -172,7 +172,7 @@ function Fantasma({
   if (!letras.length) return null;
   return (
     <div
-      className="absolute flex items-center whitespace-pre text-muy"
+      className={`absolute flex items-center whitespace-pre ${f.deClaude ? "text-claude2/70" : "text-muy"}`}
       style={{
         left: MARGEN + buf.cursorX * celda,
         top: buf.cursorY * alto,
@@ -186,6 +186,11 @@ function Fantasma({
           {l}
         </span>
       ))}
+      {f.deClaude && caben - letras.length > 12 && (
+        <span className="ml-3 rounded-full border border-claude/40 bg-claude/10 px-1.5 font-ui text-[10.5px] leading-[16px] text-claude2">
+          Claude · Tab
+        </span>
+      )}
       {f.total > 1 && caben - letras.length > 6 && (
         <span className="ml-3 font-ui text-[10.5px] tabular-nums text-muy/70">
           {f.indice + 1}/{f.total}

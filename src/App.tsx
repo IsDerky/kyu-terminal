@@ -23,6 +23,7 @@ import { aplicarFuente, configurar, itemDePty, sesion } from "./lib/terminales";
 import { configurarEditores, editor } from "./lib/editores";
 import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
 import { restaurarSesion, vigilarSesion } from "./lib/restaurar";
+import { vigilarComandos } from "./lib/comandoClaude";
 import { configurarLimite } from "./lib/gasto";
 import { preguntarPorSeleccion } from "./lib/seleccion";
 import { vigilarActualizaciones } from "./lib/actualizar";
@@ -101,6 +102,9 @@ export default function App() {
     });
     return () => void quitar.then((f) => f());
   }, []);
+
+  // El último comando de cada respuesta de Claude, en gris en su terminal.
+  useEffect(() => vigilarComandos(), []);
 
   // Herramientas MCP de Kyu para el Claude del panel.
   useEffect(() => {
