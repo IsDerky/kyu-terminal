@@ -5,14 +5,13 @@ import BarraTitulo, { nombreEspacio } from "./componentes/BarraTitulo";
 import Espacio from "./componentes/Espacio";
 import Paleta from "./componentes/Paleta";
 // Se cargan la primera vez que se abren (menos memoria si no se usan).
-const PanelClaude = lazy(() => import("./componentes/PanelClaude"));
 const Ajustes = lazy(() => import("./componentes/Ajustes"));
 const Uso = lazy(() => import("./componentes/Uso"));
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
-import { configurarClaude, conversacionEnPanel, ID_ENTRADA, limpiar, useClaude } from "./lib/claude";
+import { configurarClaude, irAClaude, limpiar, nuevaConversacion } from "./lib/claude";
 import { escucharMcp } from "./lib/mcp";
 import { alternarGrabacion } from "./lib/grabar";
-import { focoActual, useKyu } from "./lib/estado";
+import { focoActual, paneles, useKyu } from "./lib/estado";
 import { aplicarFuente, configurar, itemDePty, sesion } from "./lib/terminales";
 import { configurarEditores, editor } from "./lib/editores";
 import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
@@ -21,29 +20,29 @@ import { configurarLimite } from "./lib/gasto";
 import { preguntarPorSeleccion } from "./lib/seleccion";
 import { vigilarActualizaciones } from "./lib/actualizar";
 
+/** Panel del que se vino a Claude con Ctrl+Mayús+C (para volver con la misma tecla). */
+let volverA: { espacio: string; panel: string } | null = null;
+
 /**
- * Ctrl+Mayús+C: oculto → se abre con el cursor en la caja; abierto sin foco → le da el
- * foco; abierto con foco → se oculta y el foco vuelve al panel de antes.
+ * Ctrl+Mayús+C: lleva a la última conversación del espacio (o abre una a la derecha) con el
+ * cursor en la caja. Con el foco ya en Claude, vuelve al panel de antes.
  */
 function alternarClaude() {
-  const { visible, mostrar } = useClaude.getState();
-  const caja = () => document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null;
-  if (visible && document.activeElement === caja()) {
-    mostrar(false);
-    const it = focoActual()?.item;
+  const k = useKyu.getState();
+  const f = focoActual();
+  if (f?.item?.tipo === "claude") {
+    const esp = f.espacio;
+    const antes = volverA?.espacio === esp.id ? paneles(esp.raiz).find((p) => p.id === volverA!.panel) : undefined;
+    const destino = antes ?? paneles(esp.raiz).find((p) => p.activo && k.items[p.activo]?.tipo !== "claude");
+    if (!destino?.activo) return;
+    k.enfocar(destino.id);
+    const it = k.items[destino.activo];
     if (it?.tipo === "terminal") sesion(it.id)?.term.focus();
     else if (it?.tipo === "archivo") editor(it.id)?.vista.focus();
     return;
   }
-  mostrar(true);
-  // La primera vez el panel aún se está cargando: se reintenta hasta que la caja exista.
-  let intentos = 0;
-  const enfocar = () => {
-    const c = caja();
-    if (c) c.focus();
-    else if (++intentos < 60) requestAnimationFrame(enfocar);
-  };
-  requestAnimationFrame(enfocar);
+  if (f?.panel) volverA = { espacio: f.espacio.id, panel: f.panel.id };
+  irAClaude(k.activo);
 }
 
 export default function App() {
@@ -54,8 +53,6 @@ export default function App() {
   const paleta = useKyu((s) => s.paleta);
   const ajustes = useKyu((s) => s.ajustes);
   const uso = useKyu((s) => s.uso);
-  const claudeVisible = useClaude((s) => s.visible);
-  const expandido = useClaude((s) => s.expandido);
   useKyu((s) => s.items); // el título de la ventana sigue al terminal con el foco
 
   useEffect(() => {
@@ -119,16 +116,11 @@ export default function App() {
           case "KeyW": hecho(); cerrarActual(); return;
           case "Tab": hecho(); k.siguientePestana(-1); return;
           case "KeyC": hecho(); alternarClaude(); return;
-          case "KeyX": {
-            hecho();
-            const c = useClaude.getState();
-            useClaude.setState({ expandido: !(c.expandido && c.visible), visible: true });
-            return;
-          }
+          case "KeyX": hecho(); k.alternarMaximizar(); return;
           case "KeyG": hecho(); void alternarGrabacion(); return;
           case "KeyB": hecho(); k.alternarArbol(); return;
           // En el editor, Ctrl+Mayús+K es borrar línea (como en VS Code): se le deja.
-          case "KeyK": if (enEditor) return; hecho(); conversacionEnPanel(k.activo); return;
+          case "KeyK": if (enEditor) return; hecho(); nuevaConversacion(k.activo); return;
         }
       }
       if (e.ctrlKey && !e.shiftKey && !e.altKey) {
@@ -184,13 +176,10 @@ export default function App() {
         )}
         {uso && <Uso />}
         {espacio && (
-          // Modo expandido: Claude delante (order-first) y los terminales en una columna a la
-          // derecha. Con CSS order, sin volver a montar los terminales.
-          <div className={ajustes || uso ? "hidden" : expandido && claudeVisible ? "flex w-[420px] min-w-0 flex-none border-l border-borde" : "flex min-w-0 flex-1"}>
+          <div className={ajustes || uso ? "hidden" : "flex min-w-0 flex-1"}>
             <Espacio key={espacio.id} espacio={espacio} config={config} />
           </div>
         )}
-        {espacio && claudeVisible && !uso && !ajustes && <PanelClaude key={`claude-${espacio.id}`} espacio={espacio.id} />}
       </div>
       </Suspense>
       <Avisos />

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Check, ClipboardList, ShieldAlert, TriangleAlert, X } from "lucide-react";
 import { corto, useGasto } from "../lib/gasto";
-import { activarPestana, espacioDe, pendiente, pestanasDe, responder, useClaude, type AvisoFin, ID_ENTRADA } from "../lib/claude";
+import { espacioDe, irAConversacion, panelMuestra, pendiente, responder, sitioDe, useClaude, type AvisoFin } from "../lib/claude";
 import { useKyu } from "../lib/estado";
 import { herramienta, partirRuta, relativa } from "../lib/herramientas";
 import { nombreEspacio } from "./BarraTitulo";
@@ -9,57 +9,47 @@ import { Mascota } from "./iconos";
 
 const DURACION_FIN = 8000;
 
-/** Abre el panel de Claude en esa conversación con el cursor en la caja. */
-function ver(cid: string) {
-  const espacio = espacioDe(cid);
-  activarPestana(cid);
-  const k = useKyu.getState();
-  if (k.activo !== espacio) k.cambiarEspacio(espacio);
-  useClaude.getState().mostrar(true);
-  requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
-}
+/** Lleva a la pestaña de esa conversación con el cursor en la caja. */
+const ver = (cid: string) => irAConversacion(cid);
 
 /**
- * Avisos flotantes de Claude cuando el panel no enseña su conversación (oculto o en otro
- * espacio): permisos pendientes, que se contestan desde aquí, y turnos terminados.
+ * Avisos flotantes de Claude cuando su pestaña no se ve (otra pestaña delante u otro espacio):
+ * permisos pendientes, que se contestan desde aquí, y turnos terminados.
  */
 export default function Avisos() {
-  const visible = useClaude((s) => s.visible);
   const conversaciones = useClaude((s) => s.conversaciones);
   const avisos = useClaude((s) => s.avisos);
-  const activo = useKyu((s) => s.activo);
+  // Lo que se ve cambia con las pestañas, el espacio, Ajustes y Uso.
   const espacios = useKyu((s) => s.espacios);
+  useKyu((s) => s.activo);
+  useKyu((s) => s.items);
+  useKyu((s) => s.ajustes);
+  useKyu((s) => s.uso);
 
-  const activas = useClaude((s) => s.activas);
-  const pestanas = useClaude((s) => s.pestanas);
-  const muestra = (cid: string) => visible && activo === espacioDe(cid) && (activas[espacioDe(cid)] ?? espacioDe(cid)) === cid;
+  const muestra = (cid: string) => panelMuestra(cid);
+  const existe = (cid: string) => sitioDe(cid) !== null;
   const nombre = (cid: string) => {
     const esp = espacios.find((e) => e.id === espacioDe(cid));
     return espacios.length > 1 && esp ? nombreEspacio(esp) : null;
   };
 
-  const permisos = espacios.flatMap((esp) =>
-    pestanasDe(esp.id, { pestanas } as never).flatMap((cid) => {
-      const c = conversaciones[cid];
-      const p = pendiente(c);
-      return p && !muestra(cid) ? [{ espacio: cid, p, carpeta: c!.carpeta }] : [];
-    }),
-  );
-  const fines = avisos.filter((a) => !muestra(a.espacio) && espacios.some((e) => e.id === espacioDe(a.espacio)));
+  const permisos = Object.keys(conversaciones).flatMap((cid) => {
+    const c = conversaciones[cid];
+    const p = pendiente(c);
+    return p && existe(cid) && !muestra(cid) ? [{ espacio: cid, p, carpeta: c!.carpeta }] : [];
+  });
+  const fines = avisos.filter((a) => !muestra(a.espacio) && existe(a.espacio));
 
-  // Lo que ya se ve en el panel no hace falta avisarlo.
+  // Lo que ya se ve no hace falta avisarlo.
   useEffect(() => {
-    const vistos = avisos.filter((a) => muestra(a.espacio) || !espacios.some((e) => e.id === espacioDe(a.espacio)));
+    const vistos = avisos.filter((a) => muestra(a.espacio) || !existe(a.espacio));
     for (const a of vistos) useClaude.getState().quitarAviso(a.id);
   });
 
   const gasto = useGasto((s) => s.aviso);
   if (!permisos.length && !fines.length && !gasto) return null;
   return (
-    <div
-      className="pointer-events-none absolute bottom-3 z-40 flex w-[330px] flex-col gap-2"
-      style={{ right: visible ? 380 + 20 : 12 }}
-    >
+    <div className="pointer-events-none absolute bottom-3 right-3 z-40 flex w-[330px] flex-col gap-2">
       {permisos.map(({ espacio, p, carpeta }) => {
         const [accion] = herramienta(p.herramienta);
         const resumen = relativa(p.resumen, carpeta);

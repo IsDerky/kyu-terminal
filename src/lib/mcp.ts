@@ -4,7 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { duracion, textoBloque } from "./bloques";
-import { activaDe, espacioDe as espacioDeConversacion, useClaude } from "./claude";
+import { espacioDe as espacioDeConversacion, ultimaDe, useClaude } from "./claude";
 import { paneles, useKyu } from "./estado";
 import { escribirPty } from "./nucleo";
 import { sesion } from "./terminales";
@@ -85,7 +85,7 @@ async function terminalClaude(espacio: string): Promise<string> {
   const k = useKyu.getState();
   let id = terminalesClaude.get(espacio);
   if (!id || !k.items[id] || !terminalesDe(espacio).some((t) => t.it.id === id)) {
-    const conv = useClaude.getState().conversaciones[activaDe(espacio)];
+    const conv = useClaude.getState().conversaciones[ultimaDe(espacio) ?? ""];
     const perfil = terminalesDe(espacio)[0]?.it.perfil ?? "";
     id = k.terminalAlLado(espacio, perfil, conv?.carpeta ?? null, "Claude") ?? undefined;
     if (!id) throw new Error("no se pudo abrir el panel «Claude»");

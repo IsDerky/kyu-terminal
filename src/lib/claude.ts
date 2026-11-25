@@ -1,4 +1,4 @@
-// Panel de Claude: una conversación por espacio de trabajo, cada una con su proceso de
+// Claude: conversaciones en pestañas de panel («espacio~pN»), cada una con su proceso de
 // Claude Code (src-tauri/src/claude.rs). El proceso se arranca con el primer mensaje, en la
 // carpeta del terminal con el foco.
 import { create } from "zustand";
@@ -94,8 +94,6 @@ export interface Seleccion {
   recortada: boolean;
 }
 
-/** id de la caja de texto del panel de Claude (para darle el foco desde fuera). */
-export const ID_ENTRADA = "entrada-claude";
 
 export type Respuesta = "permitir" | "siempre" | "denegar";
 
@@ -165,19 +163,13 @@ export interface AvisoFin {
 }
 
 interface EstadoClaude {
-  visible: boolean;
-  /** Modo expandido: Claude delante y los terminales en una columna. */
-  expandido: boolean;
   /**
-   * Conversaciones por id. La primera de cada espacio tiene el id del espacio; las demás,
-   * «espacio~n». Las funciones de este módulo reciben ese id (el parámetro se llama
-   * `espacio` por historia).
+   * Conversaciones por id («espacio~pN»); cada una vive en una pestaña de panel. Las
+   * funciones de este módulo reciben ese id (el parámetro se llama `espacio` por historia).
    */
   conversaciones: Record<string, Conversacion>;
-  /** Pestañas de conversación de cada espacio, en orden (sin entrada = solo la primera). */
-  pestanas: Record<string, string[]>;
-  /** Conversación que enseña el panel en cada espacio. */
-  activas: Record<string, string>;
+  /** La última conversación usada de cada espacio: a ella van Ctrl+Mayús+C, Alt+K y compañía. */
+  ultimas: Record<string, string>;
   avisos: AvisoFin[];
   /** Orden del terminal adjunta a lo próximo que se escriba, por espacio. */
   adjuntos: Record<string, TextoBloque>;
@@ -189,8 +181,8 @@ interface EstadoClaude {
   catalogo: Catalogo | null;
   /** Lo elegido la última vez: lo hereda cada conversación nueva. */
   prefs: Preferencias;
-  /** Desglose del contexto abierto. */
-  verContexto: boolean;
+  /** Conversación con el desglose del contexto abierto (null = ninguna). */
+  verContexto: string | null;
   /** Texto que vuelve a la caja al volver a un punto, por espacio. */
   borradores: Record<string, string>;
   /** Mensajes escritos mientras Claude trabajaba, por conversación: salen al acabar el turno. */
@@ -199,7 +191,6 @@ interface EstadoClaude {
   cuentas: string[];
   /** Sugerencias de respuesta activas (kyu.toml). */
   sugerencias: boolean;
-  mostrar: (visible: boolean) => void;
   quitarAviso: (id: number) => void;
 }
 
@@ -239,58 +230,148 @@ export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Convers
 });
 
 export const useClaude = create<EstadoClaude>((set) => ({
-  visible: false,
-  expandido: false,
   conversaciones: {},
-  pestanas: {},
-  activas: {},
+  ultimas: {},
   avisos: [],
   adjuntos: {},
   selecciones: {},
   imagenes: {},
   catalogo: catalogoGuardado(),
   prefs: prefsGuardadas(),
-  verContexto: false,
+  verContexto: null,
   borradores: {},
   colas: {},
   cuentas: [],
   sugerencias: true,
-  mostrar: (visible) => set({ visible }),
   quitarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));
 
 /** Espacio de una conversación («e3~2» → «e3»). */
 export const espacioDe = (cid: string) => cid.split("~")[0];
 
-/** Conversación que enseña el panel en el espacio. */
-export const activaDe = (espacio: string) => useClaude.getState().activas[espacio] ?? espacio;
-
-/** Conversaciones (pestañas) del espacio, en orden. */
-export const pestanasDe = (espacio: string, s = useClaude.getState()) => s.pestanas[espacio] ?? [espacio];
-
-/** Conversaciones que viven en una pestaña de panel («espacio~pN»), no en el panel lateral. */
-export const esDePanel = (cid: string) => /~p\d+$/.test(cid);
-
-/** ¿Se está viendo ahora esta conversación (en el panel lateral o en su pestaña)? */
-export const panelMuestra = (cid: string) => {
-  const espacio = espacioDe(cid);
+/** Dónde está la pestaña de una conversación: su espacio, su panel y su pestaña. */
+export function sitioDe(cid: string) {
   const k = useKyu.getState();
-  if (k.activo !== espacio || k.ajustes || k.uso) return false;
-  if (esDePanel(cid)) {
-    const esp = k.espacios.find((e) => e.id === espacio);
-    return !!esp && paneles(esp.raiz).some((p) => p.activo && (k.items[p.activo] as { cid?: string } | undefined)?.cid === cid);
+  for (const esp of k.espacios) {
+    for (const p of paneles(esp.raiz)) {
+      const item = p.items.find((i) => {
+        const it = k.items[i];
+        return it?.tipo === "claude" && it.cid === cid;
+      });
+      if (item) return { espacio: esp.id, panel: p.id, item };
+    }
   }
-  return useClaude.getState().visible && activaDe(espacio) === cid;
+  return null;
+}
+
+/** Conversaciones del espacio que tienen pestaña, en el orden de los paneles. */
+export function conversacionesDe(espacio: string): string[] {
+  const k = useKyu.getState();
+  const esp = k.espacios.find((e) => e.id === espacio);
+  if (!esp) return [];
+  return paneles(esp.raiz).flatMap((p) =>
+    p.items.flatMap((i) => {
+      const it = k.items[i];
+      return it?.tipo === "claude" ? [it.cid] : [];
+    }),
+  );
+}
+
+/** ¿Se está viendo ahora esta conversación (su pestaña es la activa de su panel)? */
+export const panelMuestra = (cid: string) => {
+  const k = useKyu.getState();
+  const sitio = sitioDe(cid);
+  if (!sitio || k.activo !== sitio.espacio || k.ajustes || k.uso) return false;
+  const esp = k.espacios.find((e) => e.id === sitio.espacio);
+  return !!esp && paneles(esp.raiz).some((p) => p.id === sitio.panel && p.activo === sitio.item);
 };
+
+/** La última conversación usada del espacio que siga abierta (o la primera que haya). */
+export function ultimaDe(espacio: string): string | null {
+  const u = useClaude.getState().ultimas[espacio];
+  if (u && sitioDe(u)) return u;
+  return conversacionesDe(espacio)[0] ?? null;
+}
+
+/** Apunta la conversación como la última usada de su espacio. */
+export function marcarUltima(cid: string) {
+  const espacio = espacioDe(cid);
+  if (useClaude.getState().ultimas[espacio] === cid) return;
+  useClaude.setState((s) => ({ ultimas: { ...s.ultimas, [espacio]: cid } }));
+}
+
+/** Pone el cursor en la caja de la conversación (reintenta mientras el panel se carga). */
+export function enfocarCaja(cid: string) {
+  let intentos = 0;
+  const probar = () => {
+    const caja = document.querySelector<HTMLTextAreaElement>(`textarea[data-cid="${cid}"]`);
+    if (caja) caja.focus();
+    else if (++intentos < 60) requestAnimationFrame(probar);
+  };
+  requestAnimationFrame(probar);
+}
+
+/**
+ * Lleva a la conversación del espacio: la última usada, con su pestaña delante y el cursor en
+ * la caja. Si no hay ninguna (y `crear`), abre una en un panel a la derecha. Devuelve su id.
+ */
+export function irAClaude(espacio: string, crear = true): string | null {
+  const k = useKyu.getState();
+  if (!k.espacios.some((e) => e.id === espacio)) return null;
+  if (k.ajustes) k.ponerAjustes(false);
+  if (k.uso) k.ponerUso(false);
+  if (k.activo !== espacio) k.cambiarEspacio(espacio);
+  let cid = ultimaDe(espacio);
+  if (cid) {
+    const sitio = sitioDe(cid)!;
+    useKyu.getState().activar(sitio.panel, sitio.item);
+  } else {
+    if (!crear) return null;
+    cid = conversacionEnPanel(espacio, { alLado: true });
+  }
+  marcarUltima(cid);
+  enfocarCaja(cid);
+  return cid;
+}
+
+/** Lleva a una conversación concreta (desde los avisos o el centro de actividad). */
+export function irAConversacion(cid: string) {
+  const sitio = sitioDe(cid);
+  if (!sitio) return;
+  const k = useKyu.getState();
+  if (k.ajustes) k.ponerAjustes(false);
+  if (k.uso) k.ponerUso(false);
+  if (k.activo !== sitio.espacio) k.cambiarEspacio(sitio.espacio);
+  useKyu.getState().activar(sitio.panel, sitio.item);
+  marcarUltima(cid);
+  enfocarCaja(cid);
+}
 
 let siguientePanel = 0;
 
 /** Abre una conversación nueva como pestaña de un panel (con `alLado`, en un panel nuevo a la
- *  derecha). Devuelve su id. */
+ *  derecha que ocupa el 40 %). Devuelve su id. */
 export function conversacionEnPanel(espacio: string, opciones: { panel?: string; alLado?: boolean } = {}): string {
   const cid = nuevaDePanel(espacio);
   useKyu.getState().ponerClaude(cid, opciones);
+  marcarUltima(cid);
+  enfocarCaja(cid);
   return cid;
+}
+
+/**
+ * Ctrl+Mayús+K: conversación nueva donde ya están las de Claude (el panel con el foco si
+ * enseña una, o el de la última usada); si no hay ninguna, en un panel nuevo a la derecha.
+ */
+export function nuevaConversacion(espacio: string): string {
+  const k = useKyu.getState();
+  if (k.activo !== espacio) k.cambiarEspacio(espacio);
+  const esp = useKyu.getState().espacios.find((e) => e.id === espacio);
+  const foco = esp && paneles(esp.raiz).find((p) => p.id === esp.foco);
+  if (foco?.activo && k.items[foco.activo]?.tipo === "claude") return conversacionEnPanel(espacio, { panel: foco.id });
+  const ultima = ultimaDe(espacio);
+  const sitio = ultima ? sitioDe(ultima) : null;
+  return sitio ? conversacionEnPanel(espacio, { panel: sitio.panel }) : conversacionEnPanel(espacio, { alLado: true });
 }
 
 /** Crea (vacía) una conversación de pestaña de panel del espacio, sin colocarla. */
@@ -302,25 +383,7 @@ export function nuevaDePanel(espacio: string): string {
   return cid;
 }
 
-/**
- * Saca la conversación que se ve en el panel lateral a una pestaña al lado: allí sigue (con
- * `--resume`, como al reanudar) y el panel lateral se queda con una nueva.
- */
-export async function sacarAPanel(espacio: string) {
-  const origen = activaDe(espacio);
-  const c = conversacion(origen);
-  if (c.estado === "arrancando" || c.estado === "pensando") return;
-  const destino = conversacionEnPanel(espacio, { alLado: true });
-  if (c.sesion && c.carpeta) {
-    const primero = c.entradas.find((e) => e.tipo === "tu");
-    const titulo = primero?.tipo === "tu" ? primero.texto.split("\n")[0].slice(0, 60) : "conversación";
-    await reanudar(destino, c.carpeta, c.sesion, titulo, c.cuenta).catch(() => {});
-    cambiar(destino, () => ({ eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo }));
-  }
-  nueva(origen);
-}
-
-/** Cierra una conversación de pestaña de panel (para su Claude y la olvida). */
+/** Cierra una conversación (para su Claude y la olvida). */
 export function cerrarConversacion(cid: string) {
   const c = useClaude.getState().conversaciones[cid];
   if (c?.claudeId != null) void cerrarClaude(c.claudeId);
@@ -328,45 +391,8 @@ export function cerrarConversacion(cid: string) {
   useClaude.setState((s) => {
     const { [cid]: _, ...conversaciones } = s.conversaciones;
     const { [cid]: __, ...selecciones } = s.selecciones;
-    return { conversaciones, selecciones };
-  });
-}
-
-let siguientePestana = 1;
-
-/** Abre una conversación nueva en el espacio, como pestaña, y la enseña. Devuelve su id. */
-export function nuevaPestana(espacio: string): string {
-  const cid = `${espacio}~${++siguientePestana}`;
-  useClaude.setState((s) => ({
-    verContexto: false,
-    conversaciones: { ...s.conversaciones, [cid]: vacia() },
-    pestanas: { ...s.pestanas, [espacio]: [...pestanasDe(espacio, s), cid] },
-    activas: { ...s.activas, [espacio]: cid },
-  }));
-  return cid;
-}
-
-export function activarPestana(cid: string) {
-  useClaude.setState((s) => ({ verContexto: false, activas: { ...s.activas, [espacioDe(cid)]: cid } }));
-}
-
-/** Cierra una conversación (para su Claude). Si era la única, queda una vacía. */
-export function cerrarPestana(cid: string) {
-  const espacio = espacioDe(cid);
-  const c = useClaude.getState().conversaciones[cid];
-  if (c?.claudeId != null) void cerrarClaude(c.claudeId);
-  olvidarCola(cid);
-  useClaude.setState((s) => {
-    const lista = pestanasDe(espacio, s);
-    const i = lista.indexOf(cid);
-    let resto = lista.filter((x) => x !== cid);
-    const { [cid]: _, ...conversaciones } = s.conversaciones;
-    if (!resto.length) {
-      resto = [espacio];
-      conversaciones[espacio] = vacia();
-    }
-    const activa = s.activas[espacio] === cid || !s.activas[espacio] ? resto[Math.min(Math.max(0, i), resto.length - 1)] : s.activas[espacio];
-    return { conversaciones, pestanas: { ...s.pestanas, [espacio]: resto }, activas: { ...s.activas, [espacio]: activa } };
+    const { [cid]: ___, ...adjuntos } = s.adjuntos;
+    return { conversaciones, selecciones, adjuntos, verContexto: s.verContexto === cid ? null : s.verContexto };
   });
 }
 
@@ -612,15 +638,16 @@ export async function verCambios(espacio: string, ruta: string) {
 
 /** Adjunta una orden del terminal a lo próximo que se le escriba a Claude. */
 export function adjuntar(espacio: string, bloque: TextoBloque) {
-  // Se llama con el espacio (desde un bloque del terminal): va a la conversación que se ve.
-  const cid = activaDe(espacio);
-  useClaude.setState((s) => ({ adjuntos: { ...s.adjuntos, [cid]: bloque }, visible: true }));
+  // Se llama con el espacio (desde un bloque del terminal): va a la última conversación usada
+  // (o a una nueva a la derecha), que se pone delante con el cursor en la caja.
+  const cid = irAClaude(espacio);
+  if (cid) useClaude.setState((s) => ({ adjuntos: { ...s.adjuntos, [cid]: bloque } }));
 }
 
-/** Adjunta texto seleccionado a lo próximo que se escriba en la conversación que se ve. */
+/** Adjunta texto seleccionado a lo próximo que se escriba en la última conversación usada. */
 export function adjuntarSeleccion(espacio: string, s: Seleccion) {
-  const cid = activaDe(espacio);
-  useClaude.setState((x) => ({ selecciones: { ...x.selecciones, [cid]: s }, visible: true }));
+  const cid = irAClaude(espacio);
+  if (cid) useClaude.setState((x) => ({ selecciones: { ...x.selecciones, [cid]: s } }));
 }
 
 export function quitarSeleccion(cid: string) {
@@ -823,7 +850,7 @@ export async function reanudar(espacio: string, carpeta: string, id: string, tit
   });
   entradas.push({ id: ++contador, tipo: "aviso", texto: `Reanudada «${titulo}»: sigue donde lo dejaste` });
   useClaude.setState((s) => ({
-    verContexto: false,
+    verContexto: s.verContexto === espacio ? null : s.verContexto,
     conversaciones: {
       ...s.conversaciones,
       [espacio]: {
@@ -848,12 +875,13 @@ export async function reanudar(espacio: string, carpeta: string, id: string, tit
  */
 export async function enviar(espacio: string, texto: string, deCola?: EnCola) {
   let c = conversacion(espacio);
+  marcarUltima(espacio);
   if (c.estado === "arrancando" || c.estado === "pensando") return encolar(espacio, texto);
   // Comandos que resuelve Kyu sin Claude.
   const orden = texto.trim().toLowerCase();
   if (orden === "/clear" || orden === "/new") return nueva(espacio);
   if (orden === "/context" && c.claudeId !== null) {
-    useClaude.setState({ verContexto: true });
+    useClaude.setState({ verContexto: espacio });
     return void refrescarContexto(espacio);
   }
   let adjunto: TextoBloque | undefined;
@@ -1047,7 +1075,7 @@ export function nueva(espacio: string) {
   }
   // Se queda con lo elegido en la conversación que se cierra.
   useClaude.setState((s) => ({
-    verContexto: false,
+    verContexto: s.verContexto === espacio ? null : s.verContexto,
     conversaciones: {
       ...s.conversaciones,
       [espacio]: { ...vacia(), eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, cuenta: c.cuenta },
@@ -1158,7 +1186,7 @@ export async function volver(espacio: string, entrada: number, que: Vuelta) {
   // Sin pieza anterior era el primer mensaje: se empieza de cero.
   const seguir = e.previo && c.sesion ? c.sesion : null;
   useClaude.setState((s) => ({
-    verContexto: false,
+    verContexto: s.verContexto === espacio ? null : s.verContexto,
     borradores: { ...s.borradores, [espacio]: e.texto },
     conversaciones: {
       ...s.conversaciones,
@@ -1203,14 +1231,10 @@ export function tomarBorrador(espacio: string) {
 export function limpiar(espacios: string[]) {
   for (const id of Object.keys(useClaude.getState().conversaciones)) {
     if (!espacios.includes(espacioDe(id))) {
-      const c = conversacion(id);
-      if (c.claudeId !== null) void cerrarClaude(c.claudeId);
-      olvidarCola(id);
+      cerrarConversacion(id);
       useClaude.setState((s) => {
-        const { [id]: _, ...resto } = s.conversaciones;
-        const { [espacioDe(id)]: __, ...pestanas } = s.pestanas;
-        const { [espacioDe(id)]: ___, ...activas } = s.activas;
-        return { conversaciones: resto, pestanas, activas };
+        const { [espacioDe(id)]: _, ...ultimas } = s.ultimas;
+        return { ultimas };
       });
     }
   }

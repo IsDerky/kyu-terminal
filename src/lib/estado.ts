@@ -38,6 +38,8 @@ export interface Espacio {
   raiz: Nodo;
   /** id del panel con el foco */
   foco: string;
+  /** Panel a pantalla completa (Ctrl+Mayús+X); deja de estarlo en cuanto el foco va a otro. */
+  maximizado?: string | null;
 }
 
 export type Zona = "centro" | "izquierda" | "derecha" | "arriba" | "abajo";
@@ -75,6 +77,8 @@ interface Estado {
   /** Pone la conversación `cid` como pestaña: en el panel `panel` (o el del foco) o, con
    *  `alLado`, en un panel nuevo a la derecha del foco. */
   ponerClaude: (cid: string, opciones?: { panel?: string; alLado?: boolean }) => void;
+  /** Ctrl+Mayús+X: el panel con el foco a pantalla completa, o de vuelta. */
+  alternarMaximizar: () => void;
   ponerTitulo: (item: string, titulo: string, carpeta?: string | null) => void;
   marcarSucio: (item: string, sucio: boolean) => void;
   ponerBuscando: (item: string | null) => void;
@@ -114,8 +118,8 @@ function cambiar(nodo: Nodo, id: string, f: (n: Nodo) => Nodo | null): Nodo | nu
   return { ...nodo, hijos: planos };
 }
 
-/** Pone `nuevo` al lado del nodo `id`. */
-function ponerAlLado(raiz: Nodo, id: string, nuevo: Nodo, zona: Exclude<Zona, "centro">): Nodo {
+/** Pone `nuevo` al lado del nodo `id` (con `parte`, el % que ocupa lo nuevo). */
+function ponerAlLado(raiz: Nodo, id: string, nuevo: Nodo, zona: Exclude<Zona, "centro">, parte?: number): Nodo {
   const dir: Direccion = zona === "izquierda" || zona === "derecha" ? "horizontal" : "vertical";
   const antes = zona === "izquierda" || zona === "arriba";
   return (
@@ -124,6 +128,7 @@ function ponerAlLado(raiz: Nodo, id: string, nuevo: Nodo, zona: Exclude<Zona, "c
       id: nuevoId("d"),
       dir,
       hijos: antes ? [nuevo, n] : [n, nuevo],
+      tamanos: parte ? (antes ? [parte, 100 - parte] : [100 - parte, parte]) : undefined,
     })) ?? nuevo
   );
 }
@@ -213,14 +218,17 @@ export const useKyu = create<Estado>((set, get) => {
       return t.id;
     },
 
+    // Ir a otro panel quita el «maximizado» (si no, volvería a saltar al volver a él).
     activar: (panel, item) =>
       conEspacio((esp) => ({
         ...esp,
         foco: panel,
+        maximizado: esp.maximizado === panel ? panel : null,
         raiz: cambiar(esp.raiz, panel, (n) => (n.tipo === "panel" ? { ...n, activo: item } : n)) ?? esp.raiz,
       })),
 
-    enfocar: (panel) => conEspacio((esp) => (esp.foco === panel ? esp : { ...esp, foco: panel })),
+    enfocar: (panel) =>
+      conEspacio((esp) => (esp.foco === panel ? esp : { ...esp, foco: panel, maximizado: esp.maximizado === panel ? panel : null })),
 
     quitarItem: (item) => {
       const s = get();
@@ -350,7 +358,7 @@ export const useKyu = create<Estado>((set, get) => {
       set((s) => ({ items: { ...s.items, [it.id]: it } }));
       if (opciones.alLado) {
         const nuevo = nuevoPanel([it.id]);
-        conEspacio((e) => ({ ...e, foco: nuevo.id, raiz: ponerAlLado(e.raiz, e.foco, nuevo, "derecha") }));
+        conEspacio((e) => ({ ...e, foco: nuevo.id, raiz: ponerAlLado(e.raiz, e.foco, nuevo, "derecha", 40) }));
         return;
       }
       conEspacio((e) => {
@@ -364,6 +372,12 @@ export const useKyu = create<Estado>((set, get) => {
         };
       });
     },
+
+    alternarMaximizar: () =>
+      conEspacio((e) => {
+        if (paneles(e.raiz).length < 2) return e.maximizado ? { ...e, maximizado: null } : e;
+        return { ...e, maximizado: e.maximizado === e.foco ? null : e.foco };
+      }),
 
     ponerTitulo: (item, titulo, carpeta) =>
       set((s) => {

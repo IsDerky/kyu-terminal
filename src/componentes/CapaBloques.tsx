@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
 import type { Autocompletado } from "../lib/autocompletado";
-import { adjuntar, ID_ENTRADA } from "../lib/claude";
+import { adjuntar } from "../lib/claude";
 import { useKyu } from "../lib/estado";
 import { Mascota } from "./iconos";
 
@@ -14,7 +14,6 @@ function preguntarAClaude(term: Terminal, b: Bloque) {
   const t = textoBloque(term, b);
   if (!t) return;
   adjuntar(useKyu.getState().activo, t);
-  requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
 }
 
 interface Props {

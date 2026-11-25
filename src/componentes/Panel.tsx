@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { ChevronDown, Columns2, FolderTree, Plus, Rows2, X } from "lucide-react";
+import { ChevronDown, Columns2, FolderTree, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import type { ConfigVista } from "../lib/nucleo";
@@ -23,9 +23,11 @@ interface Props {
   /** true si hay más de un panel en el espacio (entonces se marca el del foco). */
   varios: boolean;
   config: ConfigVista;
+  /** Está a pantalla completa (Ctrl+Mayús+X). */
+  maximizado?: boolean;
 }
 
-export default function Panel({ panel, conFoco, varios, config }: Props) {
+export default function Panel({ panel, conFoco, varios, config, maximizado = false }: Props) {
   const items = useKyu((s) => s.items);
   const { activar, enfocar, nuevaPestana, dividir, moverItem } = useKyu.getState();
   const [zona, setZona] = useState<Zona | null>(null);
@@ -169,6 +171,17 @@ export default function Panel({ panel, conFoco, varios, config }: Props) {
           <BotonBarra titulo="Dividir abajo (Ctrl+Mayús+E)" onClick={() => dividir("vertical", perfilNuevo, panel.id)}>
             <Rows2 size={13} />
           </BotonBarra>
+          {(varios || maximizado) && (
+            <BotonBarra
+              titulo={maximizado ? "Volver a los paneles (Ctrl+Mayús+X)" : "Maximizar este panel (Ctrl+Mayús+X)"}
+              onClick={() => {
+                enfocar(panel.id);
+                useKyu.getState().alternarMaximizar();
+              }}
+            >
+              {maximizado ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            </BotonBarra>
+          )}
         </div>
       </div>
 

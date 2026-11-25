@@ -44,7 +44,9 @@ const SECCIONES: { id: Seccion; nombre: string; icono: LucideIcon | "claude" }[]
 const ATAJOS: [string, string][] = [
   ["Paleta de órdenes", "Ctrl+Mayús+P"],
   ["Ajustes", "Ctrl+,"],
-  ["Panel de Claude", "Ctrl+Mayús+C"],
+  ["Ir a Claude (la última conversación) / volver", "Ctrl+Mayús+C"],
+  ["Nueva conversación con Claude en este panel", "Ctrl+Mayús+K"],
+  ["Maximizar el panel / volver", "Ctrl+Mayús+X"],
   ["Preguntar a Claude por la selección", "Alt+K"],
   ["Nueva pestaña", "Ctrl+Mayús+T"],
   ["Nuevo espacio", "Ctrl+Mayús+N"],
@@ -220,7 +222,7 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
 
           {seccion === "claude" && (
             <>
-              <Explicacion>El panel de Claude (Ctrl+Mayús+C) arranca Claude Code en la carpeta del terminal con el foco.</Explicacion>
+              <Explicacion>Cada conversación con Claude es una pestaña (Ctrl+Mayús+C va a la última; Ctrl+Mayús+K abre otra) y arranca Claude Code en la carpeta del terminal con el foco.</Explicacion>
               <Campo
                 titulo="Ruta de Claude Code"
                 detalle={a.claude_encontrado ? `Se usa: ${a.claude_encontrado}` : "No se encuentra claude: instálalo o pon aquí su ruta."}

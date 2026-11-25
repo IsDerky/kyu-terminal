@@ -12,10 +12,17 @@ interface Props {
 
 /** Un espacio de trabajo: su árbol de paneles divididos, redimensionables. */
 export default function Espacio({ espacio, config }: Props) {
-  const varios = paneles(espacio.raiz).length > 1;
+  const lista = paneles(espacio.raiz);
+  const varios = lista.length > 1;
+  // Ctrl+Mayús+X: solo el panel con el foco, a pantalla completa.
+  const grande = espacio.maximizado && espacio.maximizado === espacio.foco ? lista.find((p) => p.id === espacio.maximizado) : undefined;
   return (
     <div className="min-h-0 min-w-0 flex-1">
-      <Arbol nodo={espacio.raiz} foco={espacio.foco} varios={varios} config={config} />
+      {grande ? (
+        <Panel panel={grande} conFoco varios={false} config={config} maximizado />
+      ) : (
+        <Arbol nodo={espacio.raiz} foco={espacio.foco} varios={varios} config={config} />
+      )}
     </div>
   );
 }

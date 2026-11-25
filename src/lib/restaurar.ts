@@ -1,8 +1,8 @@
 // Restaurar la sesión: al cambiar algo se guarda (localStorage, con un momento de espera)
-// qué espacios, paneles y pestañas hay, y la conversación de Claude de cada espacio; al
+// qué espacios, paneles y pestañas hay (también las conversaciones de Claude); al
 // abrir Kyu se vuelve a montar todo. Las shells son nuevas (en su carpeta), no las de antes.
 import { nuevoId, paneles, useKyu, type Direccion, type Espacio, type Item, type Nodo } from "./estado";
-import { activarPestana, nuevaDePanel, nuevaPestana, pestanasDe, reanudar, useClaude } from "./claude";
+import { nuevaDePanel, reanudar, useClaude } from "./claude";
 import { leerArchivo } from "./nucleo";
 
 const CLAVE = "kyu:sesion";
@@ -33,9 +33,9 @@ interface ConversacionGuardada {
 interface EspacioGuardado {
   nombre: string | null;
   raiz: NodoGuardado;
-  /** Antes de las pestañas de conversación (se sigue leyendo). */
+  /** Del panel lateral de antes (se sigue leyendo: pasan a pestañas a la derecha). */
   claude?: ConversacionGuardada;
-  /** Conversaciones del espacio, en orden, y la que se veía. */
+
   claudes?: ConversacionGuardada[];
   claudeActiva?: number;
 }
@@ -43,7 +43,8 @@ interface EspacioGuardado {
 interface SesionGuardada {
   version: 1;
   activo: number;
-  claudeVisible: boolean;
+  /** Del panel lateral de antes. */
+  claudeVisible?: boolean;
   expandido?: boolean;
   espacios: EspacioGuardado[];
 }
@@ -89,25 +90,15 @@ function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGu
 
 function foto(): SesionGuardada {
   const k = useKyu.getState();
-  const c = useClaude.getState();
   const espacios: EspacioGuardado[] = [];
   let activo = 0;
   for (const e of k.espacios) {
     const raiz = guardarNodo(e.raiz, k.items, e.foco);
     if (!raiz) continue;
     if (e.id === k.activo) activo = espacios.length;
-    // Las conversaciones con algo dentro (las vacías no vuelven).
-    const claudes: ConversacionGuardada[] = [];
-    let claudeActiva = 0;
-    for (const cid of pestanasDe(e.id, c)) {
-      const g = guardarConversacion(cid, c);
-      if (!g) continue;
-      if (cid === (c.activas[e.id] ?? e.id)) claudeActiva = claudes.length;
-      claudes.push(g);
-    }
-    espacios.push({ nombre: e.nombre, raiz, claudes: claudes.length ? claudes : undefined, claudeActiva });
+    espacios.push({ nombre: e.nombre, raiz });
   }
-  return { version: 1, activo, claudeVisible: c.visible, expandido: c.expandido, espacios };
+  return { version: 1, activo, espacios };
 }
 
 let pendiente: ReturnType<typeof setTimeout> | null = null;
@@ -143,8 +134,7 @@ export function vigilarSesion() {
     if (s.espacios !== a.espacios || s.items !== a.items || s.activo !== a.activo) programar();
   });
   const quitarC = useClaude.subscribe((s, a) => {
-    if (s.conversaciones !== a.conversaciones || s.visible !== a.visible || s.pestanas !== a.pestanas || s.activas !== a.activas || s.expandido !== a.expandido)
-      programar();
+    if (s.conversaciones !== a.conversaciones) programar();
   });
   window.addEventListener("beforeunload", guardarSesion);
   return () => {
@@ -244,31 +234,34 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
   };
 
   const espacios: Espacio[] = [];
-  const claudes: { espacio: string; lista: ConversacionGuardada[]; activa: number }[] = [];
   let activo = "";
   s.espacios.forEach((g, k) => {
     const foco = { id: null as string | null };
     const id = nuevoId("e");
-    const raiz = montar(g.raiz, foco, id);
+    let raiz = montar(g.raiz, foco, id);
     if (!raiz) return;
+    // Sesión de antes de quitar el panel lateral: sus conversaciones pasan a pestañas de un
+    // panel a la derecha (40 %), en el mismo orden y con delante la que se veía.
+    const lateral = g.claudes ?? (g.claude ? [g.claude] : []);
+    if (lateral.length) {
+      const ids = lateral.map((conv) => {
+        const cid = nuevaDePanel(id);
+        dePanel.push({ cid, conv });
+        const it: Item = { id: nuevoId("c"), tipo: "claude", cid };
+        items[it.id] = it;
+        return it.id;
+      });
+      const panel: Nodo = { tipo: "panel", id: nuevoId("p"), items: ids, activo: ids[Math.min(g.claudeActiva ?? 0, ids.length - 1)] };
+      raiz = { tipo: "division", id: nuevoId("d"), dir: "horizontal", hijos: [raiz, panel], tamanos: [60, 40] };
+    }
     const esp: Espacio = { id, nombre: g.nombre, raiz, foco: foco.id ?? paneles(raiz)[0].id };
     espacios.push(esp);
     if (k === s.activo || !activo) activo = esp.id;
-    const lista = g.claudes ?? (g.claude ? [g.claude] : []);
-    if (lista.length) claudes.push({ espacio: esp.id, lista, activa: g.claudeActiva ?? 0 });
   });
   if (!espacios.length) return false;
 
   useKyu.setState({ espacios, items, activo });
   // Las conversaciones se cargan del historial; Claude arranca al escribir (--resume).
-  // La primera conversación de cada espacio lleva su id; las demás, pestañas nuevas.
-  for (const { espacio, lista, activa } of claudes) {
-    const ids = lista.map((_, i) => (i === 0 ? espacio : nuevaPestana(espacio)));
-    lista.forEach((d, i) => void reanudar(ids[i], d.carpeta, d.sesion, d.titulo, d.cuenta ?? null).catch(() => {}));
-    activarPestana(ids[Math.min(activa, ids.length - 1)]);
-  }
   for (const { cid, conv } of dePanel) void reanudar(cid, conv.carpeta, conv.sesion, conv.titulo, conv.cuenta ?? null).catch(() => {});
-  if (s.expandido) useClaude.setState({ expandido: true });
-  if (s.claudeVisible) useClaude.getState().mostrar(true);
   return true;
 }

@@ -17,12 +17,12 @@ Estado: en desarrollo (0.2). La primera versión, con egui, está en la etiqueta
 
 ## Claude Code
 
-Panel a la derecha (Ctrl+Mayús+C, o a pantalla grande con Ctrl+Mayús+X) que arranca Claude Code en la carpeta del terminal con el foco.
+Cada conversación es una pestaña más, al lado de terminales y archivos: Ctrl+Mayús+C va a la última (o abre una a la derecha), Ctrl+Mayús+K abre otra y el botón «Claude» de la barra enseña todas, con cuál trabaja y cuál espera un permiso. Arranca Claude Code en la carpeta del terminal con el foco.
 
 - Modelo, esfuerzo y modo de permisos (Mayús+Tab), comandos con `/`, `@archivo`, imágenes pegadas o soltadas y desglose del contexto.
 - Alt+K manda lo seleccionado en el terminal o en el editor (con su archivo y líneas) para preguntar sobre ello.
 - Permisos con el diff del cambio; los planes se aprueban desde el panel.
-- Varias conversaciones por espacio, reanudar las anteriores y volver a un mensaje (conversación, archivos o las dos cosas).
+- Varias conversaciones a la vez, mensajes en cola mientras trabaja, reanudar las anteriores y volver a un mensaje (conversación, archivos o las dos cosas).
 - Los archivos que cambia Claude se abren con lo cambiado marcado, y se puede deshacer.
 - Respuesta sugerida en gris tras cada turno (Tab la usa).
 - Varias cuentas: cada una con su sesión y el mismo historial; se cambia desde el pie del panel y la conversación sigue con la otra. El pie enseña cuánto lleva gastado la cuenta de su sesión de 5 h y de la semana, y al 90 % propone seguir con otra.
@@ -35,7 +35,9 @@ Panel a la derecha (Ctrl+Mayús+C, o a pantalla grande con Ctrl+Mayús+X) que ar
 |---|---|
 | Ctrl+Mayús+P | Paleta de órdenes |
 | Ctrl+, | Ajustes |
-| Ctrl+Mayús+C / Ctrl+Mayús+X | Panel de Claude / Claude a pantalla grande |
+| Ctrl+Mayús+C | Ir a la última conversación con Claude / volver |
+| Ctrl+Mayús+K | Nueva conversación con Claude en el panel |
+| Ctrl+Mayús+X | Maximizar el panel con el foco / volver |
 | Mayús+Tab (en el panel) | Siguiente modo de permisos |
 | Alt+K | Lo seleccionado (terminal o archivo) a la caja de Claude |
 | Ctrl+Mayús+D / Ctrl+Mayús+E | Dividir el panel a la derecha / abajo |

@@ -4,7 +4,7 @@ import { focoActual, useKyu } from "./estado";
 import { sesion } from "./terminales";
 import { editor } from "./editores";
 import { textoSeleccion } from "./bloques";
-import { adjuntarSeleccion, ID_ENTRADA, type Seleccion } from "./claude";
+import { adjuntarSeleccion, type Seleccion } from "./claude";
 
 const MAX_CARACTERES = 40_000;
 
@@ -45,6 +45,5 @@ export function preguntarPorSeleccion(): boolean {
   const sel = seleccionActual();
   if (!sel) return false;
   adjuntarSeleccion(useKyu.getState().activo, sel);
-  requestAnimationFrame(() => (document.getElementById(ID_ENTRADA) as HTMLTextAreaElement | null)?.focus());
   return true;
 }
