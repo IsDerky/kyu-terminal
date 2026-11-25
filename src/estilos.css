@@ -84,7 +84,8 @@ body {
 
 .codigo-md, .codigo-md pre {
   margin: 0;
-  padding: 10px 12px;
+  /* A la derecha, sitio para el lenguaje y el botón de copiar. */
+  padding: 10px 84px 10px 12px;
   overflow-x: auto;
   font: 12px/1.55 var(--font-mono, "FiraCode Nerd Font Mono", Consolas, monospace);
   background: transparent !important;

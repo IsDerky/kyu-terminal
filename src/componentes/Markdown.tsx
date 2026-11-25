@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { Check, Copy } from "lucide-react";
 
 // Shiki se carga al primer bloque de código (y cada lenguaje, la primera vez que sale).
 let shiki: Promise<typeof import("shiki")> | null = null;
@@ -31,11 +32,27 @@ function Bloque({ codigo, lenguaje }: { codigo: string; lenguaje: string }) {
     };
   }, [codigo, lenguaje]);
 
+  const [copiado, setCopiado] = useState(false);
+  const copiar = () =>
+    void navigator.clipboard.writeText(codigo).then(() => {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1500);
+    });
+
   return (
     <div className="group/codigo relative my-2 overflow-hidden rounded-lg border border-borde bg-tarjeta">
-      {lenguaje && (
-        <span className="absolute right-2 top-1.5 font-mono text-[10.5px] text-muy">{lenguaje}</span>
-      )}
+      {/* Siempre a la vista (no solo al pasar el ratón): copiar es lo que más se hace con un bloque. */}
+      <div className="absolute right-1 top-1 z-10 flex items-center gap-1.5 rounded-md bg-tarjeta/90 pl-2">
+        {lenguaje && <span className="font-mono text-[10.5px] text-muy">{lenguaje}</span>}
+        <button
+          type="button"
+          title={copiado ? "Copiado" : "Copiar"}
+          onClick={copiar}
+          className={`grid size-6 place-items-center rounded-md hover:bg-hover ${copiado ? "text-ok" : "text-muy hover:text-texto"}`}
+        >
+          {copiado ? <Check size={13} strokeWidth={2.2} /> : <Copy size={12} strokeWidth={1.8} />}
+        </button>
+      </div>
       {html ? (
         <div className="codigo-md" dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
