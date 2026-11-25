@@ -31,13 +31,18 @@ pub fn al_cambiar_foco(ventana: &tauri::WebviewWindow, con_foco: bool) {
 #[cfg(windows)]
 fn poner_nivel(ventana: &tauri::WebviewWindow, bajo: bool) {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
-        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL, ICoreWebView2_19,
+        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        ICoreWebView2_19,
     };
     use windows::core::Interface;
     let _ = ventana.with_webview(move |w| unsafe {
-        let Ok(core) = w.controller().CoreWebView2() else { return };
+        let Ok(core) = w.controller().CoreWebView2() else {
+            return;
+        };
         // ICoreWebView2_19 llega con WebView2 115; uno más viejo simplemente no lo hace.
-        let Ok(c19) = core.cast::<ICoreWebView2_19>() else { return };
+        let Ok(c19) = core.cast::<ICoreWebView2_19>() else {
+            return;
+        };
         let nivel = if bajo {
             COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
         } else {

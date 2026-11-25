@@ -294,26 +294,46 @@ fn prompt_bash(shell: &str, argumentos: &mut Vec<String>, entorno: &mut Vec<(Str
         if !solo_opciones_de_login {
             return;
         }
-        let Some(script) = preparar_prompt_bash() else { return };
+        let Some(script) = preparar_prompt_bash() else {
+            return;
+        };
         // Con --login en el perfil (Git Bash lo trae), kyu.bash carga lo de login.
         if argumentos.iter().any(|a| a == "--login" || a == "-l") {
             entorno.push(("KYU_LOGIN".into(), "1".into()));
         }
-        *argumentos = vec!["--rcfile".into(), script.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/"), "-i".into()];
+        *argumentos = vec![
+            "--rcfile".into(),
+            script
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/"),
+            "-i".into(),
+        ];
     } else if cfg!(windows) && programa == "wsl.exe" && argumentos.is_empty() {
-        let Some(script) = preparar_prompt_bash() else { return };
-        let Some(ruta) = ruta_wsl(&script) else { return };
+        let Some(script) = preparar_prompt_bash() else {
+            return;
+        };
+        let Some(ruta) = ruta_wsl(&script) else {
+            return;
+        };
         // wsl.exe abre una shell de login: se hace lo mismo a mano en kyu.bash.
         entorno.push(("KYU_LOGIN".into(), "1".into()));
         // Las variables de Kyu pasan a Linux; /p traduce la ruta de Windows.
         entorno.push(("WSLENV".into(), wslenv()));
-        *argumentos = vec!["-e".into(), "bash".into(), "--rcfile".into(), ruta, "-i".into()];
+        *argumentos = vec![
+            "-e".into(),
+            "bash".into(),
+            "--rcfile".into(),
+            ruta,
+            "-i".into(),
+        ];
     }
 }
 
 /// C:\Users\x\… → /mnt/c/Users/x/… (el montaje por defecto de WSL).
 fn ruta_wsl(ruta: &std::path::Path) -> Option<String> {
-    let texto = ruta.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+    let texto = ruta
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/");
     let (unidad, resto) = texto.split_once(":/")?;
     (unidad.len() == 1).then(|| format!("/mnt/{}/{resto}", unidad.to_lowercase()))
 }
@@ -346,7 +366,9 @@ pub const PREFIJO_SSH: &str = "SSH · ";
 /// Un perfil por cada `Host` de ~/.ssh/config que sea un nombre concreto (sin `*`, `?` ni
 /// `!`): lanza `ssh <alias>` y ssh hace el resto con lo que diga ese archivo.
 fn perfiles_ssh() -> Vec<Perfil> {
-    let Some(texto) = dirs::home_dir().and_then(|h| std::fs::read_to_string(h.join(".ssh").join("config")).ok()) else {
+    let Some(texto) =
+        dirs::home_dir().and_then(|h| std::fs::read_to_string(h.join(".ssh").join("config")).ok())
+    else {
         return Vec::new();
     };
     #[cfg(windows)]
@@ -382,7 +404,10 @@ fn alias_ssh(texto: &str) -> Vec<String> {
         }
         for alias in resto {
             let alias = alias.trim_matches('"');
-            if alias.is_empty() || alias.contains(['*', '?', '!']) || lista.iter().any(|a| a == alias) {
+            if alias.is_empty()
+                || alias.contains(['*', '?', '!'])
+                || lista.iter().any(|a| a == alias)
+            {
                 continue;
             }
             lista.push(alias.to_string());
@@ -493,7 +518,10 @@ pub fn carpeta_portable() -> Option<&'static std::path::Path> {
         .get_or_init(|| {
             let exe = std::env::current_exe().ok()?;
             let junto = exe.parent()?;
-            junto.join(MARCA_PORTABLE).is_file().then(|| junto.join("datos"))
+            junto
+                .join(MARCA_PORTABLE)
+                .is_file()
+                .then(|| junto.join("datos"))
         })
         .as_deref()
 }

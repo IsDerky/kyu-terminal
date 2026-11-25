@@ -58,7 +58,11 @@ fn trozos(ruta: &Path, n: u64) -> (String, String) {
         String::from_utf8_lossy(&buf).into_owned()
     };
     let principio = leer(0, n.min(largo));
-    let fin = if largo > n { leer(largo - n, n) } else { String::new() };
+    let fin = if largo > n {
+        leer(largo - n, n)
+    } else {
+        String::new()
+    };
     (principio, fin)
 }
 
@@ -78,8 +82,16 @@ fn texto_usuario(v: &Value) -> Option<String> {
             let imagenes = bloques.iter().filter(|b| b["type"] == "image").count();
             let mut t = textos.join("\n");
             if imagenes > 0 {
-                let marca = if imagenes == 1 { "[1 imagen]".to_string() } else { format!("[{imagenes} imágenes]") };
-                t = if t.is_empty() { marca } else { format!("{marca} {t}") };
+                let marca = if imagenes == 1 {
+                    "[1 imagen]".to_string()
+                } else {
+                    format!("[{imagenes} imágenes]")
+                };
+                t = if t.is_empty() {
+                    marca
+                } else {
+                    format!("{marca} {t}")
+                };
             }
             t
         }
@@ -95,7 +107,11 @@ fn texto_usuario(v: &Value) -> Option<String> {
             .and_then(|a| a.split("</command-args>").next())
             .unwrap_or("")
             .trim();
-        return Some(if args.is_empty() { nombre.to_string() } else { format!("{nombre} {args}") });
+        return Some(if args.is_empty() {
+            nombre.to_string()
+        } else {
+            format!("{nombre} {args}")
+        });
     }
     let t = t.trim();
     // Lo que mete el propio Claude Code como si fuera del usuario va entre etiquetas
@@ -103,7 +119,9 @@ fn texto_usuario(v: &Value) -> Option<String> {
     let etiqueta = t
         .strip_prefix('<')
         .and_then(|r| r.split_once('>'))
-        .is_some_and(|(nombre, _)| !nombre.is_empty() && nombre.chars().all(|c| c.is_ascii_lowercase() || c == '-'));
+        .is_some_and(|(nombre, _)| {
+            !nombre.is_empty() && nombre.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+        });
     if t.is_empty() || etiqueta || t.starts_with("Caveat:") {
         return None;
     }
@@ -111,7 +129,11 @@ fn texto_usuario(v: &Value) -> Option<String> {
 }
 
 fn titulo_de(principio: &str, fin: &str) -> Option<String> {
-    let lineas = |s: &str| s.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).collect::<Vec<_>>();
+    let lineas = |s: &str| {
+        s.lines()
+            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+            .collect::<Vec<_>>()
+    };
     let del_fin = lineas(fin);
     for clave in ["customTitle", "aiTitle"] {
         if let Some(t) = del_fin.iter().rev().find_map(|v| v[clave].as_str()) {
@@ -140,7 +162,12 @@ pub async fn claude_sesiones(carpeta: String) -> Result<Vec<SesionGuardada>, Str
             .filter(|e| e.path().extension().is_some_and(|x| x == "jsonl"))
             .filter_map(|e| {
                 let m = e.metadata().ok()?;
-                let fecha = m.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_millis() as u64;
+                let fecha = m
+                    .modified()
+                    .ok()?
+                    .duration_since(UNIX_EPOCH)
+                    .ok()?
+                    .as_millis() as u64;
                 Some((e.path(), fecha, m.len()))
             })
             .collect();
@@ -155,14 +182,23 @@ pub async fn claude_sesiones(carpeta: String) -> Result<Vec<SesionGuardada>, Str
                 let id = ruta.file_stem()?.to_string_lossy().into_owned();
                 // El último mensaje del usuario que se vea (principio y luego final); si no hay
                 // ninguno entero en esos trozos, el `lastPrompt` que apunta Claude Code.
-                let leer = |s: &str| s.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).collect::<Vec<_>>();
+                let leer = |s: &str| {
+                    s.lines()
+                        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+                        .collect::<Vec<_>>()
+                };
                 let buscar = |lineas: &[Value]| {
                     lineas
                         .iter()
                         .rev()
                         .filter(|v| v["type"] == "user")
                         .find_map(texto_usuario)
-                        .or_else(|| lineas.iter().rev().find_map(|v| v["lastPrompt"].as_str().map(String::from)))
+                        .or_else(|| {
+                            lineas
+                                .iter()
+                                .rev()
+                                .find_map(|v| v["lastPrompt"].as_str().map(String::from))
+                        })
                 };
                 let ultimo = buscar(&leer(&fin))
                     .or_else(|| buscar(&leer(&principio)))
@@ -187,12 +223,27 @@ pub async fn claude_sesiones(carpeta: String) -> Result<Vec<SesionGuardada>, Str
 #[serde(tag = "tipo", rename_all = "camelCase")]
 pub enum Pasado {
     /// `uuid` y `previo` (la pieza anterior de la cadena) sirven para volver a este punto.
-    Tu { texto: String, uuid: Option<String>, previo: Option<String> },
-    Claude { texto: String },
-    Herramienta { id: String, nombre: String, resumen: String, error: bool },
-    Aviso { texto: String },
+    Tu {
+        texto: String,
+        uuid: Option<String>,
+        previo: Option<String>,
+    },
+    Claude {
+        texto: String,
+    },
+    Herramienta {
+        id: String,
+        nombre: String,
+        resumen: String,
+        error: bool,
+    },
+    Aviso {
+        texto: String,
+    },
     /// Al final: la última pieza de la cadena (por donde sigue la conversación).
-    Cadena { uuid: String },
+    Cadena {
+        uuid: String,
+    },
 }
 
 /// Lo que se ve de una conversación guardada: mensajes, respuestas y herramientas (las
@@ -220,7 +271,9 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
             {
                 continue;
             }
-            let Ok(v) = serde_json::from_str::<Value>(&linea) else { continue };
+            let Ok(v) = serde_json::from_str::<Value>(&linea) else {
+                continue;
+            };
             if v["isSidechain"].as_bool() == Some(true) {
                 continue;
             }
@@ -240,7 +293,9 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
                     }
                     if let Some(t) = texto_usuario(&v) {
                         if t.starts_with("[Request interrupted") {
-                            sal.push(Pasado::Aviso { texto: "Parado por ti".into() });
+                            sal.push(Pasado::Aviso {
+                                texto: "Parado por ti".into(),
+                            });
                         } else {
                             sal.push(Pasado::Tu {
                                 texto: t,
@@ -251,7 +306,11 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
                     }
                 }
                 Some("assistant") => {
-                    if v["message"]["model"] == "<synthetic>" && v["message"]["content"][0]["text"].as_str().is_some_and(|t| t.starts_with("No response requested")) {
+                    if v["message"]["model"] == "<synthetic>"
+                        && v["message"]["content"][0]["text"]
+                            .as_str()
+                            .is_some_and(|t| t.starts_with("No response requested"))
+                    {
                         continue;
                     }
                     for b in v["message"]["content"].as_array().into_iter().flatten() {
@@ -259,7 +318,9 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
                             Some("text") => {
                                 let t = b["text"].as_str().unwrap_or("").trim();
                                 if !t.is_empty() {
-                                    sal.push(Pasado::Claude { texto: t.to_string() });
+                                    sal.push(Pasado::Claude {
+                                        texto: t.to_string(),
+                                    });
                                 }
                             }
                             Some("tool_use") => {
@@ -276,7 +337,9 @@ pub async fn claude_historial(carpeta: String, id: String) -> Result<Vec<Pasado>
                     }
                 }
                 Some("system") if v["subtype"] == "compact_boundary" => {
-                    sal.push(Pasado::Aviso { texto: "Conversación compactada".into() });
+                    sal.push(Pasado::Aviso {
+                        texto: "Conversación compactada".into(),
+                    });
                 }
                 _ => {}
             }
@@ -329,14 +392,17 @@ fn listar(raiz: &Path) -> Lista {
                 return true;
             }
             let n = e.file_name().to_string_lossy();
-            !CARPETAS_FUERA.contains(&n.as_ref()) && (!n.starts_with('.') || OCULTAS_DENTRO.contains(&n.as_ref()))
+            !CARPETAS_FUERA.contains(&n.as_ref())
+                && (!n.starts_with('.') || OCULTAS_DENTRO.contains(&n.as_ref()))
         })
         .build();
     for e in paseo.flatten() {
         if e.depth() == 0 {
             continue;
         }
-        let Ok(rel) = e.path().strip_prefix(raiz) else { continue };
+        let Ok(rel) = e.path().strip_prefix(raiz) else {
+            continue;
+        };
         let mut s = rel.to_string_lossy().replace('\\', "/");
         if e.file_type().is_some_and(|t| t.is_dir()) {
             s.push('/');
@@ -348,7 +414,8 @@ fn listar(raiz: &Path) -> Lista {
     }
     let lista = std::sync::Arc::new(lista);
     if let Ok(mut g) = LISTAS.lock() {
-        g.get_or_insert_with(HashMap::new).insert(raiz.to_path_buf(), (Instant::now(), lista.clone()));
+        g.get_or_insert_with(HashMap::new)
+            .insert(raiz.to_path_buf(), (Instant::now(), lista.clone()));
     }
     lista
 }
@@ -382,7 +449,10 @@ fn puntuar(ruta: &str, consulta: &str) -> Option<i64> {
     }
     let q: Vec<char> = consulta.to_lowercase().chars().collect();
     let sin_barra = r.len() - usize::from(r.last() == Some(&'/'));
-    let nombre = r[..sin_barra].iter().rposition(|&c| c == '/').map_or(0, |i| i + 1);
+    let nombre = r[..sin_barra]
+        .iter()
+        .rposition(|&c| c == '/')
+        .map_or(0, |i| i + 1);
     let en_nombre = encajar(&r[..sin_barra], nombre, &q).map(|p| {
         let empieza = r[nombre..].starts_with(&q);
         p + 60 + if empieza { 50 } else { 0 }
@@ -392,7 +462,9 @@ fn puntuar(ruta: &str, consulta: &str) -> Option<i64> {
     // antes que en «virtual-keyboard»).
     let seguido: String = q.iter().collect();
     let ruta_min: String = r.iter().collect();
-    if ruta_min[ruta_min.rfind('/').map_or(0, |i| i + 1)..].contains(&seguido) || r[nombre..].iter().collect::<String>().contains(&seguido) {
+    if ruta_min[ruta_min.rfind('/').map_or(0, |i| i + 1)..].contains(&seguido)
+        || r[nombre..].iter().collect::<String>().contains(&seguido)
+    {
         puntos += 300;
     } else if ruta_min.contains(&seguido) {
         puntos += 200;
@@ -410,7 +482,10 @@ pub async fn archivos_buscar(carpeta: String, consulta: String) -> Result<Vec<St
         }
         let lista = listar(&raiz);
         let consulta = consulta.replace('\\', "/");
-        let mut con: Vec<(i64, &String)> = lista.iter().filter_map(|r| Some((puntuar(r, &consulta)?, r))).collect();
+        let mut con: Vec<(i64, &String)> = lista
+            .iter()
+            .filter_map(|r| Some((puntuar(r, &consulta)?, r)))
+            .collect();
         con.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
         con.into_iter().take(30).map(|(_, r)| r.clone()).collect()
     })

@@ -119,7 +119,10 @@ fn atender(mcp: &Mcp, app: &AppHandle, mut peticion: tiny_http::Request) {
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({ "tools": herramientas() })),
         "tools/call" => {
-            let nombre = msg["params"]["name"].as_str().unwrap_or_default().to_string();
+            let nombre = msg["params"]["name"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
             let argumentos = msg["params"]["arguments"].clone();
             let r = llamar(mcp, app, claude, &nombre, argumentos);
             Ok(json!({
@@ -137,7 +140,13 @@ fn atender(mcp: &Mcp, app: &AppHandle, mut peticion: tiny_http::Request) {
 }
 
 /// Pasa la llamada a la ventana y espera su respuesta.
-fn llamar(mcp: &Mcp, app: &AppHandle, claude: u32, herramienta: &str, argumentos: Value) -> Respuesta {
+fn llamar(
+    mcp: &Mcp,
+    app: &AppHandle,
+    claude: u32,
+    herramienta: &str,
+    argumentos: Value,
+) -> Respuesta {
     let id = mcp.siguiente.fetch_add(1, Ordering::Relaxed);
     let (tx, rx) = mpsc::channel();
     if let Ok(mut p) = mcp.pendientes.lock() {

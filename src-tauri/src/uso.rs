@@ -53,7 +53,15 @@ fn civil_desde_dias(z: i64) -> (i64, i64, i64) {
     let mp = (5 * doy + 2) / 153;
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    (if m <= 2 { yoe + era * 400 + 1 } else { yoe + era * 400 }, m, d)
+    (
+        if m <= 2 {
+            yoe + era * 400 + 1
+        } else {
+            yoe + era * 400
+        },
+        m,
+        d,
+    )
 }
 
 /// "2026-11-24T15:03:00.123Z" → minutos desde 1970 (UTC).
@@ -69,23 +77,37 @@ fn fecha(dia: i64) -> String {
 
 /// "claude-opus-5-5" → "Opus 5.5"; "claude-haiku-4-5-20251001" → "Haiku 4.5".
 fn nombre_modelo(m: &str) -> String {
-    let partes: Vec<&str> = m.trim_start_matches("claude-").split('-').filter(|p| p.len() < 8).collect();
-    let Some((familia, version)) = partes.split_first() else { return m.to_string() };
+    let partes: Vec<&str> = m
+        .trim_start_matches("claude-")
+        .split('-')
+        .filter(|p| p.len() < 8)
+        .collect();
+    let Some((familia, version)) = partes.split_first() else {
+        return m.to_string();
+    };
     let mut f = familia.to_string();
     if let Some(c) = f.get_mut(0..1) {
         c.make_ascii_uppercase();
     }
-    if version.is_empty() { f } else { format!("{f} {}", version.join(".")) }
+    if version.is_empty() {
+        f
+    } else {
+        format!("{f} {}", version.join("."))
+    }
 }
 
 fn jsonl(carpeta: &Path, desde: SystemTime, salida: &mut Vec<PathBuf>, nivel: u8) {
-    let Ok(lectura) = std::fs::read_dir(carpeta) else { return };
+    let Ok(lectura) = std::fs::read_dir(carpeta) else {
+        return;
+    };
     for e in lectura.flatten() {
         let ruta = e.path();
         let Ok(meta) = e.metadata() else { continue };
         if meta.is_dir() && nivel < 3 {
             jsonl(&ruta, desde, salida, nivel + 1);
-        } else if ruta.extension().is_some_and(|x| x == "jsonl") && meta.modified().is_ok_and(|t| t >= desde) {
+        } else if ruta.extension().is_some_and(|x| x == "jsonl")
+            && meta.modified().is_ok_and(|t| t >= desde)
+        {
             salida.push(ruta);
         }
     }
@@ -96,8 +118,15 @@ fn jsonl(carpeta: &Path, desde: SystemTime, salida: &mut Vec<PathBuf>, nivel: u8
 #[tauri::command(async)]
 pub fn uso_leer(dias: u32, desfase_min: i64) -> Result<UsoVista, String> {
     let dias = dias.clamp(1, 90) as i64;
-    let carpeta = dirs::home_dir().ok_or("sin carpeta personal")?.join(".claude").join("projects");
-    let ahora_min = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs() as i64 / 60;
+    let carpeta = dirs::home_dir()
+        .ok_or("sin carpeta personal")?
+        .join(".claude")
+        .join("projects");
+    let ahora_min = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs() as i64
+        / 60;
     let hoy = (ahora_min - desfase_min).div_euclid(1440);
     let primero = hoy - dias + 1;
 
@@ -112,7 +141,9 @@ pub fn uso_leer(dias: u32, desfase_min: i64) -> Result<UsoVista, String> {
     let mut vistos: HashSet<String> = HashSet::new();
 
     for ruta in archivos {
-        let Ok(f) = std::fs::File::open(&ruta) else { continue };
+        let Ok(f) = std::fs::File::open(&ruta) else {
+            continue;
+        };
         // Cada sesión cuenta entera en la carpeta donde empezó (la primera `cwd` del
         // registro): si Claude hace `cd` dentro, no se reparte entre carpetas sueltas.
         let mut proyecto: Option<String> = None;
@@ -135,20 +166,30 @@ pub fn uso_leer(dias: u32, desfase_min: i64) -> Result<UsoVista, String> {
             if !linea.contains("\"usage\"") || !linea.contains("\"assistant\"") {
                 continue;
             }
-            let Ok(v) = serde_json::from_str::<Value>(&linea) else { continue };
+            let Ok(v) = serde_json::from_str::<Value>(&linea) else {
+                continue;
+            };
             if v["type"] != "assistant" {
                 continue;
             }
             let msg = &v["message"];
             let u = &msg["usage"];
-            let Some(dia) = v["timestamp"].as_str().and_then(minutos_iso).map(|m| (m - desfase_min).div_euclid(1440)) else {
+            let Some(dia) = v["timestamp"]
+                .as_str()
+                .and_then(minutos_iso)
+                .map(|m| (m - desfase_min).div_euclid(1440))
+            else {
                 continue;
             };
             if dia < primero || dia > hoy {
                 continue;
             }
             // Una respuesta sale en varias líneas (una por bloque) con el mismo uso.
-            let clave = format!("{}|{}", msg["id"].as_str().unwrap_or(""), v["requestId"].as_str().unwrap_or(""));
+            let clave = format!(
+                "{}|{}",
+                msg["id"].as_str().unwrap_or(""),
+                v["requestId"].as_str().unwrap_or("")
+            );
             if clave != "|" && !vistos.insert(clave) {
                 continue;
             }
@@ -172,14 +213,20 @@ pub fn uso_leer(dias: u32, desfase_min: i64) -> Result<UsoVista, String> {
     }
 
     let ordenar = |m: HashMap<String, u64>| {
-        let mut v: Vec<Parte> = m.into_iter().map(|(nombre, salida)| Parte { nombre, salida }).collect();
-        v.sort_by(|a, b| b.salida.cmp(&a.salida));
+        let mut v: Vec<Parte> = m
+            .into_iter()
+            .map(|(nombre, salida)| Parte { nombre, salida })
+            .collect();
+        v.sort_by_key(|a| std::cmp::Reverse(a.salida));
         v
     };
     Ok(UsoVista {
         carpeta: carpeta.display().to_string(),
         dias: (primero..=hoy)
-            .map(|d| Dia { fecha: fecha(d), ..por_dia.get(&d).cloned().unwrap_or_default() })
+            .map(|d| Dia {
+                fecha: fecha(d),
+                ..por_dia.get(&d).cloned().unwrap_or_default()
+            })
             .collect(),
         proyectos: ordenar(proyectos),
         modelos: ordenar(modelos),

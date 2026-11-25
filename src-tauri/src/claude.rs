@@ -29,16 +29,29 @@ pub enum Evento {
         modo: String,
     },
     /// «compacting» mientras compacta; null al acabar.
-    Estado { estado: Option<String> },
-    Compactado { antes: u64, despues: u64 },
+    Estado {
+        estado: Option<String>,
+    },
+    Compactado {
+        antes: u64,
+        despues: u64,
+    },
     /// Trozo de texto mientras Claude escribe.
-    Parcial { texto: String },
+    Parcial {
+        texto: String,
+    },
     /// Bloque de texto terminado (sustituye a los parciales).
-    Texto { texto: String },
+    Texto {
+        texto: String,
+    },
     /// Trozo del resumen de lo que va pensando (`--thinking-display summarized`).
-    ParcialRazonamiento { texto: String },
+    ParcialRazonamiento {
+        texto: String,
+    },
     /// Resumen del razonamiento terminado (sustituye a los parciales).
-    Razonamiento { texto: String },
+    Razonamiento {
+        texto: String,
+    },
     Herramienta {
         id: String,
         nombre: String,
@@ -56,11 +69,18 @@ pub enum Evento {
         resumen: String,
     },
     /// Eco de un mensaje tuyo (`--replay-user-messages`): su uuid sirve de punto de control.
-    Eco { uuid: String },
+    Eco {
+        uuid: String,
+    },
     /// Uuid de cada pieza de la conversación (respuestas y resultados): la última antes de un
     /// mensaje tuyo es por donde se corta al volver a ese punto.
-    Cadena { uuid: String },
-    ResultadoHerramienta { id: String, error: bool },
+    Cadena {
+        uuid: String,
+    },
+    ResultadoHerramienta {
+        id: String,
+        error: bool,
+    },
     Permiso {
         #[serde(rename = "idPeticion")]
         id_peticion: String,
@@ -69,7 +89,9 @@ pub enum Evento {
         input: Value,
     },
     /// Tokens que ocupa la conversación ahora mismo.
-    Contexto { tokens: u64 },
+    Contexto {
+        tokens: u64,
+    },
     Fin {
         coste: f64,
         error: bool,
@@ -77,7 +99,9 @@ pub enum Evento {
         /// Texto del resultado cuando no hubo turno del modelo (p. ej. «Unknown command: /x»).
         resultado: Option<String>,
     },
-    Error { texto: String },
+    Error {
+        texto: String,
+    },
     Cerrado,
 }
 
@@ -139,8 +163,9 @@ pub fn claude_abrir(
 ) -> Result<u32, String> {
     let opciones = opciones.unwrap_or_default();
     let config = crate::config::Config::cargar();
-    let programa = buscar_programa(config.claude.as_deref())
-        .ok_or("no encuentro Claude Code (claude) en el PATH; ponlo en kyu.toml con claude = \"ruta\"")?;
+    let programa = buscar_programa(config.claude.as_deref()).ok_or(
+        "no encuentro Claude Code (claude) en el PATH; ponlo en kyu.toml con claude = \"ruta\"",
+    )?;
     let carpeta = carpeta
         .map(PathBuf::from)
         .filter(|c| c.is_dir())
@@ -198,10 +223,9 @@ pub fn claude_abrir(
             ]);
         }
     }
-    cmd
-    .stdin(Stdio::piped())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -241,7 +265,10 @@ pub fn claude_abrir(
                     let _ = quien.send(if r["subtype"] == "success" {
                         Ok(r["response"].clone())
                     } else {
-                        Err(r["error"].as_str().unwrap_or("Claude no pudo hacerlo").to_string())
+                        Err(r["error"]
+                            .as_str()
+                            .unwrap_or("Claude no pudo hacerlo")
+                            .to_string())
                     });
                 }
                 continue;
@@ -285,7 +312,11 @@ static PETICION: AtomicU32 = AtomicU32::new(0);
 /// Manda una orden de control (`initialize`, `set_model`, `get_context_usage`…) y espera su
 /// respuesta, hasta 30 s.
 #[tauri::command]
-pub async fn claude_control(claudes: State<'_, Claudes>, id: u32, peticion: Value) -> Result<Value, String> {
+pub async fn claude_control(
+    claudes: State<'_, Claudes>,
+    id: u32,
+    peticion: Value,
+) -> Result<Value, String> {
     let (tx, rx) = mpsc::channel();
     let id_peticion = format!("kyu-{}", PETICION.fetch_add(1, Ordering::Relaxed));
     con_sesion(&claudes, id, |s| {
@@ -293,7 +324,9 @@ pub async fn claude_control(claudes: State<'_, Claudes>, id: u32, peticion: Valu
             .lock()
             .map_err(|_| "estado roto")?
             .insert(id_peticion.clone(), tx);
-        s.escribir(json!({ "type": "control_request", "request_id": id_peticion, "request": peticion }))
+        s.escribir(
+            json!({ "type": "control_request", "request_id": id_peticion, "request": peticion }),
+        )
     })?;
     tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(30)))
         .await
@@ -437,8 +470,14 @@ fn traducir(v: &Value) -> Vec<Evento> {
             let ev = &v["event"];
             if ev["type"] == "content_block_delta" {
                 let d = &ev["delta"];
-                match (d["type"].as_str(), d["text"].as_str(), d["thinking"].as_str()) {
-                    (Some("text_delta"), Some(t), _) => sal.push(Evento::Parcial { texto: t.into() }),
+                match (
+                    d["type"].as_str(),
+                    d["text"].as_str(),
+                    d["thinking"].as_str(),
+                ) {
+                    (Some("text_delta"), Some(t), _) => {
+                        sal.push(Evento::Parcial { texto: t.into() })
+                    }
                     (Some("thinking_delta"), _, Some(t)) if !t.is_empty() => {
                         sal.push(Evento::ParcialRazonamiento { texto: t.into() })
                     }
@@ -588,7 +627,10 @@ pub(crate) fn resumen(herramienta: &str, input: &Value) -> String {
     }
     input[campo]
         .as_str()
-        .map(|s| s.trim_start_matches("select:").replace("mcp__kyu__", "kyu: "))
+        .map(|s| {
+            s.trim_start_matches("select:")
+                .replace("mcp__kyu__", "kyu: ")
+        })
         .unwrap_or_else(|| {
             let s = input.to_string();
             if s.len() > 80 {

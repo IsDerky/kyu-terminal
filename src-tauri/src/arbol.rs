@@ -82,7 +82,10 @@ fn estado(carpeta: &str) -> HashMap<String, String> {
         return mapa;
     };
     let raiz = PathBuf::from(String::from_utf8_lossy(&raiz).trim());
-    let Some(salida) = git(carpeta, &["status", "--porcelain=v1", "-z", "--untracked-files=all"]) else {
+    let Some(salida) = git(
+        carpeta,
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    ) else {
         return mapa;
     };
     // Cada entrada: «XY ruta\0»; en los renombrados viene además la ruta vieja «\0vieja\0».

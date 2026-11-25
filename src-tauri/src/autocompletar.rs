@@ -68,7 +68,10 @@ pub fn git_ramas(carpeta: String) -> Vec<String> {
         }
     };
     if !salida.status.success() {
-        eprintln!("git_ramas: {}", String::from_utf8_lossy(&salida.stderr).trim());
+        eprintln!(
+            "git_ramas: {}",
+            String::from_utf8_lossy(&salida.stderr).trim()
+        );
         return Vec::new();
     }
     String::from_utf8_lossy(&salida.stdout)

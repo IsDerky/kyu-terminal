@@ -11,9 +11,13 @@ fn copiar_conpty() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
-    let Ok(salida) = std::env::var("OUT_DIR") else { return };
+    let Ok(salida) = std::env::var("OUT_DIR") else {
+        return;
+    };
     // OUT_DIR = target/<perfil>/build/<paquete>/out → target/<perfil>
-    let Some(destino) = std::path::Path::new(&salida).ancestors().nth(3) else { return };
+    let Some(destino) = std::path::Path::new(&salida).ancestors().nth(3) else {
+        return;
+    };
     for archivo in ["conpty.dll", "OpenConsole.exe"] {
         let origen = std::path::Path::new("conpty").join(archivo);
         if let Err(e) = std::fs::copy(&origen, destino.join(archivo)) {

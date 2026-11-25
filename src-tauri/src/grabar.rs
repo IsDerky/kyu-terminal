@@ -44,8 +44,8 @@ type Foto = (u32, u32, Vec<u8>);
 fn fotografiar(hwnd: isize) -> Option<Foto> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::Graphics::Gdi::{
-        BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleBitmap, CreateCompatibleDC, DIB_RGB_COLORS,
-        DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC, SelectObject,
+        BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleBitmap, CreateCompatibleDC,
+        DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC, SelectObject,
     };
     use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PrintWindow};
     use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
@@ -77,7 +77,15 @@ fn fotografiar(hwnd: isize) -> Option<Foto> {
             ..Default::default()
         };
         let mut datos = vec![0u8; (w * h * 4) as usize];
-        let filas = GetDIBits(dc, mapa, 0, h as u32, Some(datos.as_mut_ptr().cast()), &mut info, DIB_RGB_COLORS);
+        let filas = GetDIBits(
+            dc,
+            mapa,
+            0,
+            h as u32,
+            Some(datos.as_mut_ptr().cast()),
+            &mut info,
+            DIB_RGB_COLORS,
+        );
         SelectObject(dc, anterior);
         let _ = DeleteObject(mapa.into());
         let _ = DeleteDC(dc);
@@ -85,7 +93,7 @@ fn fotografiar(hwnd: isize) -> Option<Foto> {
         if !hecho || filas == 0 {
             return None;
         }
-        for p in datos.chunks_exact_mut(4) {
+        for p in datos.as_chunks_mut::<4>().0 {
             p.swap(0, 2); // BGRA → RGBA
             p[3] = 255;
         }
@@ -127,7 +135,10 @@ pub fn grabar_empezar(
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .collect();
-    let ruta = carpeta.join(format!("{}.gif", if nombre.is_empty() { "kyu" } else { &nombre }));
+    let ruta = carpeta.join(format!(
+        "{}.gif",
+        if nombre.is_empty() { "kyu" } else { &nombre }
+    ));
 
     // Primera foto ya aquí: si falla, se avisa enseguida en vez de grabar nada.
     let (ancho, alto, _) = fotografiar(hwnd).ok_or("no se pudo fotografiar la ventana de Kyu")?;
@@ -181,7 +192,12 @@ fn recortar((ancho, alto, datos): &Foto, (x, y, w, h): (u32, u32, u32, u32)) -> 
     Some(salida)
 }
 
-fn grabar(hwnd: isize, caja: (u32, u32, u32, u32), ruta: PathBuf, parar: Arc<AtomicBool>) -> Result<PathBuf, String> {
+fn grabar(
+    hwnd: isize,
+    caja: (u32, u32, u32, u32),
+    ruta: PathBuf,
+    parar: Arc<AtomicBool>,
+) -> Result<PathBuf, String> {
     let (_, _, w, h) = caja;
     // El GIF se codifica en otro hilo; si se atrasa, se saltan fotos (alarga la anterior).
     let (tx, rx): (SyncSender<(Vec<u8>, u32)>, _) = sync_channel(12);
@@ -190,7 +206,8 @@ fn grabar(hwnd: isize, caja: (u32, u32, u32, u32), ruta: PathBuf, parar: Arc<Ato
         let archivo = std::fs::File::create(&ruta_enc).map_err(|e| e.to_string())?;
         let mut enc = gif::Encoder::new(std::io::BufWriter::new(archivo), w as u16, h as u16, &[])
             .map_err(|e| e.to_string())?;
-        enc.set_repeat(gif::Repeat::Infinite).map_err(|e| e.to_string())?;
+        enc.set_repeat(gif::Repeat::Infinite)
+            .map_err(|e| e.to_string())?;
         for (mut rgba, ms) in rx {
             let mut f = gif::Frame::from_rgba_speed(w as u16, h as u16, &mut rgba, 20);
             f.delay = (ms / 10).clamp(2, u16::MAX as u32) as u16;
@@ -227,6 +244,8 @@ fn grabar(hwnd: isize, caja: (u32, u32, u32, u32), ruta: PathBuf, parar: Arc<Ato
         enviar(buf, desde.elapsed().as_millis() as u32 + PAUSA_FINAL_MS);
     }
     drop(tx);
-    codificador.join().map_err(|_| "el codificador se ha caído")??;
+    codificador
+        .join()
+        .map_err(|_| "el codificador se ha caído")??;
     Ok(ruta)
 }

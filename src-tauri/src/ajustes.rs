@@ -58,7 +58,10 @@ pub fn ajustes_leer() -> AjustesVista {
         })
         .collect();
     AjustesVista {
-        ruta: ruta.as_ref().map(|r| r.display().to_string()).unwrap_or_default(),
+        ruta: ruta
+            .as_ref()
+            .map(|r| r.display().to_string())
+            .unwrap_or_default(),
         existe: ruta.as_ref().is_some_and(|r| r.is_file()),
         autocompletado: config.autocompletado(),
         sin_prompt: config.sin_prompt,
@@ -139,7 +142,8 @@ pub fn ajustes_guardar(clave: String, valor: Value) -> Result<(), String> {
 
     // Comprobación: lo que queda tiene que seguir leyéndose bien.
     let resultado = doc.to_string();
-    toml::from_str::<crate::config::Config>(&resultado).map_err(|e| format!("quedaría mal: {e}"))?;
+    toml::from_str::<crate::config::Config>(&resultado)
+        .map_err(|e| format!("quedaría mal: {e}"))?;
     if let Some(carpeta) = ruta.parent() {
         std::fs::create_dir_all(carpeta).map_err(|e| e.to_string())?;
     }
