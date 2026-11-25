@@ -1,8 +1,9 @@
 // Controles del panel de Claude: modo, modelo y esfuerzo bajo la caja de texto, menú de
 // comandos con barra y desglose del contexto.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AtSign, Check, ChevronDown, ChevronRight, Gauge, ImagePlus, Minimize2 } from "lucide-react";
+import { AtSign, Check, ChevronDown, ChevronRight, Gauge, ImagePlus, Minimize2, UserRound } from "lucide-react";
 import {
+  cambiarCuenta,
   cambiarEsfuerzo,
   cambiarModelo,
   cambiarModo,
@@ -148,6 +149,42 @@ function Desplegable({
 }
 
 const Separador = () => <div className="mx-3 my-1 border-t border-borde" />;
+
+// ---------- Cuenta (pie del panel) ----------
+
+/** Selector de cuenta de Claude; solo sale con dos o más cuentas en kyu.toml. */
+export function SelectorCuenta({ espacio, c }: { espacio: string; c: Conversacion }) {
+  const cuentas = useClaude((s) => s.cuentas);
+  if (cuentas.length < 2) return null;
+  const ocupado = c.estado === "arrancando" || c.estado === "pensando";
+  const actual = c.cuenta ?? cuentas[0];
+  return (
+    <Desplegable
+      cabecera="Cuenta de Claude"
+      derecha
+      fijo
+      ayuda={
+        c.claudeId !== null
+          ? `Cuenta: ${actual} · al cambiarla, la conversación sigue con la otra cuenta`
+          : `Cuenta: ${actual}`
+      }
+      valor={actual}
+      alElegir={(v) => v && cambiarCuenta(espacio, v)}
+      ancho={220}
+      etiqueta={
+        <span className="flex min-w-0 items-center gap-1.5 text-tenue">
+          <UserRound size={12} strokeWidth={1.8} className="flex-none" />
+          <span className="max-w-[80px] truncate">{actual}</span>
+        </span>
+      }
+      opciones={cuentas.map((n) => ({
+        valor: n,
+        titulo: n,
+        desactivada: ocupado && n !== actual ? "Espera a que Claude acabe" : undefined,
+      }))}
+    />
+  );
+}
 
 // ---------- Barra bajo la caja ----------
 

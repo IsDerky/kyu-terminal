@@ -6,6 +6,7 @@ import {
   abrirClaude,
   cerrarClaude,
   controlClaude,
+  type ConfigVista,
   enviarClaude,
   historialClaude,
   pararClaude,
@@ -127,6 +128,10 @@ export interface Conversacion {
   eleccionModelo: string | null;
   modo: string;
   esfuerzo: string | null;
+  /** Cuenta de Claude con la que arranca (null = la de siempre). */
+  cuenta: string | null;
+  /** Lo que Claude Code propone escribir ahora (Tab lo pone en la caja). */
+  sugerencia: string | null;
   compactando: boolean;
   /** Desglose del contexto (get_context_usage), tras cada turno. */
   contexto: UsoContexto | null;
@@ -172,6 +177,10 @@ interface EstadoClaude {
   verContexto: boolean;
   /** Texto que vuelve a la caja al volver a un punto, por espacio. */
   borradores: Record<string, string>;
+  /** Cuentas de Claude de kyu.toml (vacío = solo la de siempre, sin selector). */
+  cuentas: string[];
+  /** Sugerencias de respuesta activas (kyu.toml). */
+  sugerencias: boolean;
   mostrar: (visible: boolean) => void;
   quitarAviso: (id: number) => void;
 }
@@ -193,6 +202,8 @@ export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Convers
   eleccionModelo: prefs.modelo,
   modo: prefs.modo,
   esfuerzo: prefs.esfuerzo,
+  cuenta: prefs.cuenta,
+  sugerencia: null,
   compactando: false,
   contexto: null,
   tokens: 0,
@@ -213,6 +224,8 @@ export const useClaude = create<EstadoClaude>((set) => ({
   prefs: prefsGuardadas(),
   verContexto: false,
   borradores: {},
+  cuentas: [],
+  sugerencias: true,
   mostrar: (visible) => set({ visible }),
   quitarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));
@@ -422,6 +435,10 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       return;
     case "contexto":
       cambiar(espacio, () => ({ tokens: ev.tokens }));
+      return;
+    case "sugerencia":
+      // Llega después del fin del turno; si ya se ha escrito otro mensaje, no sirve.
+      cambiar(espacio, (c) => (c.estado === "listo" ? { sugerencia: ev.texto } : {}));
       return;
     case "fin":
       if (!panelMuestra(espacio)) {
@@ -636,7 +653,7 @@ export function quitarImagen(espacio: string, id: number) {
 }
 
 /** Carga una conversación guardada en el panel; Claude la sigue (`--resume`) al escribir. */
-export async function reanudar(espacio: string, carpeta: string, id: string, titulo: string) {
+export async function reanudar(espacio: string, carpeta: string, id: string, titulo: string, cuenta?: string | null) {
   const pasado = await historialClaude(carpeta, id);
   const antes = conversacion(espacio);
   if (antes.claudeId !== null) void cerrarClaude(antes.claudeId);
@@ -675,6 +692,7 @@ export async function reanudar(espacio: string, carpeta: string, id: string, tit
         eleccionModelo: antes.eleccionModelo,
         modo: antes.modo,
         esfuerzo: antes.esfuerzo,
+        cuenta: cuenta !== undefined ? cuentaValida(cuenta) : antes.cuenta,
         carpeta,
         reanudar: id,
         sesion: id,
@@ -707,7 +725,7 @@ export async function enviar(espacio: string, texto: string) {
     imagenes: imagenes.length ? imagenes.map((i) => i.url) : undefined,
     esperaEco: true,
   });
-  cambiar(espacio, () => ({ estado: "arrancando", desde: Date.now() }));
+  cambiar(espacio, () => ({ estado: "arrancando", desde: Date.now(), sugerencia: null }));
   try {
     if (c.claudeId === null) {
       // Al reanudar, en la carpeta de la conversación guardada; si no, la del terminal con el foco.
@@ -716,17 +734,28 @@ export async function enviar(espacio: string, texto: string) {
       cambiar(espacio, () => ({ generacion }));
       const id = await abrirClaude(
         carpeta,
-        { modelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, reanudar: c.reanudar, reanudarEn: c.reanudarEn },
+        {
+          modelo: c.eleccionModelo,
+          modo: c.modo,
+          esfuerzo: c.esfuerzo,
+          reanudar: c.reanudar,
+          reanudarEn: c.reanudarEn,
+          cuenta: c.cuenta,
+        },
         (ev) => alEvento(espacio, generacion, ev),
       );
       // La copia cortada ya existe: si Claude se cierra, se sigue esa (su id llega en el init).
       cambiar(espacio, () => ({ claudeId: id, carpeta, reanudarEn: null }));
       c = conversacion(espacio);
-      // Comandos de este proyecto y modelos: en segundo plano, sin esperar.
-      void controlClaude<Catalogo>(id, { subtype: "initialize" })
-        .then(guardarCatalogoDe)
-        .then(() => refrescarContexto(espacio))
-        .catch(() => {});
+      // Comandos de este proyecto y modelos: en segundo plano, sin esperar. Con sugerencias no:
+      // un `initialize` del anfitrión las apaga (Claude Code 2.1.331). Entonces la lista es la
+      // del proceso de prueba de `cargarCatalogo`.
+      if (!useClaude.getState().sugerencias) {
+        void controlClaude<Catalogo>(id, { subtype: "initialize" })
+          .then(guardarCatalogoDe)
+          .then(() => refrescarContexto(espacio))
+          .catch(() => {});
+      }
     }
     await enviarClaude(
       c.claudeId!,
@@ -772,9 +801,53 @@ export function nueva(espacio: string) {
     verContexto: false,
     conversaciones: {
       ...s.conversaciones,
-      [espacio]: { ...vacia(), eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo },
+      [espacio]: { ...vacia(), eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, cuenta: c.cuenta },
     },
   }));
+}
+
+// ---------- Cuentas ----------
+
+/**
+ * Al leer kyu.toml: qué cuentas hay y si hay sugerencias. Las conversaciones con una cuenta que
+ * ya no existe vuelven a la de siempre.
+ */
+export function configurarClaude({ cuentas_claude: cuentas, sugerencias_claude: sugerencias }: ConfigVista) {
+  useClaude.setState((s) => {
+    const vale = (x: string | null) => (x && cuentas.includes(x) ? x : null);
+    const prefs = { ...s.prefs, cuenta: vale(s.prefs.cuenta) };
+    guardarPrefs(prefs);
+    const conversaciones = Object.fromEntries(
+      Object.entries(s.conversaciones).map(([id, c]) => [id, { ...c, cuenta: vale(c.cuenta) }]),
+    );
+    return { cuentas, sugerencias, prefs, conversaciones };
+  });
+}
+
+const cuentaValida = (x: string | null) => (x && useClaude.getState().cuentas.includes(x) ? x : null);
+
+/**
+ * Cambia la cuenta de la conversación. Si Claude está en marcha (y sin hacer nada), se cierra
+ * y con el próximo mensaje sigue la misma conversación con la otra cuenta (`--resume`).
+ */
+export function cambiarCuenta(espacio: string, cuenta: string | null) {
+  const c = conversacion(espacio);
+  if (c.estado === "arrancando" || c.estado === "pensando" || cuenta === c.cuenta) return;
+  recordar({ cuenta });
+  if (c.claudeId === null) {
+    cambiar(espacio, () => ({ cuenta }));
+    return;
+  }
+  void cerrarClaude(c.claudeId);
+  cambiar(espacio, (x) => ({
+    cuenta,
+    claudeId: null,
+    generacion: ++contador,
+    estado: "cerrado",
+    reanudar: x.sesion,
+    sugerencia: null,
+  }));
+  añadir(espacio, { tipo: "aviso", texto: `Cuenta: ${cuenta ?? "la de siempre"} · la conversación sigue con el próximo mensaje` });
 }
 
 // ---------- Puntos de control ----------
@@ -848,6 +921,7 @@ export async function volver(espacio: string, entrada: number, que: Vuelta) {
         reanudar: seguir,
         reanudarEn: seguir ? (e.previo ?? null) : null,
         sesion: seguir,
+        sugerencia: null,
         ultimoUuid: seguir ? (e.previo ?? null) : null,
         carpeta: seguir ? c.carpeta : null,
         contexto: null,

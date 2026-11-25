@@ -1,6 +1,31 @@
 import { useEffect, useState } from "react";
-import { Bell, Keyboard, Palette, SlidersHorizontal, SquareTerminal, Check, FileCog, type LucideIcon } from "lucide-react";
-import { guardarAjuste, leerAjustes, type AjustesVista, type ConfigVista } from "../lib/nucleo";
+import {
+  Bell,
+  Keyboard,
+  Palette,
+  SlidersHorizontal,
+  SquareTerminal,
+  Check,
+  FileCog,
+  Loader2,
+  LogIn,
+  Plus,
+  RefreshCw,
+  UserRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  anadirCuenta,
+  cuentasClaude,
+  entrarCuenta,
+  guardarAjuste,
+  leerAjustes,
+  quitarCuenta,
+  type AjustesVista,
+  type ConfigVista,
+  type CuentaClaude,
+} from "../lib/nucleo";
 import { useKyu } from "../lib/estado";
 import { IconoPerfil, Mascota } from "./iconos";
 
@@ -205,9 +230,16 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
               >
                 <Numero valor={a.limite_diario} min={0} max={100000} paso={10} sufijo="mil" alCambiar={(v) => void guardar("limite_diario", v === 0 ? null : v)} />
               </Campo>
+              <Campo
+                titulo="Sugerencias de respuesta"
+                detalle="A partir de la segunda respuesta, Claude propone lo siguiente que podrías escribir: sale en gris en la caja y Tab lo pone. Conversaciones nuevas."
+              >
+                <Interruptor valor={a.sugerencias_claude} alCambiar={(v) => void guardar("sugerencias_claude", v ? null : false)} />
+              </Campo>
               <Campo titulo="Herramientas de Kyu" detalle="Claude puede ejecutar órdenes en un panel «Claude» a la vista (siempre con tu permiso) y leer tus terminales.">
                 <span className="text-[12px] text-ok">Activas</span>
               </Campo>
+              <Cuentas alCambiar={alCambiar} />
             </>
           )}
 
@@ -235,6 +267,132 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Cuentas de Claude (kyu.toml, [[cuentas_claude]]). Cada una inicia sesión en su carpeta; el
+ * selector del panel sale con dos o más.
+ */
+function Cuentas({ alCambiar }: { alCambiar: () => void }) {
+  const [lista, setLista] = useState<CuentaClaude[] | null>(null);
+  const [nombre, setNombre] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [esperando, setEsperando] = useState<string | null>(null);
+
+  const leer = () => {
+    setLista(null);
+    cuentasClaude().then(setLista, (e) => (setError(String(e)), setLista([])));
+  };
+  useEffect(leer, []);
+
+  const hacer = async (f: () => Promise<unknown>, recargarConfig = true) => {
+    try {
+      await f();
+      setError(null);
+      if (recargarConfig) alCambiar();
+      leer();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  return (
+    <div className="mt-6">
+      <div className="mb-1 text-[13px] font-medium">Cuentas</div>
+      <p className="mb-3 text-[11.5px] text-muy">
+        Para cambiar de cuenta en el pie del panel de Claude. Cada una guarda su sesión en su carpeta; el historial, la memoria, los agentes y
+        los ajustes se comparten con la principal, así una conversación sigue con la otra cuenta.
+      </p>
+      {error && <p className="mb-3 rounded-md border border-mal/30 bg-mal/[0.05] px-3 py-2 text-[12px] text-mal">{error}</p>}
+      {lista === null ? (
+        <p className="flex items-center gap-2 text-[12px] text-tenue">
+          <Loader2 size={12} className="animate-spin" /> Mirando las sesiones…
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {lista.map((c) => (
+            <div key={c.nombre} className="flex items-center gap-3 rounded-lg border border-borde bg-tarjeta px-3 py-2.5">
+              <span className="grid size-8 flex-none place-items-center rounded-md bg-hover text-tenue">
+                <UserRound size={15} strokeWidth={1.8} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <b className="text-[13px] font-semibold">{c.nombre}</b>
+                  {c.principal && <span className="text-[11px] text-muy">la de siempre</span>}
+                </div>
+                <div className="truncate text-[11.5px] text-muy">
+                  {c.sesion ? (
+                    <span className="text-tenue">
+                      {c.correo ?? "Sesión iniciada"}
+                      {c.plan && ` · ${c.plan}`}
+                    </span>
+                  ) : (
+                    <span className="text-aviso">Sin sesión</span>
+                  )}
+                  <span className="font-mono"> · {c.carpeta}</span>
+                </div>
+              </div>
+              {!c.sesion && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void hacer(async () => {
+                      await entrarCuenta(c.nombre);
+                      setEsperando(c.nombre);
+                    }, false)
+                  }
+                  className="flex items-center gap-1.5 rounded-full border border-acento/40 bg-acento/10 px-2.5 py-0.5 text-[11.5px] text-acento2 hover:bg-acento/20"
+                >
+                  <LogIn size={12} /> Iniciar sesión
+                </button>
+              )}
+              {!c.principal && (
+                <button
+                  type="button"
+                  title="Quitarla de kyu.toml (su carpeta y su sesión se quedan en el disco)"
+                  onClick={() => void hacer(() => quitarCuenta(c.nombre))}
+                  className="grid size-6 place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {esperando && (
+        <p className="mt-2 flex items-center gap-2 text-[12px] text-tenue">
+          Termina de iniciar sesión con «{esperando}» en el navegador y luego
+          <button type="button" onClick={() => (setEsperando(null), leer())} className="flex items-center gap-1 text-acento2 hover:underline">
+            <RefreshCw size={11} /> comprueba
+          </button>
+        </p>
+      )}
+      <form
+        className="mt-3 flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = nombre.trim();
+          if (n) void hacer(() => anadirCuenta(n)).then(() => setNombre(""));
+        }}
+      >
+        <input
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder={lista?.length ? "Nombre de otra cuenta" : "Nombre de la segunda cuenta (p. ej. Trabajo)"}
+          spellCheck={false}
+          className="h-8 w-64 rounded-md border border-borde2 bg-fondo px-2 text-[12.5px] text-texto outline-none placeholder:text-muy focus:border-acento/60"
+        />
+        <button
+          type="submit"
+          disabled={!nombre.trim()}
+          className="flex h-8 items-center gap-1.5 rounded-md border border-borde2 px-2.5 text-[12px] text-tenue hover:text-texto disabled:opacity-40"
+        >
+          <Plus size={13} /> Añadir cuenta
+        </button>
+      </form>
     </div>
   );
 }

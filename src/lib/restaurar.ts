@@ -24,6 +24,8 @@ interface ConversacionGuardada {
   sesion: string;
   carpeta: string;
   titulo: string;
+  /** Cuenta de Claude con la que iba (sin poner = la de siempre). */
+  cuenta?: string;
 }
 
 interface EspacioGuardado {
@@ -86,7 +88,12 @@ function foto(): SesionGuardada {
       const primero = conv?.entradas.find((x) => x.tipo === "tu");
       if (!conv?.sesion || !conv.carpeta || primero?.tipo !== "tu") continue;
       if (cid === (c.activas[e.id] ?? e.id)) claudeActiva = claudes.length;
-      claudes.push({ sesion: conv.sesion, carpeta: conv.carpeta, titulo: primero.texto.split("\n")[0].slice(0, 60) });
+      claudes.push({
+        sesion: conv.sesion,
+        carpeta: conv.carpeta,
+        titulo: primero.texto.split("\n")[0].slice(0, 60),
+        cuenta: conv.cuenta ?? undefined,
+      });
     }
     espacios.push({ nombre: e.nombre, raiz, claudes: claudes.length ? claudes : undefined, claudeActiva });
   }
@@ -240,7 +247,7 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
   // La primera conversación de cada espacio lleva su id; las demás, pestañas nuevas.
   for (const { espacio, lista, activa } of claudes) {
     const ids = lista.map((_, i) => (i === 0 ? espacio : nuevaPestana(espacio)));
-    lista.forEach((d, i) => void reanudar(ids[i], d.carpeta, d.sesion, d.titulo).catch(() => {}));
+    lista.forEach((d, i) => void reanudar(ids[i], d.carpeta, d.sesion, d.titulo, d.cuenta ?? null).catch(() => {}));
     activarPestana(ids[Math.min(activa, ids.length - 1)]);
   }
   if (s.expandido) useClaude.setState({ expandido: true });

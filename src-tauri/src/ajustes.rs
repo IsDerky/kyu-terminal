@@ -23,6 +23,7 @@ pub struct AjustesVista {
     restaurar_sesion: bool,
     perfiles_ssh: bool,
     limite_diario: u64,
+    sugerencias_claude: bool,
     fuente: Option<String>,
     fuente_tamano: f32,
     fuentes_conocidas: Vec<String>,
@@ -69,6 +70,7 @@ pub fn ajustes_leer() -> AjustesVista {
         restaurar_sesion: config.restaurar_sesion(),
         perfiles_ssh: config.perfiles_ssh(),
         limite_diario: config.limite_diario.unwrap_or(0),
+        sugerencias_claude: config.sugerencias_claude(),
         fuente: config.fuente.clone(),
         fuente_tamano: config.tema.fuente_tamano,
         fuentes_conocidas: crate::config::FUENTES_CONOCIDAS
@@ -96,6 +98,7 @@ pub fn ajustes_guardar(clave: String, valor: Value) -> Result<(), String> {
         "restaurar_sesion",
         "perfiles_ssh",
         "limite_diario",
+        "sugerencias_claude",
         "fuente",
         "tema.fuente_tamano",
         "claude",
@@ -104,11 +107,7 @@ pub fn ajustes_guardar(clave: String, valor: Value) -> Result<(), String> {
     if !PERMITIDAS.contains(&clave.as_str()) {
         return Err(format!("no se puede cambiar «{clave}» desde Ajustes"));
     }
-    let ruta = ruta_config().ok_or("no encuentro la carpeta de configuración")?;
-    let texto = std::fs::read_to_string(&ruta).unwrap_or_default();
-    let mut doc = texto
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(|e| format!("kyu.toml no es válido: {e}"))?;
+    let mut doc = leer_documento()?;
 
     let nuevo: Option<toml_edit::Item> = match &valor {
         Value::Null => None,
@@ -139,8 +138,21 @@ pub fn ajustes_guardar(clave: String, valor: Value) -> Result<(), String> {
             tabla.remove(nombre);
         }
     }
+    escribir_documento(&doc)
+}
 
-    // Comprobación: lo que queda tiene que seguir leyéndose bien.
+/// kyu.toml tal cual (vacío si aún no existe), para cambiarlo sin perder comentarios.
+pub(crate) fn leer_documento() -> Result<toml_edit::DocumentMut, String> {
+    let ruta = ruta_config().ok_or("no encuentro la carpeta de configuración")?;
+    std::fs::read_to_string(&ruta)
+        .unwrap_or_default()
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("kyu.toml no es válido: {e}"))
+}
+
+/// Guarda kyu.toml si lo que queda se sigue leyendo bien.
+pub(crate) fn escribir_documento(doc: &toml_edit::DocumentMut) -> Result<(), String> {
+    let ruta = ruta_config().ok_or("no encuentro la carpeta de configuración")?;
     let resultado = doc.to_string();
     toml::from_str::<crate::config::Config>(&resultado)
         .map_err(|e| format!("quedaría mal: {e}"))?;

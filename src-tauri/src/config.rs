@@ -39,12 +39,35 @@ pub struct Config {
     /// Límite diario de Claude en miles de tokens de salida (aviso al 80 % y al 100 %).
     /// Sin poner o 0 = sin límite.
     pub limite_diario: Option<u64>,
+    /// Respuesta que propone Claude Code tras cada turno, en gris en la caja del panel
+    /// (Tab la usa). Sin poner = sí.
+    pub sugerencias_claude: Option<bool>,
+    /// Cuentas de Claude entre las que elegir en el panel. Sin ninguna = la de siempre.
+    pub cuentas_claude: Vec<CuentaClaude>,
     pub tema: Tema,
+}
+
+/// Una cuenta de Claude Code: su carpeta de configuración (`CLAUDE_CONFIG_DIR`), donde
+/// guarda su inicio de sesión.
+#[derive(Deserialize, Clone)]
+pub struct CuentaClaude {
+    pub nombre: String,
+    /// Sin poner = la carpeta de siempre (~/.claude). Admite `~/`.
+    #[serde(default)]
+    pub carpeta: Option<String>,
+    /// Compartir con la principal el historial, la memoria, los agentes, las skills y
+    /// los ajustes (para seguir una conversación con esta cuenta). Sin poner = sí.
+    #[serde(default)]
+    pub compartir: Option<bool>,
 }
 
 impl Config {
     pub fn autocompletado(&self) -> bool {
         self.autocompletado.unwrap_or(true)
+    }
+
+    pub fn sugerencias_claude(&self) -> bool {
+        self.sugerencias_claude.unwrap_or(true)
     }
 
     pub fn restaurar_sesion(&self) -> bool {
@@ -133,6 +156,9 @@ pub struct ConfigVista {
     aviso_segundos: u32,
     restaurar_sesion: bool,
     limite_diario: u64,
+    /// Nombres de las cuentas de Claude (vacío = solo la de siempre, sin selector).
+    cuentas_claude: Vec<String>,
+    sugerencias_claude: bool,
     tema: Tema,
     perfiles: Vec<PerfilVista>,
 }
@@ -175,6 +201,12 @@ pub fn config() -> ConfigVista {
         aviso_segundos: config.aviso_segundos.unwrap_or(10),
         restaurar_sesion: config.restaurar_sesion(),
         limite_diario: config.limite_diario.unwrap_or(0),
+        cuentas_claude: config
+            .cuentas_claude
+            .iter()
+            .map(|c| c.nombre.clone())
+            .collect(),
+        sugerencias_claude: config.sugerencias_claude(),
         perfiles,
         tema: config.tema,
     }
@@ -416,17 +448,6 @@ fn alias_ssh(texto: &str) -> Vec<String> {
     lista
 }
 
-#[cfg(test)]
-mod pruebas_ssh {
-    use super::alias_ssh;
-
-    #[test]
-    fn lee_los_host_concretos() {
-        let t = "# comentario\nHost servidor n1\n  HostName 10.0.0.1\nHost *\n  User x\nhost=nodo2\nHost !malo *.lan otro \"con\"\nMatch host foo\nHost servidor\n";
-        assert_eq!(alias_ssh(t), vec!["servidor", "n1", "nodo2", "otro", "con"]);
-    }
-}
-
 fn detectar_perfiles() -> Vec<Perfil> {
     let perfil =
         |nombre: &str, shell: String, argumentos: &[&str], color: &str, icono: &str| Perfil {
@@ -531,5 +552,16 @@ pub fn carpeta_kyu() -> Option<std::path::PathBuf> {
     match carpeta_portable() {
         Some(c) => Some(c.to_path_buf()),
         None => dirs::config_dir().map(|d| d.join("kyu")),
+    }
+}
+
+#[cfg(test)]
+mod pruebas_ssh {
+    use super::alias_ssh;
+
+    #[test]
+    fn lee_los_host_concretos() {
+        let t = "# comentario\nHost casa vps\n  HostName 192.0.2.1\nHost *\n  User x\nhost=web\nHost !malo *.lan otro \"con\"\nMatch host foo\nHost casa\n";
+        assert_eq!(alias_ssh(t), vec!["casa", "vps", "web", "otro", "con"]);
     }
 }

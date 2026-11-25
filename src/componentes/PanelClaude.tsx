@@ -26,7 +26,7 @@ import {
   type Entrada,
 } from "../lib/claude";
 import type { Comando } from "../lib/claudeOpciones";
-import { BarraOpciones, DesgloseContexto, filtrarComandos, MenuComandos } from "./ControlesClaude";
+import { BarraOpciones, DesgloseContexto, filtrarComandos, MenuComandos, SelectorCuenta } from "./ControlesClaude";
 import { ListaSesiones, mencionEnCursor, MenuArchivos, Miniaturas, Recientes } from "./AdjuntosClaude";
 import { imagenesDe, type ImagenAdjunta } from "../lib/imagenes";
 import { buscarArchivos } from "../lib/nucleo";
@@ -188,9 +188,11 @@ export default function PanelClaude({ espacio: espacioReal }: { espacio: string 
 
       <CajaEntrada grande={grande} espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} />
 
-      <footer className="flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
+      <footer className="relative flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
         <EstadoTurno c={c} />
-        <span className="ml-auto truncate" title="Modelo que contesta">{c.modelo.replace(/^claude-/, "")}</span>
+        <span className="ml-auto" />
+        <SelectorCuenta espacio={espacio} c={c} />
+        <span className="truncate" title="Modelo que contesta">{c.modelo.replace(/^claude-/, "")}</span>
         <BarraGasto />
         {c.coste > 0 && <span title="Coste de la conversación">{dolares(c.coste)}</span>}
       </footer>
@@ -499,6 +501,8 @@ function CajaEntrada({
   const mencion = permiso === null && !sinMenuA && carpeta ? mencionEnCursor(texto, cursor) : null;
   const consulta = mencion?.[1] ?? null;
   const selA = Math.min(elegidoA, Math.max(0, rutas.length - 1));
+  // La respuesta que propone Claude, solo con la caja vacía y nada pendiente.
+  const sugerencia = permiso === null && !ocupado && !adjunto && !imagenes.length ? c.sugerencia : null;
 
   useEffect(() => {
     if (consulta === null || !carpeta) return;
@@ -605,7 +609,9 @@ function CajaEntrada({
                 ? "Pregunta sobre esta orden, o Intro para que la revise"
                 : imagenes.length
                   ? "Pregunta sobre la imagen"
-                  : "Escribe a Claude · @ archivos · / comandos"
+                  : sugerencia
+                    ? `${sugerencia}  · Tab`
+                    : "Escribe a Claude · @ archivos · / comandos"
           }
           onChange={(e) => {
             setTexto(e.target.value);
@@ -670,6 +676,14 @@ function CajaEntrada({
                 setSinMenu(true);
                 return;
               }
+            }
+            // Caja vacía con una sugerencia de Claude: Tab la escribe (para mandarla o retocarla).
+            if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.altKey && sugerencia && !texto) {
+              e.preventDefault();
+              setTexto(sugerencia);
+              setCursor(sugerencia.length);
+              requestAnimationFrame(() => area.current?.setSelectionRange(sugerencia.length, sugerencia.length));
+              return;
             }
             if (permiso !== null) {
               // Con texto, Intro deniega y le dice a Claude qué hacer en su lugar; sin texto

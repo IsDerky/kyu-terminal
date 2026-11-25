@@ -92,6 +92,11 @@ pub enum Evento {
     Contexto {
         tokens: u64,
     },
+    /// Lo que Claude Code cree que vas a escribir ahora (`--prompt-suggestions`). Llega tras
+    /// el turno, a partir del segundo.
+    Sugerencia {
+        texto: String,
+    },
     Fin {
         coste: f64,
         error: bool,
@@ -128,6 +133,8 @@ pub struct Opciones {
     /// + `--fork-session`). Es «volver a este punto» de la conversación.
     #[serde(rename = "reanudarEn")]
     reanudar_en: Option<String>,
+    /// Cuenta de kyu.toml (`cuentas_claude`); sin poner = la de siempre.
+    cuenta: Option<String>,
 }
 
 /// Imagen pegada o soltada en el panel: tipo MIME y datos en base64.
@@ -194,6 +201,15 @@ pub fn claude_abrir(
     .env("KYU_TERMINAL", env!("CARGO_PKG_VERSION"))
     // Copia de los archivos antes de cada cambio de Claude: `rewind_files` los devuelve.
     .env("CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING", "true");
+    if let Some(cuenta) = crate::cuentas::buscar(&config, opciones.cuenta.as_deref())
+        && !cuenta.principal
+    {
+        crate::cuentas::preparar(&cuenta)?;
+        cmd.env("CLAUDE_CONFIG_DIR", &cuenta.carpeta);
+    }
+    if config.sugerencias_claude() {
+        cmd.arg("--prompt-suggestions");
+    }
     if opciones.reanudar.is_some()
         && let Some(en) = opciones.reanudar_en.as_deref().filter(|v| !v.is_empty())
     {
@@ -568,6 +584,12 @@ fn traducir(v: &Value) -> Vec<Evento> {
                 herramienta,
                 input: r["input"].clone(),
             });
+        }
+        "prompt_suggestion" => {
+            let t = texto(&v["suggestion"]);
+            if !t.trim().is_empty() {
+                sal.push(Evento::Sugerencia { texto: t });
+            }
         }
         "result" => sal.push(Evento::Fin {
             coste: v["total_cost_usd"].as_f64().unwrap_or(0.0),

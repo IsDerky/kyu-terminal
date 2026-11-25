@@ -9,7 +9,7 @@ const PanelClaude = lazy(() => import("./componentes/PanelClaude"));
 const Ajustes = lazy(() => import("./componentes/Ajustes"));
 const Uso = lazy(() => import("./componentes/Uso"));
 import { alTerminarPty, cerrarTodasClaude, cerrarTodasPty, leerConfig, type ConfigVista } from "./lib/nucleo";
-import { ID_ENTRADA, limpiar, useClaude } from "./lib/claude";
+import { configurarClaude, ID_ENTRADA, limpiar, useClaude } from "./lib/claude";
 import { escucharMcp } from "./lib/mcp";
 import { alternarGrabacion } from "./lib/grabar";
 import { focoActual, useKyu } from "./lib/estado";
@@ -65,6 +65,7 @@ export default function App() {
       configurar(c);
       configurarEditores(c.fuente, c.tema.fuente_tamano);
       configurarLimite(c.limite_diario);
+      configurarClaude(c);
       const porDefecto = c.perfiles[0]?.nombre ?? "";
       // Lo de la última vez; si no hay (o está apagado en Ajustes), un espacio nuevo.
       const restaurada = c.restaurar_sesion && (await restaurarSesion(c.perfiles.map((p) => p.nombre), porDefecto).catch(() => false));
@@ -167,6 +168,7 @@ export default function App() {
                 configurarEditores(c.fuente, c.tema.fuente_tamano);
                 aplicarFuente(c.fuente, c.tema.fuente_tamano);
                 configurarLimite(c.limite_diario);
+                configurarClaude(c);
                 setConfig(c);
               })
             }

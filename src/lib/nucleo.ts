@@ -31,6 +31,10 @@ export interface ConfigVista {
   restaurar_sesion: boolean;
   /** Límite diario de Claude en miles de tokens de salida (0 = sin límite). */
   limite_diario: number;
+  /** Nombres de las cuentas de Claude de kyu.toml (vacío = solo la de siempre). */
+  cuentas_claude: string[];
+  /** Respuesta propuesta por Claude tras cada turno. */
+  sugerencias_claude: boolean;
   tema: Tema;
   /** El primero es el predeterminado. */
   perfiles: Perfil[];
@@ -95,6 +99,7 @@ export interface AjustesVista {
   restaurar_sesion: boolean;
   perfiles_ssh: boolean;
   limite_diario: number;
+  sugerencias_claude: boolean;
   fuente: string | null;
   fuente_tamano: number;
   fuentes_conocidas: string[];
@@ -139,6 +144,7 @@ export type EventoClaude =
   | { tipo: "resultadoHerramienta"; id: string; error: boolean }
   | { tipo: "permiso"; idPeticion: string; herramienta: string; resumen: string; input: unknown }
   | { tipo: "contexto"; tokens: number }
+  | { tipo: "sugerencia"; texto: string }
   | { tipo: "fin"; coste: number; error: boolean; duracion: number; resultado: string | null }
   | { tipo: "error"; texto: string }
   | { tipo: "cerrado" };
@@ -152,7 +158,26 @@ export interface OpcionesClaude {
   reanudar?: string | null;
   /** Con `reanudar`: solo hasta esta pieza, en una copia (volver a un punto). */
   reanudarEn?: string | null;
+  /** Cuenta de kyu.toml (`cuentas_claude`); null = la de siempre. */
+  cuenta?: string | null;
 }
+
+export interface CuentaClaude {
+  nombre: string;
+  carpeta: string;
+  principal: boolean;
+  compartir: boolean;
+  sesion: boolean;
+  correo: string | null;
+  plan: string | null;
+}
+
+/** Cuentas de kyu.toml con quién ha iniciado sesión en cada una (tarda ~1 s por cuenta). */
+export const cuentasClaude = () => invoke<CuentaClaude[]>("claude_cuentas");
+/** Abre una consola con `claude auth login` para esa cuenta. */
+export const entrarCuenta = (nombre: string) => invoke("claude_cuenta_entrar", { nombre });
+export const anadirCuenta = (nombre: string) => invoke("claude_cuenta_anadir", { nombre });
+export const quitarCuenta = (nombre: string) => invoke("claude_cuenta_quitar", { nombre });
 
 /** Imagen para Claude: tipo MIME y datos en base64 (sin el «data:…,» delante). */
 export interface ImagenClaude {

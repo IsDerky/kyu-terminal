@@ -28,6 +28,8 @@ export interface Preferencias {
   modo: string;
   /** null = el que decida Claude Code. */
   esfuerzo: string | null;
+  /** Cuenta de kyu.toml (null = la de siempre). */
+  cuenta: string | null;
 }
 
 export interface CategoriaContexto {
@@ -61,7 +63,7 @@ export function guardarCatalogo(c: Catalogo) {
   localStorage.setItem(CLAVE_CATALOGO, JSON.stringify({ commands: c.commands ?? [], models: c.models ?? [] }));
 }
 
-export const prefsGuardadas = (): Preferencias => ({ modelo: null, modo: "default", esfuerzo: null, ...leer<Preferencias>(CLAVE_PREFS) });
+export const prefsGuardadas = (): Preferencias => ({ modelo: null, modo: "default", esfuerzo: null, cuenta: null, ...leer<Preferencias>(CLAVE_PREFS) });
 
 export const guardarPrefs = (p: Preferencias) => localStorage.setItem(CLAVE_PREFS, JSON.stringify(p));
 
