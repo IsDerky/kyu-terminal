@@ -48,7 +48,7 @@ import { useKyu } from "../lib/estado";
 import { herramienta, relativa } from "../lib/herramientas";
 import Markdown from "./Markdown";
 import Permiso from "./Permiso";
-import { BotonVerCambios, PasosSubagente, Plan, Razonamiento, ResumenCambios, VolverAqui } from "./TandaClaude";
+import { BotonVerCambios, PasosSubagente, Plan, Preguntas, preguntasDe, Razonamiento, ResumenCambios, VolverAqui } from "./TandaClaude";
 import { Mascota } from "./iconos";
 import { corto, useGasto } from "../lib/gasto";
 
@@ -122,6 +122,8 @@ export default function PanelClaude({
       e.preventDefault();
       void responder(espacio, permiso.id, "denegar");
     } else if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+      // Unas preguntas no se aprueban con Intro: se contesta eligiendo.
+      if (permiso.herramienta === "AskUserQuestion") return;
       e.preventDefault();
       void responder(espacio, permiso.id, "permitir", undefined, permiso.herramienta === "ExitPlanMode" ? "acceptEdits" : undefined);
     }
@@ -219,7 +221,7 @@ export default function PanelClaude({
 
       <AvisoLimite espacio={espacio} c={c} />
 
-      <CajaEntrada enfocar={conFoco} grande espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} />
+      <CajaEntrada enfocar={conFoco} grande espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} esPregunta={permiso?.herramienta === "AskUserQuestion"} />
 
       <footer className="relative flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
         <EstadoTurno c={c} />
@@ -387,7 +389,7 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
       );
     case "herramienta": {
       // El plan ya sale entero en su recuadro.
-      if (e.nombre === "ExitPlanMode") return null;
+      if (e.nombre === "ExitPlanMode" || e.nombre === "AskUserQuestion") return null;
       const [nombre, Icono] = herramienta(e.nombre);
       return (
         <div className="flex flex-col gap-1 rounded-lg border border-borde px-[9px] py-[5px]">
@@ -413,7 +415,9 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
       );
     }
     case "permiso":
-      return e.herramienta === "ExitPlanMode" ? <Plan e={e} espacio={espacio} /> : <Permiso e={e} espacio={espacio} carpeta={carpeta} />;
+      if (e.herramienta === "ExitPlanMode") return <Plan e={e} espacio={espacio} />;
+      if (e.herramienta === "AskUserQuestion" && preguntasDe(e.input)) return <Preguntas e={e} espacio={espacio} />;
+      return <Permiso e={e} espacio={espacio} carpeta={carpeta} />;
     case "aviso":
       return (
         <p className="flex items-start gap-1.5 self-center text-[11.5px] text-muy">
@@ -493,6 +497,7 @@ function CajaEntrada({
   ocupado,
   permiso,
   esPlan,
+  esPregunta = false,
 }: {
   /** Al pasar a true (su panel gana el foco), el cursor va a la caja. */
   enfocar?: boolean;
@@ -503,6 +508,8 @@ function CajaEntrada({
   permiso: number | null;
   /** El permiso pendiente es un plan (ExitPlanMode). */
   esPlan: boolean;
+  /** El permiso pendiente son preguntas (AskUserQuestion). */
+  esPregunta?: boolean;
   grande: boolean;
 }) {
   const [texto, setTexto] = useState("");
@@ -680,7 +687,9 @@ function CajaEntrada({
           spellCheck={false}
           placeholder={
             permiso !== null
-              ? esPlan
+              ? esPregunta
+                ? "Elige arriba · Esc no responde · o escribe aquí tu respuesta"
+                : esPlan
                 ? "Intro aprueba · Esc sigue planificando · o escribe qué cambiar"
                 : "Intro permite · Esc deniega · o escribe qué hacer en su lugar"
               : adjunto

@@ -159,7 +159,9 @@ function Fila({ cid, c, espacio, onClick }: { cid: string; c: Conversacion; espa
   const detalle = p
     ? p.herramienta === "ExitPlanMode"
       ? "tiene un plan para que lo revises"
-      : `quiere usar ${p.herramienta}`
+      : p.herramienta === "AskUserQuestion"
+        ? "te ha hecho una pregunta"
+        : `quiere usar ${p.herramienta}`
     : [espacio, carpeta, enCola ? `${enCola} en cola` : null].filter(Boolean).join(" · ") || "sin empezar";
   return (
     <button type="button" onClick={onClick} className="flex w-full items-center gap-2.5 px-3 py-[7px] text-left hover:bg-hover">

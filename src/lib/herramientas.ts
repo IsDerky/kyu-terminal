@@ -1,5 +1,5 @@
 // Nombres en español e iconos de las herramientas de Claude Code (panel y avisos).
-import { Bot, FilePen, FileText, Globe, ListTodo, Search, Terminal, Wrench, type LucideIcon } from "lucide-react";
+import { Bot, FilePen, FileText, Globe, ListTodo, MessageCircleQuestion, Search, Terminal, Wrench, type LucideIcon } from "lucide-react";
 
 const HERRAMIENTAS: Record<string, [string, LucideIcon]> = {
   Read: ["Leer", FileText],
@@ -17,6 +17,7 @@ const HERRAMIENTAS: Record<string, [string, LucideIcon]> = {
   Task: ["Agente", Bot],
   TodoWrite: ["Tareas", ListTodo],
   ExitPlanMode: ["Plan", ListTodo],
+  AskUserQuestion: ["Pregunta", MessageCircleQuestion],
   Skill: ["Habilidad", Wrench],
   Monitor: ["Vigilar", Terminal],
   TaskStop: ["Parar tarea", Terminal],

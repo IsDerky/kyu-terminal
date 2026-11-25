@@ -75,6 +75,8 @@ export type Entrada =
       respuesta: Respuesta | null;
       /** Lo que se le dijo a Claude al denegar. */
       mensaje?: string;
+      /** Lo elegido en un AskUserQuestion (pregunta → respuesta). */
+      respuestas?: Record<string, string>;
     }
   | { id: number; tipo: "error"; texto: string }
   /** Al acabar un turno en el que Claude tocó archivos: cuáles y cuánto. */
@@ -987,6 +989,21 @@ export async function responder(espacio: string, entrada: number, respuesta: Res
   try {
     await responderClaude(c.claudeId, e.idPeticion, respuesta, nota, respuesta === "permitir" ? modo : undefined);
     if (respuesta === "permitir" && modo) cambiar(espacio, () => ({ modo }));
+  } catch (err) {
+    añadir(espacio, { tipo: "error", texto: String(err) });
+  }
+}
+
+/** Preguntas de Claude (AskUserQuestion): se permite la herramienta con lo elegido dentro. */
+export async function contestarPreguntas(espacio: string, entrada: number, respuestas: Record<string, string>) {
+  const c = conversacion(espacio);
+  const e = c.entradas.find((x) => x.id === entrada);
+  if (c.claudeId === null || e?.tipo !== "permiso" || e.respuesta) return;
+  cambiar(espacio, (c) => ({
+    entradas: c.entradas.map((x) => (x.id === entrada && x.tipo === "permiso" ? { ...x, respuesta: "permitir", respuestas } : x)),
+  }));
+  try {
+    await responderClaude(c.claudeId, e.idPeticion, "permitir", undefined, undefined, respuestas);
   } catch (err) {
     añadir(espacio, { tipo: "error", texto: String(err) });
   }

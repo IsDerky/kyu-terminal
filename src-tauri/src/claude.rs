@@ -406,7 +406,10 @@ pub fn claude_enviar(
 /// `respuesta`: "permitir", "siempre" o "denegar". Al denegar, `mensaje` le dice a Claude
 /// qué hacer en su lugar (como «No, y dile qué hacer» en `claude`). Al permitir, `modo`
 /// cambia el modo de permisos a la vez (aprobar un plan: «sí, y edita sin preguntar»).
+/// `respuestas`: lo elegido en un AskUserQuestion ({pregunta: etiqueta}); va en
+/// `updatedInput.answers`, que es de donde lo lee Claude.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn claude_responder(
     claudes: State<'_, Claudes>,
     id: u32,
@@ -414,14 +417,18 @@ pub fn claude_responder(
     respuesta: String,
     mensaje: Option<String>,
     modo: Option<String>,
+    respuestas: Option<Value>,
 ) -> Result<(), String> {
     con_sesion(&claudes, id, |s| {
-        let (input, sugerencias) = s
+        let (mut input, sugerencias) = s
             .pendientes
             .lock()
             .map_err(|_| "estado roto")?
             .remove(&id_peticion)
             .ok_or("ese permiso ya se contestó")?;
+        if let (Some(r), Some(obj)) = (respuestas, input.as_object_mut()) {
+            obj.insert("answers".into(), r);
+        }
         let cuerpo = match respuesta.as_str() {
             "permitir" => match modo {
                 Some(m) => json!({

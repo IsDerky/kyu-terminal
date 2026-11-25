@@ -260,7 +260,8 @@ export const responderClaude = (
   respuesta: "permitir" | "siempre" | "denegar",
   mensaje?: string,
   modo?: string,
-) => invoke("claude_responder", { id, idPeticion, respuesta, mensaje: mensaje ?? null, modo: modo ?? null });
+  respuestas?: Record<string, string>,
+) => invoke("claude_responder", { id, idPeticion, respuesta, mensaje: mensaje ?? null, modo: modo ?? null, respuestas: respuestas ?? null });
 
 export const pararClaude = (id: number) => invoke("claude_parar", { id });
 

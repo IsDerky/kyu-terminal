@@ -58,13 +58,14 @@ export default function Avisos() {
         const [accion] = herramienta(p.herramienta);
         const resumen = relativa(p.resumen, carpeta);
         const ruta = partirRuta(p.herramienta, resumen);
-        // Un plan no se aprueba a ciegas: solo se ofrece verlo.
-        if (p.herramienta === "ExitPlanMode") {
+        // Un plan o unas preguntas no se aprueban a ciegas: solo se ofrece verlos.
+        if (p.herramienta === "ExitPlanMode" || p.herramienta === "AskUserQuestion") {
+          const plan = p.herramienta === "ExitPlanMode";
           return (
             <Recuadro key={p.id} espacio={nombre(espacio)} onCerrar={null} onClick={() => ver(espacio)}>
               <div className="flex items-center gap-2 text-[12.5px]">
                 <ClipboardList size={14} strokeWidth={1.8} className="flex-none text-acento" />
-                Tiene un plan listo para que lo revises
+                {plan ? "Tiene un plan listo para que lo revises" : "Te ha hecho una pregunta"}
               </div>
               <p className="mt-1 text-[11.5px] text-muy">Clic para verlo</p>
             </Recuadro>
