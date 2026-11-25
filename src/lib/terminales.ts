@@ -19,6 +19,7 @@ import { apuntar, cargarHistorial } from "./historial";
 import { avisarSiToca } from "./avisos";
 import { registrarEnlaces, registrarEnlacesGithub } from "./enlaces";
 import { useKyu } from "./estado";
+import { aLaVista, nombreCorto, useActividad } from "./actividad";
 
 export interface Sesion {
   term: XTerm;
@@ -116,6 +117,24 @@ export function obtener(item: string): Sesion {
   bloques.alTerminarOrden = (b) => {
     apuntar(b.orden ?? "", b.ruta, b.codigo ?? 0);
     void avisarSiToca(b, configuracion?.aviso_segundos ?? 10);
+  };
+  // Pestaña: el nombre de lo que corre (solo si dura más de 1 s, para que no parpadee
+  // con cada `ls`) y, si acaba sin estar a la vista, cómo acabó.
+  let esperaNombre: number | undefined;
+  bloques.alEmpezar = (b) => {
+    clearTimeout(esperaNombre);
+    const nombre = nombreCorto(b.orden ?? "");
+    if (!nombre) return;
+    esperaNombre = window.setTimeout(() => {
+      if (b.estado === "corre") useActividad.getState().poner(item, { nombre, estado: "corre" });
+    }, 1000);
+  };
+  bloques.alAcabar = (b) => {
+    clearTimeout(esperaNombre);
+    const act = useActividad.getState();
+    // Lo que acaba a la vista (o fue tan corto que ni se enseñó) no deja marca.
+    if (aLaVista(item) || !act.porItem[item]) act.quitar(item);
+    else act.poner(item, { nombre: act.porItem[item].nombre, estado: b.estado === "mal" ? "mal" : "ok" });
   };
   const datosItem = () => {
     const it = useKyu.getState().items[item];

@@ -59,6 +59,9 @@ export class Bloques {
   alCambiarCarpeta: ((ruta: string, hoja: string) => void) | null = null;
   /** Se llama cuando termina una orden (para el historial de Kyu). */
   alTerminarOrden: ((b: Bloque) => void) | null = null;
+  /** Empieza a correr una orden / acaba (también sin orden leída). Para la pestaña. */
+  alEmpezar: ((b: Bloque) => void) | null = null;
+  alAcabar: ((b: Bloque) => void) | null = null;
 
   constructor(private term: Terminal) {
     term.parser.registerOscHandler(133, (d) => this.marca(d));
@@ -144,6 +147,7 @@ export class Bloques {
           ultimo.estado = "corre";
           ultimo.tInicio = performance.now();
           this.arrancarReloj();
+          this.alEmpezar?.(ultimo);
         }
         break;
       case "D":
@@ -160,6 +164,7 @@ export class Bloques {
           ultimo.fin = this.term.registerMarker(0);
           ultimo.locales = undefined;
           if (ultimo.orden) this.alTerminarOrden?.(ultimo);
+          this.alAcabar?.(ultimo);
         }
         break;
     }

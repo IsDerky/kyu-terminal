@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { ChevronDown, Columns2, FolderTree, GitCommitHorizontal, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
@@ -13,6 +13,24 @@ const VistaCambios = lazy(() => import("./VistaCambios"));
 import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
 import { ARRASTRE_RUTA, espacioDe, useClaude } from "../lib/claude";
+import { useActividad } from "../lib/actividad";
+
+/** Punto en la pestaña: ámbar que late mientras corre algo; verde o rojo si acabó sin
+ *  estar a la vista, hasta que se abre la pestaña. */
+function MarcaActividad({ item, visible }: { item: string; visible: boolean }) {
+  const a = useActividad((s) => s.porItem[item]);
+  useEffect(() => {
+    if (visible && a && a.estado !== "corre") useActividad.getState().quitar(item);
+  }, [visible, a, item]);
+  if (!a) return null;
+  const [color, texto] =
+    a.estado === "corre"
+      ? ["bg-aviso animate-pulse", `Ejecutando ${a.nombre}`]
+      : a.estado === "ok"
+        ? ["bg-ok", `${a.nombre} terminó bien`]
+        : ["bg-mal", `${a.nombre} terminó con error`];
+  return <span className={`size-1.5 flex-none rounded-full ${color}`} title={texto} />;
+}
 
 type PanelNodo = Extract<Nodo, { tipo: "panel" }>;
 
@@ -30,6 +48,7 @@ interface Props {
 
 export default function Panel({ panel, conFoco, varios, config, maximizado = false }: Props) {
   const items = useKyu((s) => s.items);
+  const actividad = useActividad((s) => s.porItem);
   // Solo se pinta el espacio activo: es el de este panel.
   const espacioDeItem = useKyu((s) => s.activo);
   const { activar, enfocar, nuevaPestana, dividir, moverItem } = useKyu.getState();
@@ -81,7 +100,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
             if (!it) return null;
             const nombre =
               it.tipo === "terminal"
-                ? it.titulo
+                ? actividad[id]?.nombre ?? it.titulo
                 : it.tipo === "arbol"
                   ? "Archivos"
                   : it.tipo === "claude"
@@ -135,6 +154,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                   <IconoArchivo size={12} />
                 )}
                 <span className="truncate">{nombre}</span>
+                {it.tipo === "terminal" && <MarcaActividad item={id} visible={esActivo} />}
                 {it.tipo === "archivo" && it.sucio ? (
                   <span className="mx-1 size-1.5 flex-none rounded-full bg-tenue group-hover:hidden" title="Sin guardar" />
                 ) : null}
