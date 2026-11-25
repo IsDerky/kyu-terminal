@@ -64,6 +64,10 @@ jobs:
       # abierto su shell con el prompt de Kyu (eso ya lo pide la interfaz).
       - name: Arranca en Linux
         if: runner.os == 'Linux'
+        # Sin GPU en Xvfb, WebKitGTK pinta en negro si no dibuja por software.
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           sudo apt-get install -y xvfb imagemagick
           xvfb-run -a -s "-screen 0 1280x800x24" bash -c '
