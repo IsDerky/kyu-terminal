@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/kyu.png" width="880" alt="Kyu con un terminal, una pestaña de archivo y una conversación con Claude">
+  <img src="docs/kyu.gif" width="880" alt="Kyu: dos órdenes de git como bloques con su rama y su tiempo, y una conversación con Claude en el panel de la derecha">
 </p>
 
 ## Instalar
@@ -39,7 +39,7 @@ En la [última release](https://github.com/IsDerky/kyu-terminal/releases/latest)
 
 Los instaladores de Windows no van firmados: SmartScreen avisa la primera vez («Más información» → «Ejecutar de todas formas»). Lo instalado mira al abrir si hay versión nueva y la ofrece en la barra de arriba; la portable y el `.deb` se actualizan a mano.
 
-Para el panel de Claude hace falta [Claude Code](https://docs.anthropic.com/claude-code) instalado (`claude` en el PATH o su ruta en Ajustes). Lo de GitHub usa el `git` y el `gh` de tu máquina; sin ellos, el resto funciona igual.
+Para el panel de Claude hace falta [Claude Code](https://docs.anthropic.com/claude-code) instalado (`claude` en el PATH o su ruta en Ajustes); para Antigravity, su CLI (`agy`). Lo de GitHub usa el `git` y el `gh` de tu máquina; sin ellos, el resto funciona igual.
 
 ## Terminal
 
@@ -54,11 +54,12 @@ Para el panel de Claude hace falta [Claude Code](https://docs.anthropic.com/clau
 - **Servidores de desarrollo**: botón para abrir los `localhost:puerto` que salen; si el puerto está ocupado, Kyu dice qué programa lo tiene y lo cierra si se lo pides.
 - **Avisos**: de Windows cuando acaba una orden larga y no estás mirando, y cuando la salida dice que ya está listo o que algo ha fallado, sin esperar al final.
 - Variables de entorno de las shells, el PATH y los `.env` de la carpeta en un solo sitio (paleta → «Variables de entorno»), con los secretos tapados.
+- **Clic derecho**: en el terminal copia lo seleccionado o pega; en pestañas, mensajes de Claude y el árbol abre un menú propio (renombrar, duplicar, reiniciar, mover, ejecutar un bloque de código en su terminal…).
 - Imágenes sixel (Kyu lleva su propio ConPTY: el de Windows se las come), grabación del panel a GIF y ajustes (Ctrl+,) que escriben en `kyu.toml` sin perder sus comentarios.
 
 ## Claude Code
 
-Cada conversación es una pestaña más, al lado de terminales y archivos, y arranca en la carpeta del terminal con el foco. Ctrl+Mayús+C va a la última, Ctrl+Mayús+K abre otra y el botón «Claude» de la barra enseña todas: cuál trabaja y cuál espera un permiso.
+Cada conversación es una pestaña más, al lado de terminales y archivos, y arranca en la carpeta del terminal con el foco. Ctrl+Mayús+C va a la última, Ctrl+Mayús+K abre otra y el botón «Agentes» de la barra enseña todas: cuál trabaja, cuál espera un permiso, sus subagentes y lo que tienen en segundo plano, y también las sesiones de Claude Code abiertas fuera de Kyu.
 
 - Modelo, esfuerzo y modo de permisos (Mayús+Tab), comandos con `/`, `@archivo` (también arrastrando), imágenes pegadas o soltadas y desglose del contexto.
 - Permisos con el diff del cambio; los planes se aprueban desde el panel. Los archivos que cambia Claude se abren con lo cambiado marcado y se puede deshacer.
@@ -66,6 +67,10 @@ Cada conversación es una pestaña más, al lado de terminales y archivos, y arr
 - Varias conversaciones a la vez, mensajes en cola mientras trabaja, reanudar las anteriores y volver a un mensaje.
 - Claude puede leer tus terminales y ejecutar órdenes en uno a la vista, siempre con permiso.
 - Respuesta sugerida en gris tras cada turno (Tab la usa), uso por día y por proyecto, y límite diario con aviso.
+
+### Otros agentes
+
+Además de Claude, una conversación puede ir con **Antigravity** (el CLI de Google) por ACP: se elige «Quién contesta» antes del primer mensaje. Tiene su modelo, razonamiento y modo, sus comandos con `/`, permisos con diff y se reanuda al volver a abrir Kyu.
 
 ### Cuentas de Claude
 
@@ -181,7 +186,7 @@ Publicar una versión: subir la versión en `package.json`, `src-tauri/Cargo.tom
 src/lib/          estado (espacios, paneles, pestañas), terminales, bloques, editores,
                   panel de Claude, problemas, sesión, órdenes al núcleo
 src/componentes/  barra de título, espacio, panel, terminal, editor, árbol, Claude, ajustes
-src-tauri/src/    núcleo: PTY, configuración, Claude Code (stream-json), cuentas,
+src-tauri/src/    núcleo: PTY, configuración, Claude Code (stream-json), agentes ACP, cuentas,
                   servidor MCP de Kyu, archivos, git, puertos, entorno, GIF, uso
 src-tauri/conpty/ ConPTY oficial de Microsoft (ver LEEME.md)
 shell/            prompts de PowerShell y bash que Kyu carga en cada shell
