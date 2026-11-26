@@ -73,7 +73,8 @@ interface Estado {
   nuevaPestana: (perfil: string, panel?: string) => void;
   dividir: (dir: Direccion, perfil: string, panel?: string) => void;
   /** Abre un terminal en un panel nuevo a la derecha de `espacio` sin quitar el foco; devuelve su id. */
-  terminalAlLado: (espacio: string, perfil: string, carpeta: string | null, titulo: string) => string | null;
+  /** Terminal nueva a la derecha del foco. `deClaude`: es la de MCP, donde ejecuta Claude (lleva su icono). */
+  terminalAlLado: (espacio: string, perfil: string, carpeta: string | null, titulo: string, deClaude?: boolean) => string | null;
   activar: (panel: string, item: string) => void;
   enfocar: (panel: string) => void;
   /** Quita la pestaña de su panel (y el panel o el espacio si se quedan vacíos). */
@@ -238,10 +239,10 @@ export const useKyu = create<Estado>((set, get) => {
       }));
     },
 
-    terminalAlLado: (espacio, perfil, carpeta, titulo) => {
+    terminalAlLado: (espacio, perfil, carpeta, titulo, deClaude = false) => {
       const esp = get().espacios.find((e) => e.id === espacio);
       if (!esp) return null;
-      const t = { ...terminal(perfil, carpeta), titulo, deClaude: true } as Item;
+      const t = { ...terminal(perfil, carpeta), titulo, ...(deClaude ? { deClaude: true } : {}) } as Item;
       const nuevo = nuevoPanel([t.id]);
       set((s) => ({
         items: { ...s.items, [t.id]: t },

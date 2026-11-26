@@ -87,7 +87,7 @@ async function terminalClaude(espacio: string): Promise<string> {
   if (!id || !k.items[id] || !terminalesDe(espacio).some((t) => t.it.id === id)) {
     const conv = useClaude.getState().conversaciones[ultimaDe(espacio) ?? ""];
     const perfil = terminalesDe(espacio)[0]?.it.perfil ?? "";
-    id = k.terminalAlLado(espacio, perfil, conv?.carpeta ?? null, "Claude") ?? undefined;
+    id = k.terminalAlLado(espacio, perfil, conv?.carpeta ?? null, "Claude", true) ?? undefined;
     if (!id) throw new Error("no se pudo abrir el panel «Claude»");
     terminalesClaude.set(espacio, id);
   }
