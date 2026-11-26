@@ -120,7 +120,7 @@ export default function Avisos() {
             <span className="font-medium">{gasto.nivel === 100 ? "Has pasado el límite de hoy" : "Llevas el 80 % del límite de hoy"}</span>
           </div>
           <p className="mt-1 text-[12px] text-tenue">
-            {corto(gasto.hoy)} de {corto(gasto.limite)} tokens de salida. No se corta nada; cámbialo en Ajustes → Claude.
+            {corto(gasto.hoy)} de {corto(gasto.limite)} tokens de salida. No se corta nada; cámbialo en Ajustes → Agentes.
           </p>
         </Recuadro>
       )}

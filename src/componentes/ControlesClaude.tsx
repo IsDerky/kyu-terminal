@@ -273,7 +273,7 @@ export function SelectorCuenta({ espacio, c }: { espacio: string; c: Conversacio
           n === actual
             ? undefined
             : sesiones?.[n] === false
-              ? "Sin sesión: iníciala en Ajustes → Claude → Cuentas"
+              ? "Sin sesión: iníciala en Ajustes → Agentes → Cuentas de Claude"
               : ocupado
                 ? "Espera a que Claude acabe"
                 : undefined,

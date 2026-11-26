@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Bell,
+  Bot,
   Keyboard,
   Palette,
   SlidersHorizontal,
@@ -35,7 +36,17 @@ import { useKyu } from "../lib/estado";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useSesiones } from "../lib/sesiones";
 import { buscarActualizacion, instalarActualizacion, useActualizar } from "../lib/actualizar";
-import { IconoPerfil, Mascota } from "./iconos";
+import { IconoPerfil, Mascota, MascotaAntigravity } from "./iconos";
+
+/** Título de un apartado dentro de una sección (Agentes: Claude, Antigravity). */
+function Apartado({ icono, titulo }: { icono: React.ReactNode; titulo: string }) {
+  return (
+    <div className="mb-3 mt-8 flex items-center gap-2 border-b border-borde pb-2 first:mt-0">
+      <span className="grid w-5 place-items-center">{icono}</span>
+      <span className="text-[14px] font-semibold">{titulo}</span>
+    </div>
+  );
+}
 
 import { tomarSeccion, type Seccion } from "../lib/irAjustes";
 
@@ -43,7 +54,7 @@ const SECCIONES: { id: Seccion; nombre: string; icono: LucideIcon | "claude" }[]
   { id: "general", nombre: "General", icono: SlidersHorizontal },
   { id: "perfiles", nombre: "Perfiles", icono: SquareTerminal },
   { id: "aspecto", nombre: "Aspecto", icono: Palette },
-  { id: "claude", nombre: "Claude", icono: "claude" },
+  { id: "claude", nombre: "Agentes", icono: Bot },
   { id: "atajos", nombre: "Atajos", icono: Keyboard },
   { id: "avisos", nombre: "Avisos", icono: Bell },
 ];
@@ -229,6 +240,7 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
 
           {seccion === "claude" && (
             <>
+              <Apartado icono={<Mascota alto={11} />} titulo="Claude" />
               <Explicacion>Cada conversación con Claude es una pestaña (Ctrl+Mayús+C va a la última; Ctrl+Mayús+K abre otra) y arranca Claude Code en la carpeta del terminal con el foco.</Explicacion>
               <Campo
                 titulo="Ruta de Claude Code"
@@ -252,6 +264,10 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
                 <span className="text-[12px] text-ok">Activas</span>
               </Campo>
               <Cuentas alCambiar={alCambiar} />
+              <Apartado icono={<MascotaAntigravity alto={11} />} titulo="Antigravity" />
+              <Explicacion>
+                En «Quién contesta», al empezar una conversación, puedes elegir Antigravity en vez de Claude (Antigravity CLI, con tu cuenta de Google).
+              </Explicacion>
               <CuentasAntigravity alCambiar={alCambiar} />
             </>
           )}
@@ -319,7 +335,7 @@ function Cuentas({ alCambiar }: { alCambiar: () => void }) {
 
   return (
     <div className="mt-6">
-      <div className="mb-1 text-[13px] font-medium">Cuentas</div>
+      <div className="mb-1 text-[13px] font-medium">Cuentas de Claude</div>
       <p className="mb-3 text-[11.5px] text-muy">
         Para cambiar de cuenta en el pie del panel de Claude. Cada una guarda su sesión en su carpeta; el historial, la memoria, los agentes y
         los ajustes se comparten con la principal, así una conversación sigue con la otra cuenta.
@@ -541,7 +557,7 @@ Su sesión guardada se queda en Windows: si la vuelves a añadir con el mismo no
         <input
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          placeholder={varias ? "Nombre de otra cuenta" : "Nombre de la segunda cuenta (p. ej. Trabajo)"}
+          placeholder="Nombre de otra cuenta"
           spellCheck={false}
           className="h-8 w-64 rounded-md border border-borde2 bg-fondo px-2 text-[12.5px] text-texto outline-none placeholder:text-muy focus:border-acento/60"
         />
