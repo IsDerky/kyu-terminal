@@ -134,6 +134,11 @@ export function obtener(item: string): Sesion {
   };
   bloques.alAcabar = (b) => {
     clearTimeout(esperaNombre);
+    // Orden perdida (un `clear` se llevó su marca): no se sabe cómo acabó, solo se quita.
+    if (b.estado === "vacio") {
+      useActividad.getState().quitar(item);
+      return;
+    }
     // Problemas: lo último de un build o un lint queda para el panel del espacio
     // (también «sin problemas», si era una orden de las que los dan).
     const espacio = espacioDeItem(item);

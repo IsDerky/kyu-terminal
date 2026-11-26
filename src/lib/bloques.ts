@@ -109,6 +109,12 @@ export class Bloques {
     this.oyentes.forEach((o) => o());
   }
 
+  /** Una orden que corría y de la que no llegará el final: queda vacía, sin resultado. */
+  private perdido(b: Bloque) {
+    b.estado = "vacio";
+    this.alAcabar?.(b);
+  }
+
   private get ultimo(): Bloque | undefined {
     return this.lista[this.lista.length - 1];
   }
@@ -120,6 +126,9 @@ export class Bloques {
       case "A": {
         // Un prompt que se abandonó (Intro vacío, Ctrl+C) queda como bloque vacío.
         if (ultimo?.estado === "escribiendo") ultimo.estado = "vacio";
+        // Un prompt nuevo quiere decir que ya no corre nada: si una orden se quedó sin
+        // su D (se perdió por el camino), se da por acabada para no dejar la pestaña latiendo.
+        for (const b of this.lista) if (b.estado === "corre") this.perdido(b);
         const inicio = this.term.registerMarker(0);
         if (!inicio) return true;
         const bloque: Bloque = {
@@ -134,8 +143,11 @@ export class Bloques {
           hora: horaAhora(),
           estado: "escribiendo",
         };
+        // `clear` borra el historial y con él esta marca: si la orden estaba corriendo,
+        // su D ya no la encontrará, así que se da por acabada aquí.
         inicio.onDispose(() => {
           this.lista = this.lista.filter((b) => b !== bloque);
+          if (bloque.estado === "corre") this.perdido(bloque);
           this.avisar();
         });
         this.lista.push(bloque);
