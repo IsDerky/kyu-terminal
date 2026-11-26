@@ -309,7 +309,10 @@ export function BarraOpciones({
       ];
 
   return (
-    <div className="relative flex h-8 items-center gap-0.5 pl-1.5 pr-9">
+    // pr-16: hueco fijo para dos botones a la derecha (Enviar, o «Dejar en cola» + Parar)
+    // para que el de la cola no tape el selector de razonamiento al aparecer.
+    // En una barra estrecha el modo y el esfuerzo se quedan en su icono (el nombre sigue en la ayuda).
+    <div className="@container relative flex h-8 items-center gap-0.5 pl-1.5 pr-16">
       <Desplegable
         cabecera="Modo · Mayús+Tab"
         fijo
@@ -320,7 +323,7 @@ export function BarraOpciones({
         etiqueta={
           <span className={`flex min-w-0 items-center gap-1.5 ${m.color || "text-tenue"}`}>
             <m.Icono size={12} strokeWidth={2} className="flex-none" />
-            <span className="truncate">{m.corto}</span>
+            <span className="hidden truncate @[20rem]:inline">{m.corto}</span>
           </span>
         }
         opciones={modosDisponibles(elegido).map((x) => ({ valor: x.id, titulo: x.nombre, ayuda: x.ayuda }))}
@@ -368,7 +371,7 @@ export function BarraOpciones({
           etiqueta={
             <span className="flex items-center gap-1.5 text-tenue">
               <Gauge size={12} strokeWidth={1.8} className="flex-none" />
-              {c.esfuerzo ? ESFUERZOS[c.esfuerzo] ?? c.esfuerzo : "Auto"}
+              <span className="hidden @[17rem]:inline">{c.esfuerzo ? ESFUERZOS[c.esfuerzo] ?? c.esfuerzo : "Auto"}</span>
             </span>
           }
           opciones={[
