@@ -2,6 +2,7 @@
 //! Abre las shells en un PTY, lee `kyu.toml`, abre y guarda archivos y da datos
 //! del equipo (RAM) y habla con Claude Code.
 
+mod acp;
 mod ajustes;
 mod arbol;
 mod archivos;

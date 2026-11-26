@@ -115,6 +115,8 @@ type SinId<T> = T extends unknown ? Omit<T, "id"> : never;
 export type EstadoConv = "parado" | "arrancando" | "pensando" | "listo" | "cerrado";
 
 export interface Conversacion {
+  /** Otro agente por ACP en vez de Claude («antigravity», «gemini»); null = Claude. */
+  agente: string | null;
   claudeId: number | null;
   /** Cambia con cada proceso: los eventos de uno ya cerrado se ignoran. */
   generacion: number;
@@ -205,7 +207,15 @@ export interface EnCola {
   imagenes: ImagenAdjunta[];
 }
 
+/** Agentes por ACP que se pueden elegir en el panel (id → nombre). */
+export const AGENTES: Record<string, string> = { antigravity: "Antigravity" };
+
+/** Quién contesta en la conversación: «Claude» o el nombre del agente. */
+export const nombreAgente = (c: Pick<Conversacion, "agente"> | undefined) =>
+  c?.agente ? (AGENTES[c.agente] ?? c.agente) : "Claude";
+
 export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Conversacion => ({
+  agente: null,
   claudeId: null,
   generacion: 0,
   carpeta: null,
@@ -388,7 +398,20 @@ export function conversacionEnPanel(espacio: string, opciones: { panel?: string;
  * Ctrl+Mayús+K: conversación nueva donde ya están las de Claude (el panel con el foco si
  * enseña una, o el de la última usada); si no hay ninguna, en un panel nuevo a la derecha.
  */
-export function nuevaConversacion(espacio: string): string {
+export function nuevaConversacion(espacio: string, agente: string | null = null): string {
+  const cid = nuevaConversacionClaude(espacio);
+  if (agente) ponerAgente(cid, agente);
+  return cid;
+}
+
+/** Cambia quién contesta en una conversación que aún no ha empezado. */
+export function ponerAgente(cid: string, agente: string | null) {
+  const c = useClaude.getState().conversaciones[cid];
+  if (!c || c.claudeId !== null || c.entradas.length) return;
+  cambiar(cid, () => ({ agente }));
+}
+
+function nuevaConversacionClaude(espacio: string): string {
   const k = useKyu.getState();
   if (k.activo !== espacio) k.cambiarEspacio(espacio);
   const esp = useKyu.getState().espacios.find((e) => e.id === espacio);
@@ -621,7 +644,8 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       return;
     case "cerrado":
       // Al volver a escribir se sigue la misma conversación (--resume), en la misma carpeta.
-      cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, reanudar: c.sesion }));
+      // Un agente ACP no se puede reanudar (aún): al volver a escribir empieza otra sesión.
+      cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, reanudar: c.agente ? null : c.sesion }));
       // Cerrado a media respuesta: lo que esperaba en cola vuelve a la caja.
       parados.delete(espacio);
       devolverCola(espacio);
@@ -738,7 +762,7 @@ const miles = (n: number) => n.toLocaleString("es-ES");
 /** Pide a Claude el desglose del contexto y lo guarda en la conversación. */
 export async function refrescarContexto(espacio: string) {
   const c = conversacion(espacio);
-  if (c.claudeId === null) return;
+  if (c.claudeId === null || c.agente) return;
   try {
     const u = await controlClaude<UsoContexto>(c.claudeId, { subtype: "get_context_usage" });
     cambiar(espacio, (x) => (x.claudeId === c.claudeId ? { contexto: u, tokens: u.totalTokens } : {}));
@@ -948,6 +972,7 @@ export async function enviar(espacio: string, texto: string, deCola?: EnCola) {
           reanudar: c.reanudar,
           reanudarEn: c.reanudarEn,
           cuenta: c.cuenta,
+          agente: c.agente,
         },
         (ev) => alEvento(espacio, generacion, ev),
       );
@@ -957,7 +982,7 @@ export async function enviar(espacio: string, texto: string, deCola?: EnCola) {
       // Comandos de este proyecto y modelos: en segundo plano, sin esperar. Con sugerencias no:
       // un `initialize` del anfitrión las apaga (Claude Code 2.1.331). Entonces la lista es la
       // del proceso de prueba de `cargarCatalogo`.
-      if (!useClaude.getState().sugerencias) {
+      if (!c.agente && !useClaude.getState().sugerencias) {
         void controlClaude<Catalogo>(id, { subtype: "initialize" })
           .then(guardarCatalogoDe)
           .then(() => refrescarContexto(espacio))
@@ -1118,7 +1143,7 @@ export function nueva(espacio: string) {
     verContexto: s.verContexto === espacio ? null : s.verContexto,
     conversaciones: {
       ...s.conversaciones,
-      [espacio]: { ...vacia(), eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, cuenta: c.cuenta },
+      [espacio]: { ...vacia(), agente: c.agente, eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, cuenta: c.cuenta },
     },
   }));
 }

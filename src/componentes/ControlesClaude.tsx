@@ -1,8 +1,11 @@
 // Controles del panel de Claude: modo, modelo y esfuerzo bajo la caja de texto, menú de
 // comandos con barra y desglose del contexto.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AtSign, Check, ChevronDown, ChevronRight, Gauge, ImagePlus, Minimize2, UserRound, X } from "lucide-react";
+import { AtSign, Bot, Check, ChevronDown, ChevronRight, Gauge, ImagePlus, Minimize2, UserRound, X } from "lucide-react";
 import {
+  AGENTES,
+  nombreAgente,
+  ponerAgente,
   cambiarCuenta,
   cambiarEsfuerzo,
   cambiarModelo,
@@ -289,6 +292,7 @@ export function BarraOpciones({
   alImagen: () => void;
 }) {
   const catalogo = useClaude((s) => s.catalogo);
+  if (c.agente) return <BarraAgente espacio={espacio} c={c} alArroba={alArroba} alImagen={alImagen} />;
   const elegido = modeloDe(catalogo, c.eleccionModelo);
   const m = datosModo(c.modo);
   const niveles = esfuerzos(elegido);
@@ -313,6 +317,7 @@ export function BarraOpciones({
     // para que el de la cola no tape el selector de razonamiento al aparecer.
     // En una barra estrecha el modo y el esfuerzo se quedan en su icono (el nombre sigue en la ayuda).
     <div className="@container relative flex h-8 items-center gap-0.5 pl-1.5 pr-16">
+      <SelectorAgente espacio={espacio} c={c} />
       <Desplegable
         cabecera="Modo · Mayús+Tab"
         fijo
@@ -383,6 +388,66 @@ export function BarraOpciones({
             })),
           ]}
         />
+      )}
+    </div>
+  );
+}
+
+/** Quién contesta: solo se puede cambiar antes del primer mensaje. */
+function SelectorAgente({ espacio, c }: { espacio: string; c: Conversacion }) {
+  if (c.claudeId !== null || c.entradas.length) return null;
+  return (
+    <Desplegable
+      cabecera="Quién contesta"
+      fijo
+      ayuda={`${nombreAgente(c)} (se elige antes del primer mensaje)`}
+      valor={c.agente}
+      alElegir={(v) => ponerAgente(espacio, v)}
+      ancho={260}
+      etiqueta={
+        <span className="flex min-w-0 items-center gap-1.5 text-tenue">
+          <Bot size={12} strokeWidth={2} className="flex-none" />
+          <span className="hidden truncate @[20rem]:inline">{nombreAgente(c)}</span>
+        </span>
+      }
+      opciones={[
+        { valor: null, titulo: "Claude", ayuda: "Claude Code, con tu cuenta de Claude" },
+        ...Object.entries(AGENTES).map(([id, nombre]) => ({
+          valor: id,
+          titulo: nombre,
+          ayuda: id === "antigravity" ? "Antigravity CLI (agy): modelos de Google con tu cuenta" : undefined,
+        })),
+      ]}
+    />
+  );
+}
+
+/** Barra de una conversación con otro agente: sin modo, modelo ni esfuerzo de Claude. */
+function BarraAgente({ espacio, c, alArroba, alImagen }: { espacio: string; c: Conversacion; alArroba: () => void; alImagen: () => void }) {
+  return (
+    <div className="@container relative flex h-8 items-center gap-0.5 pl-1.5 pr-16">
+      <SelectorAgente espacio={espacio} c={c} />
+      <button
+        type="button"
+        title="Mencionar un archivo (@)"
+        onClick={alArroba}
+        className="grid size-6 flex-none place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
+      >
+        <AtSign size={12} strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        title="Adjuntar imagen (también se puede pegar o soltar)"
+        onClick={alImagen}
+        className="grid size-6 flex-none place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
+      >
+        <ImagePlus size={12} strokeWidth={2} />
+      </button>
+      <span className="ml-auto" />
+      {c.modelo && (
+        <span title="Modelo que contesta" className="truncate px-1.5 text-[11.5px] text-tenue">
+          {c.modelo}
+        </span>
       )}
     </div>
   );

@@ -182,6 +182,8 @@ export interface OpcionesClaude {
   reanudarEn?: string | null;
   /** Cuenta de kyu.toml (`cuentas_claude`); null = la de siempre. */
   cuenta?: string | null;
+  /** Otro agente por ACP («antigravity»); null = Claude Code. */
+  agente?: string | null;
 }
 
 export interface CuentaClaude {

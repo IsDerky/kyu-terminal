@@ -159,6 +159,8 @@ pub struct Opciones {
     reanudar_en: Option<String>,
     /// Cuenta de kyu.toml (`cuentas_claude`); sin poner = la de siempre.
     cuenta: Option<String>,
+    /// Otro agente por ACP en vez de Claude Code («antigravity», «gemini»).
+    agente: Option<String>,
 }
 
 /// Imagen pegada o soltada en el panel: tipo MIME y datos en base64.
@@ -180,7 +182,19 @@ impl Sesion {
 #[derive(Default)]
 pub struct Claudes {
     sesiones: Mutex<HashMap<u32, Sesion>>,
+    /// Conversaciones con otro agente (ACP): mismos ids, mismos comandos.
+    acp: Mutex<HashMap<u32, crate::acp::Sesion>>,
     siguiente: AtomicU32,
+}
+
+/// Si `id` es de un agente ACP, le hace `f`; si no, None (es de Claude).
+fn con_acp<T>(
+    claudes: &State<'_, Claudes>,
+    id: u32,
+    f: impl FnOnce(&mut crate::acp::Sesion) -> Result<T, String>,
+) -> Option<Result<T, String>> {
+    let mut acp = claudes.acp.lock().ok()?;
+    acp.get_mut(&id).map(f)
 }
 
 /// Arranca Claude Code en `carpeta`. Los eventos llegan por `eventos`.
@@ -193,17 +207,26 @@ pub fn claude_abrir(
     eventos: Channel<Evento>,
 ) -> Result<u32, String> {
     let opciones = opciones.unwrap_or_default();
-    let config = crate::config::Config::cargar();
-    let programa = buscar_programa(config.claude.as_deref()).ok_or(
-        "no encuentro Claude Code (claude) en el PATH; ponlo en kyu.toml con claude = \"ruta\"",
-    )?;
     let carpeta = carpeta
         .map(PathBuf::from)
         .filter(|c| c.is_dir())
         .or_else(dirs::home_dir)
         .ok_or("no hay carpeta donde arrancar Claude")?;
-
     let id = claudes.siguiente.fetch_add(1, Ordering::Relaxed);
+    if let Some(agente) = opciones.agente.as_deref().filter(|a| !a.is_empty()) {
+        let (sesion, _) = crate::acp::abrir(agente, carpeta, eventos)?;
+        claudes
+            .acp
+            .lock()
+            .map_err(|_| "estado roto")?
+            .insert(id, sesion);
+        return Ok(id);
+    }
+    let config = crate::config::Config::cargar();
+    let programa = buscar_programa(config.claude.as_deref()).ok_or(
+        "no encuentro Claude Code (claude) en el PATH; ponlo en kyu.toml con claude = \"ruta\"",
+    )?;
+
     let mut cmd = Command::new(&programa);
     cmd.args([
         "-p",
@@ -357,6 +380,10 @@ pub async fn claude_control(
     id: u32,
     peticion: Value,
 ) -> Result<Value, String> {
+    if let Some(r) = con_acp(&claudes, id, |_| Ok(())) {
+        r?;
+        return Err("esto solo se puede con Claude".into());
+    }
     let (tx, rx) = mpsc::channel();
     let id_peticion = format!("kyu-{}", PETICION.fetch_add(1, Ordering::Relaxed));
     con_sesion(&claudes, id, |s| {
@@ -390,6 +417,19 @@ pub fn claude_enviar(
     texto: String,
     imagenes: Option<Vec<Imagen>>,
 ) -> Result<(), String> {
+    if let Some(r) = con_acp(&claudes, id, |s| {
+        let imgs = imagenes
+            .as_ref()
+            .map(|v| {
+                v.iter()
+                    .map(|i| (i.tipo.clone(), i.datos.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        s.enviar(texto.clone(), imgs)
+    }) {
+        return r;
+    }
     let mut contenido: Vec<Value> = imagenes
         .unwrap_or_default()
         .into_iter()
@@ -419,6 +459,9 @@ pub fn claude_responder(
     modo: Option<String>,
     respuestas: Option<Value>,
 ) -> Result<(), String> {
+    if let Some(r) = con_acp(&claudes, id, |s| s.responder(&id_peticion, &respuesta)) {
+        return r;
+    }
     con_sesion(&claudes, id, |s| {
         let (mut input, sugerencias) = s
             .pendientes
@@ -461,6 +504,9 @@ pub fn claude_responder(
 /// Para lo que esté haciendo Claude (como Esc en `claude`).
 #[tauri::command]
 pub fn claude_parar(claudes: State<'_, Claudes>, id: u32) -> Result<(), String> {
+    if let Some(r) = con_acp(&claudes, id, |s| s.parar()) {
+        return r;
+    }
     con_sesion(&claudes, id, |s| {
         s.escribir(json!({
             "type": "control_request",
@@ -472,6 +518,11 @@ pub fn claude_parar(claudes: State<'_, Claudes>, id: u32) -> Result<(), String> 
 
 #[tauri::command]
 pub fn claude_cerrar(claudes: State<'_, Claudes>, id: u32) {
+    if let Ok(mut acp) = claudes.acp.lock()
+        && let Some(mut s) = acp.remove(&id)
+    {
+        s.matar();
+    }
     if let Ok(mut sesiones) = claudes.sesiones.lock()
         && let Some(mut s) = sesiones.remove(&id)
     {
@@ -482,6 +533,11 @@ pub fn claude_cerrar(claudes: State<'_, Claudes>, id: u32) {
 /// Al arrancar la ventana: cierra las conversaciones que quedaran de antes de recargarla.
 #[tauri::command]
 pub fn claude_cerrar_todas(claudes: State<'_, Claudes>) {
+    if let Ok(mut acp) = claudes.acp.lock() {
+        for (_, mut s) in acp.drain() {
+            s.matar();
+        }
+    }
     if let Ok(mut sesiones) = claudes.sesiones.lock() {
         for (_, mut s) in sesiones.drain() {
             let _ = s.hijo.kill();
@@ -647,7 +703,10 @@ fn traducir(v: &Value) -> Vec<Evento> {
 /// Cómo estaba el archivo que va a cambiar una herramienta, para enseñar luego el diff:
 /// (ruta, contenido, no existía). Sin ruta si la herramienta no cambia archivos o el archivo
 /// no es de texto o pasa de 4 MB.
-fn foto_antes(herramienta: &str, input: &Value) -> (Option<String>, Option<String>, bool) {
+pub(crate) fn foto_antes(
+    herramienta: &str,
+    input: &Value,
+) -> (Option<String>, Option<String>, bool) {
     if !matches!(herramienta, "Write" | "Edit" | "MultiEdit") {
         return (None, None, false);
     }

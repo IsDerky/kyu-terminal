@@ -64,6 +64,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
       ...(useGit.getState().resumen ? [{ id: "cambios", grupo: "Git", titulo: "Cambios", detalle: "diff y commit del repo", icono: FileDiff, hacer: () => k.abrirCambios(useGit.getState().resumen!.raiz) }] : []),
       ...(useGit.getState().resumen?.github ? [{ id: "issues", grupo: "Git", titulo: "Trabajar en un issue", detalle: "worktree, espacio y conversación", icono: CircleDot, hacer: () => window.dispatchEvent(new Event("kyu-issues")) }] : []),
       { id: "claude-panel", grupo: "Paneles", titulo: "Nueva conversación con Claude", detalle: "junto a las demás, o a la derecha", atajo: "Ctrl+Mayús+K", icono: SquarePen, hacer: () => nuevaConversacion(k.activo) },
+      { id: "antigravity-panel", grupo: "Paneles", titulo: "Nueva conversación con Antigravity", detalle: "modelos de Google con tu cuenta (agy)", icono: SquarePen, hacer: () => nuevaConversacion(k.activo, "antigravity") },
       { id: "cerrar", grupo: "Paneles", titulo: "Cerrar pestaña", atajo: "Ctrl+Mayús+W", icono: X, hacer: cerrarActual },
       {
         id: "claude-orden",

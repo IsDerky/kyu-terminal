@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ShieldAlert, X } from "lucide-react";
-import { responder, type Entrada } from "../lib/claude";
+import { nombreAgente, responder, useClaude, type Entrada } from "../lib/claude";
 import { contar, diffLineas, recortar, type Linea, type Trozo } from "../lib/diff";
 import { herramienta, partirRuta, relativa } from "../lib/herramientas";
 import { leerArchivo } from "../lib/nucleo";
@@ -13,6 +13,7 @@ const texto = (v: unknown) => (typeof v === "string" ? v : "");
 /** Permiso de Claude en el panel: qué quiere hacer, el detalle (diff, orden) y los botones. */
 export default function Permiso({ e, espacio, carpeta }: { e: EntradaPermiso; espacio: string; carpeta: string | null }) {
   const [nombre] = herramienta(e.herramienta);
+  const quien = useClaude((s) => nombreAgente(s.conversaciones[espacio]));
 
   if (e.respuesta) {
     const si = e.respuesta !== "denegar";
@@ -34,7 +35,7 @@ export default function Permiso({ e, espacio, carpeta }: { e: EntradaPermiso; es
     <div className="overflow-hidden rounded-[10px] border border-aviso/25 bg-aviso/[0.03]">
       <div className="flex min-w-0 items-start gap-2 px-[11px] py-[9px] text-[12.5px]">
         <ShieldAlert size={14} strokeWidth={1.8} className="mt-0.5 flex-none text-aviso" />
-        <Que nombre={nombre} herramienta={e.herramienta} resumen={relativa(e.resumen, carpeta)} />
+        <Que quien={quien} nombre={nombre} herramienta={e.herramienta} resumen={relativa(e.resumen, carpeta)} />
       </div>
       <Detalle herramienta={e.herramienta} input={(e.input ?? {}) as Datos} />
       <div className="flex items-center gap-1.5 px-[11px] pb-2.5">
@@ -51,13 +52,13 @@ export default function Permiso({ e, espacio, carpeta }: { e: EntradaPermiso; es
 }
 
 /** «Claude quiere usar Editar demo.txt» y, debajo, la carpeta del archivo recortada. */
-function Que({ nombre, herramienta: h, resumen }: { nombre: string; herramienta: string; resumen: string }) {
+function Que({ quien, nombre, herramienta: h, resumen }: { quien: string; nombre: string; herramienta: string; resumen: string }) {
   const ruta = partirRuta(h, resumen);
   if (ruta) {
     const [archivo, dir] = ruta;
     return (
       <span className="min-w-0" title={resumen}>
-        Claude quiere usar <b className="font-semibold">{nombre}</b>{" "}
+        {quien} quiere usar <b className="font-semibold">{nombre}</b>{" "}
         <span className="font-mono text-[12px] text-texto">{archivo}</span>
         {dir && <span className="block truncate font-mono text-[11px] text-muy">{dir}</span>}
       </span>
@@ -66,7 +67,7 @@ function Que({ nombre, herramienta: h, resumen }: { nombre: string; herramienta:
   // Bash y PowerShell: la orden ya va entera en el detalle.
   return (
     <span className="min-w-0">
-      Claude quiere usar <b className="font-semibold">{nombre}</b>{" "}
+      {quien} quiere usar <b className="font-semibold">{nombre}</b>{" "}
       {h !== "Bash" && h !== "PowerShell" && h !== "mcp__kyu__ejecutar_en_panel" && <span className="break-all font-mono text-[12px] text-tenue">{resumen}</span>}
     </span>
   );

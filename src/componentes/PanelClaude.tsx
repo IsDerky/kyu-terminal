@@ -3,6 +3,7 @@ import { abrirMenuMensaje } from "../lib/menus";
 import { ArrowUp, AtSign, Check, Clock, FolderOpen, History, ImageIcon, Info, ListPlus, Loader2, Pencil, Square, SquarePen, SquareTerminal, TextQuote, X } from "lucide-react";
 import {
   añadirImagenes,
+  nombreAgente,
   ARRASTRE_RUTA,
   insertarEnCaja,
   mencionDe,
@@ -165,6 +166,7 @@ export default function PanelClaude({
       <header className="flex h-11 flex-none items-center gap-2 border-b border-borde pl-3.5 pr-2">
         <span className="flex items-center gap-2 text-[13px] font-semibold">
           <Mascota alto={15} />
+          {c.agente && <span className="text-[12px] font-medium text-tenue">{nombreAgente(c)}</span>}
         </span>
         <span
           title={carpeta ?? "Carpeta personal"}
@@ -226,8 +228,8 @@ export default function PanelClaude({
       <footer className="relative flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">
         <EstadoTurno c={c} />
         <span className="ml-auto" />
-        <SelectorCuenta espacio={espacio} c={c} />
-        <LimiteCuenta c={c} />
+        {!c.agente && <SelectorCuenta espacio={espacio} c={c} />}
+        {!c.agente && <LimiteCuenta c={c} />}
         <BarraGasto />
         {c.coste > 0 && <span title="Coste de la conversación">{dolares(c.coste)}</span>}
       </footer>
@@ -306,7 +308,7 @@ function ListaEntradas({ espacio, c, carpeta, grande }: { espacio: string; c: Co
         <Mascota alto={34} />
         <p className="text-[14px] font-medium">¿En qué te ayudo?</p>
         <p className="text-[12px] leading-relaxed text-tenue">
-          Claude trabajará en <span className="font-mono text-[11.5px] text-texto">{nombreCarpeta(carpeta)}</span>, la
+          {nombreAgente(c)} trabajará en <span className="font-mono text-[11.5px] text-texto">{nombreCarpeta(carpeta)}</span>, la
           carpeta del terminal con el foco.
         </p>
         <Recientes espacio={espacio} carpeta={carpeta} />
@@ -679,7 +681,7 @@ function CajaEntrada({
       <div className={grande ? "mx-auto w-full max-w-[780px]" : undefined}>
       <Cola espacio={espacio} alEditar={editarDeCola} />
       {/* Pegado al borde de arriba de la caja, como una pestaña. */}
-      <AvisoLimite espacio={espacio} c={c} />
+      {!c.agente && <AvisoLimite espacio={espacio} c={c} />}
       <div
         // Una pestaña de archivo soltada sobre la caja queda como @ruta (en vez de moverse).
         onDragOver={(e) => {
@@ -740,7 +742,9 @@ function CajaEntrada({
                     ? "Lo que escribas queda en cola · Esc para"
                     : sugerencia
                       ? `${sugerencia}  · Tab`
-                      : "Escribe a Claude · @ archivos · / comandos"
+                      : c.agente
+                        ? `Escribe a ${nombreAgente(c)} · @ archivos`
+                        : "Escribe a Claude · @ archivos · / comandos"
           }
           onChange={(e) => {
             setTexto(e.target.value);

@@ -56,7 +56,8 @@ interface SesionGuardada {
 function guardarConversacion(cid: string, c = useClaude.getState()): ConversacionGuardada | null {
   const conv = c.conversaciones[cid];
   const primero = conv?.entradas.find((x) => x.tipo === "tu");
-  if (!conv?.sesion || !conv.carpeta || primero?.tipo !== "tu") return null;
+  // Las de otro agente (ACP) no se pueden reanudar todavía: no se guardan.
+  if (!conv?.sesion || !conv.carpeta || conv.agente || primero?.tipo !== "tu") return null;
   return {
     sesion: conv.sesion,
     carpeta: conv.carpeta,
