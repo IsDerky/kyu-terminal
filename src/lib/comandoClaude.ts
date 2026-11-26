@@ -165,21 +165,6 @@ export async function abrirYPreparar(cid: string) {
   if (usePreparados.getState().porConv[cid]?.entrada === p.entrada) s.auto?.proponer(p.comando, false);
 }
 
-/** Lleva el foco a la terminal donde quedó el comando. */
-export function irATerminal(item: string) {
-  const k = useKyu.getState();
-  for (const esp of k.espacios) {
-    const panel = paneles(esp.raiz).find((p) => p.items.includes(item))?.id;
-    if (panel) {
-      if (k.activo !== esp.id) k.cambiarEspacio(esp.id);
-      k.activar(panel, item);
-      k.enfocar(panel);
-      setTimeout(() => sesion(item)?.term.focus(), 50);
-      return;
-    }
-  }
-}
-
 /** Al acabar Claude un turno, prepara el último comando de su respuesta. */
 export function vigilarComandos(): () => void {
   const hechos = new Set<string>();
