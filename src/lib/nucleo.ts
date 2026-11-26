@@ -34,6 +34,8 @@ export interface ConfigVista {
   limite_diario: number;
   /** Nombres de las cuentas de Claude de kyu.toml (vacío = solo la de siempre). */
   cuentas_claude: string[];
+  /** Nombres de las cuentas de Antigravity de kyu.toml (vacío = solo la de siempre). */
+  cuentas_antigravity: string[];
   /** Respuesta propuesta por Claude tras cada turno. */
   sugerencias_claude: boolean;
   /** Buscar versión nueva al abrir (false en la portable). */
@@ -214,7 +216,8 @@ export interface SesionAgente {
 }
 export const acpSesiones = (agente: string, carpeta: string) => invoke<SesionAgente[]>("acp_sesiones", { agente, carpeta });
 /** Abre una consola con el inicio de sesión del agente. */
-export const acpEntrar = (agente: string) => invoke("acp_entrar", { agente });
+export const acpEntrar = (agente: string, cuenta: string | null = null) =>
+  invoke("acp_entrar", { agente, cuenta });
 
 /** Regla de permiso guardada de Claude Code. */
 export interface ReglaPermiso {
@@ -275,6 +278,21 @@ export const cuentasClaude = () => invoke<CuentaClaude[]>("claude_cuentas");
 export const entrarCuenta = (nombre: string) => invoke("claude_cuenta_entrar", { nombre });
 export const anadirCuenta = (nombre: string) => invoke("claude_cuenta_anadir", { nombre });
 export const quitarCuenta = (nombre: string) => invoke("claude_cuenta_quitar", { nombre });
+
+export interface CuentaAntigravity {
+  nombre: string;
+  principal: boolean;
+  sesion: boolean;
+  /** Su sesión es la que está ahora en Windows. */
+  activa: boolean;
+  /** Hay una conversación de Antigravity abierta con ella. */
+  abierta: boolean;
+}
+
+export const cuentasAntigravity = () => invoke<CuentaAntigravity[]>("antigravity_cuentas");
+export const entrarCuentaAntigravity = (nombre: string) => invoke("antigravity_cuenta_entrar", { nombre });
+export const anadirCuentaAntigravity = (nombre: string) => invoke("antigravity_cuenta_anadir", { nombre });
+export const quitarCuentaAntigravity = (nombre: string) => invoke("antigravity_cuenta_quitar", { nombre });
 
 /** Imagen para Claude: tipo MIME y datos en base64 (sin el «data:…,» delante). */
 export interface ImagenClaude {

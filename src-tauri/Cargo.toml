@@ -42,6 +42,6 @@ codegen-units = 1
 strip = true
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_Xps", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security_Credentials", "Win32_Storage_Xps", "Win32_UI_WindowsAndMessaging"] }
 # La misma que trae Tauri: para pedirle a WebView2 menos memoria en segundo plano.
 webview2-com = "0.39"

@@ -293,6 +293,7 @@ pub fn claude_abrir(
                 reanudar: opciones.reanudar.clone().filter(|v| !v.is_empty()),
                 callado: opciones.callado.unwrap_or(false),
                 ajustes: opciones.ajustes.clone().unwrap_or_default(),
+                cuenta: opciones.cuenta.clone(),
             },
             eventos,
         )?;

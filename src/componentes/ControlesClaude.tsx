@@ -282,6 +282,36 @@ export function SelectorCuenta({ espacio, c }: { espacio: string; c: Conversacio
   );
 }
 
+/** Selector de cuenta de Antigravity; solo sale con dos o más cuentas en kyu.toml. */
+export function SelectorCuentaAntigravity({ espacio, c }: { espacio: string; c: Conversacion }) {
+  const cuentas = useClaude((s) => s.cuentasAntigravity);
+  if (cuentas.length < 2) return null;
+  const ocupado = c.claudeId !== null;
+  const actual = c.cuenta ?? cuentas[0];
+  return (
+    <Desplegable
+      cabecera="Cuenta de Antigravity"
+      derecha
+      fijo
+      ayuda={ocupado ? `Cuenta: ${actual}` : `Cuenta: ${actual} · se aplica al próximo mensaje`}
+      valor={actual}
+      alElegir={(v) => v && cambiarCuenta(espacio, v)}
+      ancho={220}
+      etiqueta={
+        <span className="flex min-w-0 items-center gap-1.5 text-tenue">
+          <UserRound size={12} strokeWidth={1.8} className="flex-none" />
+          <span className="max-w-[80px] truncate">{actual}</span>
+        </span>
+      }
+      opciones={cuentas.map((n) => ({
+        valor: n,
+        titulo: n,
+        desactivada: n === actual ? undefined : ocupado ? "Espera a que acabe" : undefined,
+      }))}
+    />
+  );
+}
+
 // ---------- Barra bajo la caja ----------
 
 export function BarraOpciones({

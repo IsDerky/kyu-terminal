@@ -10,6 +10,7 @@ mod archivos;
 mod autocompletar;
 mod claude;
 mod config;
+mod credenciales;
 mod cuentas;
 mod entorno;
 mod git;
@@ -115,6 +116,10 @@ pub fn run() {
             cuentas::claude_cuenta_entrar,
             cuentas::claude_cuenta_anadir,
             cuentas::claude_cuenta_quitar,
+            credenciales::antigravity_cuentas,
+            credenciales::antigravity_cuenta_entrar,
+            credenciales::antigravity_cuenta_anadir,
+            credenciales::antigravity_cuenta_quitar,
             mcp::mcp_responder,
             grabar::grabar_empezar,
             grabar::grabar_parar,

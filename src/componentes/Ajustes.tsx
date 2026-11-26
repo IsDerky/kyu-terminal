@@ -17,14 +17,19 @@ import {
 } from "lucide-react";
 import {
   anadirCuenta,
+  anadirCuentaAntigravity,
   cuentasClaude,
+  cuentasAntigravity,
   entrarCuenta,
+  entrarCuentaAntigravity,
   guardarAjuste,
   leerAjustes,
   quitarCuenta,
+  quitarCuentaAntigravity,
   type AjustesVista,
   type ConfigVista,
   type CuentaClaude,
+  type CuentaAntigravity,
 } from "../lib/nucleo";
 import { useKyu } from "../lib/estado";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -247,6 +252,7 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
                 <span className="text-[12px] text-ok">Activas</span>
               </Campo>
               <Cuentas alCambiar={alCambiar} />
+              <CuentasAntigravity alCambiar={alCambiar} />
             </>
           )}
 
@@ -401,6 +407,141 @@ function Cuentas({ alCambiar }: { alCambiar: () => void }) {
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           placeholder={lista?.length ? "Nombre de otra cuenta" : "Nombre de la segunda cuenta (p. ej. Trabajo)"}
+          spellCheck={false}
+          className="h-8 w-64 rounded-md border border-borde2 bg-fondo px-2 text-[12.5px] text-texto outline-none placeholder:text-muy focus:border-acento/60"
+        />
+        <button
+          type="submit"
+          disabled={!nombre.trim()}
+          className="flex h-8 items-center gap-1.5 rounded-md border border-borde2 px-2.5 text-[12px] text-tenue hover:text-texto disabled:opacity-40"
+        >
+          <Plus size={13} /> Añadir cuenta
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Cuentas de Antigravity (kyu.toml, [[cuentas_antigravity]]). agy guarda su sesión en un solo
+ * sitio de Windows: Kyu guarda una copia por cuenta y la pone antes de arrancarlo.
+ */
+function CuentasAntigravity({ alCambiar }: { alCambiar: () => void }) {
+  const [lista, setLista] = useState<CuentaAntigravity[] | null>(null);
+  const [nombre, setNombre] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [esperando, setEsperando] = useState<string | null>(null);
+
+  const leer = () => {
+    setLista(null);
+    cuentasAntigravity().then(setLista, (e) => (setError(String(e)), setLista([])));
+  };
+  useEffect(leer, []);
+
+  const hacer = async (f: () => Promise<unknown>, recargarConfig = true) => {
+    try {
+      await f();
+      setError(null);
+      if (recargarConfig) alCambiar();
+      leer();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+  const varias = (lista?.length ?? 0) > 1;
+
+  return (
+    <div className="mt-6">
+      <div className="mb-1 text-[13px] font-medium">Cuentas de Antigravity</div>
+      <p className="mb-3 text-[11.5px] text-muy">
+        Para elegir cuenta en el pie de una conversación con Antigravity. Antigravity guarda la sesión en un solo sitio de Windows: Kyu guarda
+        una copia de cada cuenta y pone la que toca antes de arrancarlo. Por eso no puede haber dos conversaciones abiertas con cuentas
+        distintas a la vez.
+      </p>
+      {error && <p className="mb-3 rounded-md border border-mal/30 bg-mal/[0.05] px-3 py-2 text-[12px] text-mal">{error}</p>}
+      {lista === null ? (
+        <p className="flex items-center gap-2 text-[12px] text-tenue">
+          <Loader2 size={12} className="animate-spin" /> Mirando las sesiones…
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {lista.map((c) => (
+            <div key={c.nombre} className="flex items-center gap-3 rounded-lg border border-borde bg-tarjeta px-3 py-2.5">
+              <span className="grid size-8 flex-none place-items-center rounded-md bg-hover text-tenue">
+                <UserRound size={15} strokeWidth={1.8} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <b className="text-[13px] font-semibold">{c.nombre}</b>
+                  {c.principal && <span className="text-[11px] text-muy">la de siempre</span>}
+                  {varias && c.activa && <span className="text-[11px] text-ok">puesta ahora</span>}
+                  {c.abierta && <span className="text-[11px] text-acento2">en uso</span>}
+                </div>
+                <div className="truncate text-[11.5px] text-muy">
+                  {c.sesion ? <span className="text-tenue">Sesión iniciada</span> : <span className="text-aviso">Sin sesión</span>}
+                </div>
+              </div>
+              {(!c.sesion || varias) && (
+                <button
+                  type="button"
+                  title={c.sesion ? "Volver a iniciar sesión con esta cuenta" : undefined}
+                  onClick={() =>
+                    void hacer(async () => {
+                      await entrarCuentaAntigravity(c.nombre);
+                      setEsperando(c.nombre);
+                    }, false)
+                  }
+                  className={
+                    c.sesion
+                      ? "grid size-6 place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
+                      : "flex items-center gap-1.5 rounded-full border border-acento/40 bg-acento/10 px-2.5 py-0.5 text-[11.5px] text-acento2 hover:bg-acento/20"
+                  }
+                >
+                  {c.sesion ? <LogIn size={13} /> : (<><LogIn size={12} /> Iniciar sesión</>)}
+                </button>
+              )}
+              {!c.principal && (
+                <button
+                  type="button"
+                  title="Quitarla de kyu.toml (su sesión guardada se queda en Windows)"
+                  onClick={async () => {
+                    const si = await ask(
+                      `¿Quitar «${c.nombre}» de Kyu?
+
+Su sesión guardada se queda en Windows: si la vuelves a añadir con el mismo nombre, sigue iniciada.`,
+                      { title: "Quitar cuenta", kind: "warning", okLabel: "Quitar", cancelLabel: "Cancelar" },
+                    );
+                    if (si) void hacer(() => quitarCuentaAntigravity(c.nombre));
+                  }}
+                  className="grid size-6 place-items-center rounded-md text-muy hover:bg-hover hover:text-texto"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {esperando && (
+        <p className="mt-2 flex items-center gap-2 text-[12px] text-tenue">
+          Termina de iniciar sesión con «{esperando}» en la consola y el navegador y luego
+          <button type="button" onClick={() => (setEsperando(null), leer())} className="flex items-center gap-1 text-acento2 hover:underline">
+            <RefreshCw size={11} /> comprueba
+          </button>
+        </p>
+      )}
+      <form
+        className="mt-3 flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = nombre.trim();
+          if (n) void hacer(() => anadirCuentaAntigravity(n)).then(() => setNombre(""));
+        }}
+      >
+        <input
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder={varias ? "Nombre de otra cuenta" : "Nombre de la segunda cuenta (p. ej. Trabajo)"}
           spellCheck={false}
           className="h-8 w-64 rounded-md border border-borde2 bg-fondo px-2 text-[12.5px] text-texto outline-none placeholder:text-muy focus:border-acento/60"
         />

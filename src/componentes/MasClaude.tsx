@@ -58,7 +58,7 @@ export function MenuMas({ cid, c, boton }: { cid: string; c: Conversacion; boton
             </>
           )}
           {c.agente && (
-            <Opcion icono={<LogIn size={13} strokeWidth={1.8} />} texto={`Entrar en ${nombreAgente(c)}`} onClick={hacer(() => void acpEntrar(c.agente!))} />
+            <Opcion icono={<LogIn size={13} strokeWidth={1.8} />} texto={`Entrar en ${nombreAgente(c)}`} onClick={hacer(() => void acpEntrar(c.agente!, c.cuenta))} />
           )}
           <Opcion icono={<Download size={13} strokeWidth={1.8} />} texto="Exportar conversación" ayuda="/export" onClick={hacer(() => void exportar(cid))} />
         </div>
@@ -235,7 +235,7 @@ export function PieAgente({ c }: { c: Conversacion }) {
       )}
       <button
         type="button"
-        onClick={() => void acpEntrar(c.agente!)}
+        onClick={() => void acpEntrar(c.agente!, c.cuenta)}
         title={`Abre el inicio de sesión de ${nombreAgente(c)} (cuenta de Google)`}
         className="flex-none rounded px-1 text-acento2 hover:bg-hover"
       >

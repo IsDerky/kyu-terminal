@@ -43,6 +43,8 @@ pub struct Arranque {
     pub callado: bool,
     /// Id de la opción → valor, para ponerlas nada más empezar.
     pub ajustes: HashMap<String, String>,
+    /// Cuenta de Antigravity (`cuentas_antigravity` en kyu.toml).
+    pub cuenta: Option<String>,
 }
 
 #[derive(Default)]
@@ -74,6 +76,8 @@ pub struct Sesion {
     hijo: Child,
     entrada: Arc<Mutex<ChildStdin>>,
     estado: Arc<Mutex<Estado>>,
+    /// Cuenta de Antigravity abierta mientras viva la sesión.
+    _cuenta: Arc<Mutex<Option<crate::credenciales::Uso>>>,
 }
 
 /// Con `KYU_ACP_REGISTRO=1`, todo el tráfico ACP va a `%TEMP%\kyu\acp.log` (para depurar).
@@ -200,6 +204,12 @@ pub fn abrir(
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    let cuenta = if agente == "antigravity" {
+        crate::credenciales::ocupar(arranque.cuenta.as_deref())?
+    } else {
+        None
+    };
+    let cuenta = Arc::new(Mutex::new(cuenta));
     let mut hijo = cmd
         .spawn()
         .map_err(|e| format!("no se pudo lanzar {}: {e}", ruta.display()))?;
@@ -249,6 +259,7 @@ pub fn abrir(
     let est = estado.clone();
     let ent = entrada.clone();
     let cwd = carpeta.to_string_lossy().to_string();
+    let cuenta_hilo = cuenta.clone();
     std::thread::spawn(move || {
         for linea in BufReader::new(salida).lines().map_while(Result::ok) {
             registrar("←", &linea);
@@ -261,6 +272,10 @@ pub fn abrir(
                     return;
                 }
             }
+        }
+        // agy se ha cerrado: su cuenta ya no está en uso.
+        if let Ok(mut c) = cuenta_hilo.lock() {
+            c.take();
         }
         let empezada = est.lock().is_ok_and(|e| e.sesion.is_some());
         if !empezada {
@@ -281,6 +296,7 @@ pub fn abrir(
             hijo,
             entrada,
             estado,
+            _cuenta: cuenta,
         },
         nombre_agente.to_string(),
     ))
@@ -993,6 +1009,11 @@ fn listar(agente: &str, carpeta: &str) -> Result<Vec<SesionAgente>, String> {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
+    let _cuenta = if agente == "antigravity" {
+        crate::credenciales::ocupar_la_actual()
+    } else {
+        None
+    };
     let mut hijo = cmd.spawn().map_err(|e| e.to_string())?;
     let mut entrada = hijo.stdin.take().ok_or("sin stdin")?;
     let salida = hijo.stdout.take().ok_or("sin stdout")?;
@@ -1061,10 +1082,19 @@ pub async fn acp_sesiones(agente: String, carpeta: String) -> Result<Vec<SesionA
 
 /// Abre una consola con el inicio de sesión del agente (`agy acp --login`: el navegador hace el resto).
 #[tauri::command]
-pub fn acp_entrar(agente: String) -> Result<(), String> {
-    let (_, ruta) = programa_de(&agente)?;
+pub fn acp_entrar(agente: String, cuenta: Option<String>) -> Result<(), String> {
+    if agente == "antigravity" {
+        // Pone la sesión de esa cuenta; la consola vive por su cuenta, así que no queda ocupada.
+        drop(crate::credenciales::ocupar(cuenta.as_deref())?);
+    }
+    abrir_login(&agente)
+}
+
+/// Consola nueva con el inicio de sesión del agente.
+pub fn abrir_login(agente: &str) -> Result<(), String> {
+    let (_, ruta) = programa_de(agente)?;
     let mut cmd = Command::new(&ruta);
-    match agente.as_str() {
+    match agente {
         "antigravity" => cmd.args(["acp", "--login"]),
         _ => &mut cmd,
     };

@@ -44,6 +44,8 @@ pub struct Config {
     pub sugerencias_claude: Option<bool>,
     /// Cuentas de Claude entre las que elegir en el panel. Sin ninguna = la de siempre.
     pub cuentas_claude: Vec<CuentaClaude>,
+    /// Cuentas de Antigravity en Windows (intercambio de credencial). Sin ninguna = la de siempre.
+    pub cuentas_antigravity: Vec<CuentaAntigravity>,
     /// Mirar al abrir si hay versión nueva en GitHub. Sin poner = sí (nunca en la portable).
     pub buscar_actualizaciones: Option<bool>,
     pub tema: Tema,
@@ -61,6 +63,12 @@ pub struct CuentaClaude {
     /// los ajustes (para seguir una conversación con esta cuenta). Sin poner = sí.
     #[serde(default)]
     pub compartir: Option<bool>,
+}
+
+/// Una cuenta de Antigravity (respaldo de su credencial de Windows por nombre).
+#[derive(Deserialize, Clone)]
+pub struct CuentaAntigravity {
+    pub nombre: String,
 }
 
 impl Config {
@@ -164,6 +172,8 @@ pub struct ConfigVista {
     limite_diario: u64,
     /// Nombres de las cuentas de Claude (vacío = solo la de siempre, sin selector).
     cuentas_claude: Vec<String>,
+    /// Nombres de las cuentas de Antigravity (vacío = solo la de siempre, sin selector).
+    cuentas_antigravity: Vec<String>,
     sugerencias_claude: bool,
     /// Buscar versión nueva al abrir (false en la portable: se actualiza a mano).
     actualizaciones: bool,
@@ -212,6 +222,11 @@ pub fn config() -> ConfigVista {
         limite_diario: config.limite_diario.unwrap_or(0),
         cuentas_claude: config
             .cuentas_claude
+            .iter()
+            .map(|c| c.nombre.clone())
+            .collect(),
+        cuentas_antigravity: config
+            .cuentas_antigravity
             .iter()
             .map(|c| c.nombre.clone())
             .collect(),

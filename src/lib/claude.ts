@@ -221,6 +221,8 @@ interface EstadoClaude {
   colas: Record<string, EnCola[]>;
   /** Cuentas de Claude de kyu.toml (vacío = solo la de siempre, sin selector). */
   cuentas: string[];
+  /** Cuentas de Antigravity de kyu.toml (vacío = solo la de siempre, sin selector). */
+  cuentasAntigravity: string[];
   /** Sugerencias de respuesta activas (kyu.toml). */
   sugerencias: boolean;
   quitarAviso: (id: number) => void;
@@ -291,6 +293,7 @@ export const useClaude = create<EstadoClaude>((set) => ({
   borradores: {},
   colas: {},
   cuentas: [],
+  cuentasAntigravity: [],
   sugerencias: true,
   quitarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
 }));
@@ -1200,6 +1203,7 @@ export async function reanudarAgente(cid: string, agente: string, carpeta: strin
         agente,
         ajustesAgente: ajustesGuardados(agente),
         carpeta,
+        cuenta: antes.agente === agente ? antes.cuenta : null,
         sesion,
         reanudar: sesion,
         cargando: true,
@@ -1210,7 +1214,7 @@ export async function reanudarAgente(cid: string, agente: string, carpeta: strin
     },
   }));
   try {
-    const id = await abrirClaude(carpeta, { agente, reanudar: sesion, ajustes: ajustesGuardados(agente) }, (ev) =>
+    const id = await abrirClaude(carpeta, { agente, reanudar: sesion, ajustes: ajustesGuardados(agente), cuenta: antes.agente === agente ? antes.cuenta : null }, (ev) =>
       alEvento(cid, generacion, ev),
     );
     if (conversacion(cid).generacion !== generacion) return void cerrarClaude(id);
@@ -1487,15 +1491,25 @@ export function nueva(espacio: string) {
  * Al leer kyu.toml: qué cuentas hay y si hay sugerencias. Las conversaciones con una cuenta que
  * ya no existe vuelven a la de siempre.
  */
-export function configurarClaude({ cuentas_claude: cuentas, sugerencias_claude: sugerencias }: ConfigVista) {
+export function configurarClaude({
+  cuentas_claude: cuentas,
+  cuentas_antigravity: cuentasAntigravity,
+  sugerencias_claude: sugerencias,
+}: ConfigVista) {
   useClaude.setState((s) => {
-    const vale = (x: string | null) => (x && cuentas.includes(x) ? x : null);
-    const prefs = { ...s.prefs, cuenta: vale(s.prefs.cuenta) };
+    const vale = (x: string | null, lista: string[]) => (x && lista.includes(x) ? x : null);
+    const prefs = { ...s.prefs, cuenta: vale(s.prefs.cuenta, cuentas) };
     guardarPrefs(prefs);
     const conversaciones = Object.fromEntries(
-      Object.entries(s.conversaciones).map(([id, c]) => [id, { ...c, cuenta: vale(c.cuenta) }]),
+      Object.entries(s.conversaciones).map(([id, c]) => [
+        id,
+        {
+          ...c,
+          cuenta: c.agente === "antigravity" ? vale(c.cuenta, cuentasAntigravity) : c.agente ? null : vale(c.cuenta, cuentas),
+        },
+      ]),
     );
-    return { cuentas, sugerencias, prefs, conversaciones };
+    return { cuentas, cuentasAntigravity, sugerencias, prefs, conversaciones };
   });
 }
 
@@ -1508,7 +1522,7 @@ const cuentaValida = (x: string | null) => (x && useClaude.getState().cuentas.in
 export function cambiarCuenta(espacio: string, cuenta: string | null) {
   const c = conversacion(espacio);
   if (c.estado === "arrancando" || c.estado === "pensando" || cuenta === c.cuenta) return;
-  recordar({ cuenta });
+  if (!c.agente) recordar({ cuenta });
   if (c.claudeId === null) {
     cambiar(espacio, () => ({ cuenta }));
     return;

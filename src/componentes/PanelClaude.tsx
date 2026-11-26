@@ -42,6 +42,7 @@ import {
   LimiteCuenta,
   MenuComandos,
   SelectorCuenta,
+  SelectorCuentaAntigravity,
 } from "./ControlesClaude";
 import { EtiquetaFondo, TiraTareas } from "./Tareas";
 import { FlotantesClaude, IconoMas, MenuMas, PieAgente } from "./MasClaude";
@@ -242,6 +243,7 @@ export default function PanelClaude({
         <EstadoTurno c={c} />
         <span className="ml-auto" />
         {!c.agente && <SelectorCuenta espacio={espacio} c={c} />}
+        {c.agente === "antigravity" && <SelectorCuentaAntigravity espacio={espacio} c={c} />}
         {!c.agente && <LimiteCuenta c={c} />}
         <PieAgente c={c} />
         <BarraGasto />
