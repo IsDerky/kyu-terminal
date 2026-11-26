@@ -40,7 +40,8 @@ function Bloque({ codigo, lenguaje }: { codigo: string; lenguaje: string }) {
     });
 
   return (
-    <div className="group/codigo relative my-2 overflow-hidden rounded-lg border border-borde bg-tarjeta">
+    // data-codigo: el menú de clic derecho del mensaje sabe sobre qué bloque se ha pulsado.
+    <div data-codigo={codigo} data-lenguaje={lenguaje} className="group/codigo relative my-2 overflow-hidden rounded-lg border border-borde bg-tarjeta">
       {/* Siempre a la vista (no solo al pasar el ratón): copiar es lo que más se hace con un bloque. */}
       <div className="absolute right-1 top-1 z-10 flex items-center gap-1.5 rounded-md bg-tarjeta/90 pl-2">
         {lenguaje && <span className="font-mono text-[10.5px] text-muy">{lenguaje}</span>}

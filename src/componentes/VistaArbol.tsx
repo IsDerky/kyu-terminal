@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, ChevronsDownUp, File, Folder, FolderOpen, Re
 import { useKyu } from "../lib/estado";
 import { ARRASTRE_RUTA, carpetaDelEspacio, useClaude } from "../lib/claude";
 import { arbolListar, gitEstado, type NodoArbol } from "../lib/nucleo";
+import { abrirMenuArbol } from "../lib/menus";
 
 /** Carpetas abiertas de cada pestaña de árbol (sobreviven a mover o dividir el panel). */
 const abiertasDe = new Map<string, Set<string>>();
@@ -90,6 +91,10 @@ export default function VistaArbol({ item }: { item: string }) {
             e.dataTransfer.effectAllowed = "copy";
           }}
           onClick={() => (n.carpeta ? alternar(n.ruta) : useKyu.getState().abrirArchivo(n.ruta, 1, 1))}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            if (raiz) abrirMenuArbol(n.ruta, n.carpeta, raiz, claude, e.clientX, e.clientY);
+          }}
           className="flex h-6 w-full min-w-0 items-center gap-1.5 pr-2.5 text-left text-[12.5px] text-tenue hover:bg-hover hover:text-texto"
           style={{ paddingLeft: 8 + nivel * 16 }}
         >

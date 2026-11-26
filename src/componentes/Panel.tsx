@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { ChevronDown, Columns2, FolderTree, GitCommitHorizontal, ListX, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
+import { abrirMenuPestana } from "../lib/menus";
 import type { ConfigVista } from "../lib/nucleo";
 import VistaTerminal from "./VistaTerminal";
 // CodeMirror se carga al abrir el primer archivo.
@@ -55,6 +56,16 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
   const { activar, enfocar, nuevaPestana, dividir, moverItem } = useKyu.getState();
   const [zona, setZona] = useState<Zona | null>(null);
   const [menu, setMenu] = useState(false);
+  // Pestaña que se está renombrando (lo pide el menú de clic derecho).
+  const [renombrando, setRenombrando] = useState<string | null>(null);
+  useEffect(() => {
+    const pedir = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (panel.items.includes(id)) setRenombrando(id);
+    };
+    window.addEventListener("kyu-renombrar", pedir);
+    return () => window.removeEventListener("kyu-renombrar", pedir);
+  }, [panel.items]);
   const activo = panel.activo ? items[panel.activo] : undefined;
   const perfilDe = (nombre: string) => config.perfiles.find((p) => p.nombre === nombre);
   // Lo nuevo (dividir, +) se abre con el perfil de la pestaña activa, o el predeterminado.
@@ -101,7 +112,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
             if (!it) return null;
             const nombre =
               it.tipo === "terminal"
-                ? actividad[id]?.nombre ?? it.titulo
+                ? it.nombre ?? actividad[id]?.nombre ?? it.titulo
                 : it.tipo === "arbol"
                   ? "Archivos"
                   : it.tipo === "claude"
@@ -124,6 +135,10 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                 }}
                 onClick={() => activar(panel.id, id)}
                 onAuxClick={(e) => e.button === 1 && void cerrarItem(id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  abrirMenuPestana(id, panel.id, e.clientX, e.clientY);
+                }}
                 title={
                   it.tipo === "archivo"
                     ? it.ruta
@@ -160,7 +175,27 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                 ) : (
                   <IconoArchivo size={12} />
                 )}
-                <span className="truncate">{nombre}</span>
+                {renombrando === id && it.tipo === "terminal" ? (
+                  <input
+                    autoFocus
+                    defaultValue={it.nombre ?? (typeof nombre === "string" ? nombre : "")}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") (e.currentTarget.dataset.cancelar = "1"), e.currentTarget.blur();
+                    }}
+                    onBlur={(e) => {
+                      // Vacío = vuelve al título que pone la shell.
+                      if (!e.currentTarget.dataset.cancelar) useKyu.getState().renombrarItem(id, e.currentTarget.value || null);
+                      setRenombrando(null);
+                    }}
+                    className="w-28 min-w-0 rounded bg-fondo px-1 text-[12px] text-texto outline-none ring-1 ring-acento/50"
+                  />
+                ) : (
+                  <span className="truncate">{nombre}</span>
+                )}
                 {it.tipo === "terminal" && <MarcaActividad item={id} visible={esActivo} />}
                 {it.tipo === "archivo" && it.sucio ? (
                   <span className="mx-1 size-1.5 flex-none rounded-full bg-tenue group-hover:hidden" title="Sin guardar" />

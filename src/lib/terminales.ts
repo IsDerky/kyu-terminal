@@ -202,16 +202,17 @@ export function obtener(item: string): Sesion {
     return true;
   });
 
-  // Clic derecho: con texto seleccionado copia al momento (como Windows Terminal); sin
-  // selección, o con Mayús, abre el menú de Kyu (lo monta App, para no importar aquí Claude).
+  // Clic derecho como en cualquier terminal: con texto seleccionado lo copia, sin selección
+  // pega. Nada de menú aquí (el de la pestaña está en la barra de arriba).
   elemento.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    if (term.hasSelection() && !e.shiftKey) {
+    if (term.hasSelection()) {
       void writeText(textoSeleccion(term, bloques));
       term.clearSelection();
       return;
     }
-    window.dispatchEvent(new CustomEvent("kyu-menu-terminal", { detail: { item, x: e.clientX, y: e.clientY } }));
+    void readText().then((t) => t && term.paste(t));
+    term.focus();
   });
 
   term.onTitleChange((t) => {

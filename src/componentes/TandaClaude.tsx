@@ -362,6 +362,18 @@ export function VolverAqui({ espacio, entrada, tieneUuid }: { espacio: string; e
   });
   const caja = useRef<HTMLDivElement>(null);
 
+  // «Volver a este punto» del menú de un mensaje de Claude abre este (el del mensaje tuyo siguiente).
+  useEffect(() => {
+    const abrir = (ev: Event) => {
+      const d = (ev as CustomEvent<{ cid: string; entrada: number }>).detail;
+      if (d.cid !== espacio || d.entrada !== entrada) return;
+      caja.current?.scrollIntoView({ block: "center" });
+      setAbierto(true);
+    };
+    window.addEventListener("kyu-volver", abrir);
+    return () => window.removeEventListener("kyu-volver", abrir);
+  }, [espacio, entrada]);
+
   useEffect(() => {
     if (!abierto) return;
     let vivo = true;

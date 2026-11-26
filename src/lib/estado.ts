@@ -8,7 +8,7 @@ import { create } from "zustand";
 import { aplanar, heredar } from "./tamanos";
 
 export type Item =
-  | { id: string; tipo: "terminal"; perfil: string; titulo: string; carpeta: string | null; deClaude?: boolean }
+  | { id: string; tipo: "terminal"; perfil: string; titulo: string; carpeta: string | null; deClaude?: boolean; /** Nombre puesto a mano (Renombrar): manda sobre el título. */ nombre?: string }
   | {
       id: string;
       tipo: "archivo";
@@ -70,7 +70,11 @@ interface Estado {
   nuevoEspacio: (perfil: string, carpeta?: string | null, fija?: boolean) => void;
   cambiarEspacio: (id: string) => void;
   renombrarEspacio: (id: string, nombre: string | null) => void;
-  nuevaPestana: (perfil: string, panel?: string) => void;
+  nuevaPestana: (perfil: string, panel?: string, carpeta?: string | null) => void;
+  /** Pone (o quita, con null) el nombre a mano de una terminal. */
+  renombrarItem: (item: string, nombre: string | null) => void;
+  /** Cambia una pestaña por otra en el mismo sitio (Reiniciar la terminal). */
+  reemplazarItem: (viejo: string, nuevo: Item) => void;
   dividir: (dir: Direccion, perfil: string, panel?: string) => void;
   /** Abre un terminal en un panel nuevo a la derecha de `espacio` sin quitar el foco; devuelve su id. */
   /** Terminal nueva a la derecha del foco. `deClaude`: es la de MCP, donde ejecuta Claude (lleva su icono). */
@@ -210,10 +214,10 @@ export const useKyu = create<Estado>((set, get) => {
     renombrarEspacio: (id, nombre) =>
       set((s) => ({ espacios: s.espacios.map((e) => (e.id === id ? { ...e, nombre } : e)) })),
 
-    nuevaPestana: (perfil, panel) => {
+    nuevaPestana: (perfil, panel, enCarpeta) => {
       const e = espacioActivo();
       const destino = panel ?? e.foco;
-      const carpeta = carpetaDelFoco();
+      const carpeta = enCarpeta ?? carpetaDelFoco();
       const t = terminal(perfil, carpeta);
       set((s) => ({ items: { ...s.items, [t.id]: t } }));
       conEspacio((esp) => ({
@@ -456,6 +460,27 @@ export const useKyu = create<Estado>((set, get) => {
         const it = s.items[item];
         if (!it || it.tipo !== "terminal") return s;
         return { items: { ...s.items, [item]: { ...it, titulo, carpeta: carpeta ?? it.carpeta } } };
+      }),
+
+    renombrarItem: (item, nombre) =>
+      set((s) => {
+        const it = s.items[item];
+        if (!it || it.tipo !== "terminal") return s;
+        const { nombre: _, ...resto } = it;
+        const limpio = nombre?.trim();
+        return { items: { ...s.items, [item]: limpio ? { ...resto, nombre: limpio } : resto } };
+      }),
+
+    reemplazarItem: (viejo, nuevo) =>
+      set((s) => {
+        const { [viejo]: _, ...items } = s.items;
+        const poner = (n: Nodo): Nodo =>
+          n.tipo === "panel"
+            ? n.items.includes(viejo)
+              ? { ...n, items: n.items.map((i) => (i === viejo ? nuevo.id : i)), activo: n.activo === viejo ? nuevo.id : n.activo }
+              : n
+            : { ...n, hijos: n.hijos.map(poner) };
+        return { items: { ...items, [nuevo.id]: nuevo }, espacios: s.espacios.map((e) => ({ ...e, raiz: poner(e.raiz) })) };
       }),
 
     marcarSucio: (item, sucio) =>

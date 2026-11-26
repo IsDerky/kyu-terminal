@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { abrirMenuMensaje } from "../lib/menus";
 import { ArrowUp, AtSign, Check, Clock, FolderOpen, History, ImageIcon, Info, ListPlus, Loader2, Pencil, Square, SquarePen, SquareTerminal, TextQuote, X } from "lucide-react";
 import {
   añadirImagenes,
@@ -412,7 +413,13 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
       return <ResumenCambios espacio={espacio} archivos={e.archivos} carpeta={carpeta} />;
     case "claude":
       return (
-        <div className={e.enCurso ? "cursor-claude" : undefined}>
+        <div
+          className={e.enCurso ? "cursor-claude" : undefined}
+          onContextMenu={(ev) => {
+            ev.preventDefault();
+            abrirMenuMensaje(espacio, e.id, ev.target as HTMLElement, ev.currentTarget, ev.clientX, ev.clientY);
+          }}
+        >
           <Markdown texto={e.texto} />
         </div>
       );

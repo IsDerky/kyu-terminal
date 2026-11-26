@@ -40,17 +40,59 @@ export function comandoDe(texto: string): { comando: string; destino: Destino } 
   // Solo comandos de una línea: con varias, Intro en mitad del pegado lanzaría cada una.
   const lineas = ultimo[2].split("\n").map((l) => l.trim()).filter(Boolean);
   if (lineas.length !== 1) return null;
-  const comando = lineas[0];
+  const destino = destinoDe(lenguaje, texto.slice(0, ultimo.index));
+  return destino ? { comando: lineas[0], destino } : null;
+}
 
-  // Lo que dice justo encima del bloque («En WSL:», «En el OptiPlex (`ssh servidor`):»…).
-  const antes = texto.slice(0, ultimo.index).trimEnd().split("\n").filter((l) => l.trim()).slice(-2).join(" ");
+/** Adónde va un bloque: lo que dice justo encima («En WSL:», «En el OptiPlex (`ssh servidor`):»…) o su lenguaje. */
+export function destinoDe(lenguaje: string, textoAntes: string): Destino | null {
+  const antes = textoAntes.trimEnd().split("\n").filter((l) => l.trim()).slice(-2).join(" ");
   const ssh = /\bssh(?:\.exe)?\s+(?:-\S+\s+)*(?:[\w.-]+@)?([\w.-]+)/i.exec(antes);
-  if (ssh) return { comando, destino: { tipo: "ssh", host: ssh[1] } };
-  if (/\bWSL\b|\bUbuntu\b/i.test(antes)) return { comando, destino: { tipo: "wsl" } };
-  if (/PowerShell|\bpwsh\b/i.test(antes)) return { comando, destino: { tipo: "powershell" } };
-  if (lenguaje === "powershell" || lenguaje === "ps1" || lenguaje === "pwsh" || lenguaje === "ps") return { comando, destino: { tipo: "powershell" } };
-  if (lenguaje === "bash" || lenguaje === "sh" || lenguaje === "zsh") return { comando, destino: { tipo: "wsl" } };
+  if (ssh) return { tipo: "ssh", host: ssh[1] };
+  if (/\bWSL\b|\bUbuntu\b/i.test(antes)) return { tipo: "wsl" };
+  if (/PowerShell|\bpwsh\b/i.test(antes)) return { tipo: "powershell" };
+  if (lenguaje === "powershell" || lenguaje === "ps1" || lenguaje === "pwsh" || lenguaje === "ps") return { tipo: "powershell" };
+  if (lenguaje === "bash" || lenguaje === "sh" || lenguaje === "zsh") return { tipo: "wsl" };
   return null;
+}
+
+/** Lenguaje de bloque que se puede mandar a una terminal. */
+export const esDeShell = (lenguaje: string) => SHELLS.has(lenguaje.toLowerCase());
+
+/**
+ * Menú de un bloque de código de Claude: «Preparar» lo deja en gris (Tab lo escribe) y
+ * «Ejecutar» lo pega y pulsa Intro. Va a la terminal que encaje; si no hay, se abre al lado
+ * y queda preparado (nunca se ejecuta solo en una terminal recién abierta).
+ */
+export async function usarCodigo(cid: string, entrada: number, codigo: string, destino: Destino, ejecutar: boolean) {
+  const comando = codigo.replace(/\n+$/, "");
+  const item = buscarTerminal(espacioDe(cid), destino);
+  const s = item ? sesion(item) : undefined;
+  if (!item || !s || s.ptyId === null) {
+    poner(cid, { comando, destino, item: null, entrada });
+    return abrirYPreparar(cid);
+  }
+  // La terminal a la vista: su espacio y su pestaña.
+  const k = useKyu.getState();
+  const esp = k.espacios.find((e) => paneles(e.raiz).some((p) => p.items.includes(item)));
+  if (esp) {
+    if (esp.id !== k.activo) k.cambiarEspacio(esp.id);
+    const panel = paneles(esp.raiz).find((p) => p.items.includes(item));
+    if (panel) useKyu.getState().activar(panel.id, item);
+  }
+  const conMarcas = destino.tipo !== "ssh" && enMarcha(s) === null;
+  // Con algo ya escrito en el prompt se mezclaría: entonces solo se prepara.
+  const libre = !conMarcas || s.bloques.entradaActual() === "";
+  if (ejecutar && libre) {
+    s.term.paste(comando);
+    await esperar(60);
+    await escribirPty(s.ptyId, "\r");
+  } else if (!comando.includes("\n")) {
+    s.auto?.proponer(comando, conMarcas);
+  } else {
+    s.term.paste(comando);
+  }
+  s.term.focus();
 }
 
 type Terminal = Extract<Item, { tipo: "terminal" }>;

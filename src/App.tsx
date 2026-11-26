@@ -29,7 +29,7 @@ import { preguntarPorSeleccion } from "./lib/seleccion";
 import { vigilarActualizaciones } from "./lib/actualizar";
 import { vigilarGit } from "./lib/git";
 import MenuContextual from "./componentes/MenuContextual";
-import { abrirMenuGeneral, abrirMenuTerminal, abrirMenuTexto } from "./lib/menus";
+import { abrirMenuGeneral, abrirMenuTexto } from "./lib/menus";
 
 /** Panel del que se vino a Claude con Ctrl+Mayús+C (para volver con la misma tecla). */
 let volverA: { espacio: string; panel: string } | null = null;
@@ -131,15 +131,11 @@ export default function App() {
     };
   }, []);
 
-  // Clic derecho: el menú de Kyu en vez del de Edge. La terminal lo pide con un evento
-  // (con selección ya ha copiado ella); en desarrollo, Ctrl+clic derecho deja el de Edge
-  // para poder inspeccionar.
+  // Clic derecho: el menú de Kyu en vez del de Edge. La terminal, las pestañas, los mensajes
+  // de Claude y el árbol lo resuelven ellos (preventDefault); en desarrollo, Ctrl+clic
+  // derecho deja el de Edge para poder inspeccionar.
   useEffect(() => {
     if (!config) return;
-    const terminal = (e: Event) => {
-      const { item, x, y } = (e as CustomEvent<{ item: string; x: number; y: number }>).detail;
-      abrirMenuTerminal(item, x, y);
-    };
     const menu = (e: MouseEvent) => {
       if (e.defaultPrevented) return;
       if (import.meta.env.DEV && e.ctrlKey) return;
@@ -150,10 +146,8 @@ export default function App() {
       const f = focoActual();
       abrirMenuGeneral(e.clientX, e.clientY, f?.item?.tipo === "terminal" ? f.item.perfil : config.perfiles[0]?.nombre ?? "");
     };
-    window.addEventListener("kyu-menu-terminal", terminal);
     window.addEventListener("contextmenu", menu);
     return () => {
-      window.removeEventListener("kyu-menu-terminal", terminal);
       window.removeEventListener("contextmenu", menu);
     };
   }, [config]);
