@@ -17,6 +17,7 @@ use crate::config::Config;
 /// Nombre de la cuenta de siempre cuando se añade la segunda.
 const PRINCIPAL: &str = "Principal";
 
+#[cfg(any(windows, test))]
 /// Dónde vive cada cosa en el Administrador de credenciales.
 #[derive(Clone, Copy)]
 pub struct Destinos {
@@ -28,6 +29,7 @@ pub struct Destinos {
     pub activa: &'static str,
 }
 
+#[cfg(any(windows, test))]
 const REALES: Destinos = Destinos {
     agy: "gemini:antigravity",
     prefijo: "kyu:antigravity:",
@@ -62,6 +64,7 @@ pub struct CuentaAntigravityVista {
     pub abierta: bool,
 }
 
+#[cfg(any(windows, test))]
 /// Almacén de credenciales: el de Windows o, en las pruebas, uno en memoria.
 pub trait Almacen {
     fn leer(&self, destino: &str) -> Option<Cred>;
@@ -69,6 +72,7 @@ pub trait Almacen {
     fn borrar(&self, destino: &str) -> Result<(), String>;
 }
 
+#[cfg(any(windows, test))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cred {
     pub usuario: String,
@@ -76,12 +80,14 @@ pub struct Cred {
     pub persist: u32,
 }
 
+#[cfg(any(windows, test))]
 /// Lógica del intercambio, separada del almacén para poder probarla.
 pub struct Intercambio<'a, A: Almacen> {
     pub almacen: &'a A,
     pub d: Destinos,
 }
 
+#[cfg(any(windows, test))]
 impl<A: Almacen> Intercambio<'_, A> {
     fn copia(&self, nombre: &str) -> String {
         format!("{}{nombre}", self.d.prefijo)
