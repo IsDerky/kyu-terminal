@@ -337,7 +337,10 @@ pub fn claude_abrir(
         cmd.env("CLAUDE_CONFIG_DIR", &cuenta.carpeta);
     }
     if config.sugerencias_claude() {
-        cmd.arg("--prompt-suggestions");
+        // Sin la variable lo decide un flag remoto de Anthropic, que puede apagarlas por cuenta
+        // (pasó en 2.1.331: el flag no llegaba aunque se pidiera --prompt-suggestions).
+        cmd.arg("--prompt-suggestions")
+            .env("CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION", "1");
     }
     if opciones.reanudar.is_some()
         && let Some(en) = opciones.reanudar_en.as_deref().filter(|v| !v.is_empty())
