@@ -374,6 +374,10 @@ export const arbolListar = (carpeta: string) => invoke<NodoArbol[]>("arbol_lista
 export const gitEstado = (carpeta: string) => invoke<Record<string, string>>("git_estado", { carpeta });
 
 export const borrarArchivo = (ruta: string) => invoke("archivo_borrar", { ruta });
+/** Crea un archivo vacío en `carpeta`; devuelve su ruta. */
+export const crearArchivo = (carpeta: string, nombre: string) => invoke<string>("archivo_crear", { carpeta, nombre });
+/** Renombra en su misma carpeta; devuelve la ruta nueva. */
+export const renombrarArchivo = (ruta: string, nombre: string) => invoke<string>("archivo_renombrar", { ruta, nombre });
 
 export const cerrarClaude = (id: number) => invoke("claude_cerrar", { id });
 

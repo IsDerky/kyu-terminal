@@ -77,6 +77,58 @@ pub fn archivo_borrar(ruta: String) -> Result<(), String> {
     std::fs::remove_file(p).map_err(|e| e.to_string())
 }
 
+/// Un nombre de archivo o carpeta válido (sin rutas ni «..»), para crear y renombrar desde el árbol.
+fn nombre_valido(nombre: &str) -> Result<&str, String> {
+    let n = nombre.trim();
+    if n.is_empty() {
+        return Err("ponle un nombre".into());
+    }
+    if n == "." || n == ".." || n.contains(['/', '\\']) {
+        return Err("el nombre no puede llevar «/» ni «\\»".into());
+    }
+    if n.chars().any(|c| "<>:\"|?*".contains(c) || c.is_control()) {
+        return Err("el nombre no puede llevar < > : \" | ? *".into());
+    }
+    Ok(n)
+}
+
+/// Crea un archivo vacío `nombre` dentro de `carpeta` y devuelve su ruta. No pisa nada.
+#[tauri::command]
+pub fn archivo_crear(carpeta: String, nombre: String) -> Result<String, String> {
+    let dir = Path::new(&carpeta);
+    if !dir.is_dir() {
+        return Err("esa carpeta ya no existe".into());
+    }
+    let ruta = dir.join(nombre_valido(&nombre)?);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&ruta)
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => "ya hay algo con ese nombre".to_string(),
+            _ => e.to_string(),
+        })?;
+    Ok(ruta.display().to_string())
+}
+
+/// Renombra un archivo o carpeta en su misma carpeta y devuelve la ruta nueva. No pisa nada
+/// (salvo cambiar solo mayúsculas, que en Windows es el mismo archivo).
+#[tauri::command]
+pub fn archivo_renombrar(ruta: String, nombre: String) -> Result<String, String> {
+    let viejo = Path::new(&ruta);
+    if !viejo.exists() {
+        return Err("ya no existe".into());
+    }
+    let padre = viejo.parent().ok_or("no se puede renombrar la raíz")?;
+    let nuevo = padre.join(nombre_valido(&nombre)?);
+    let mismo = nuevo.to_string_lossy().to_lowercase() == viejo.to_string_lossy().to_lowercase();
+    if nuevo.exists() && !mismo {
+        return Err("ya hay algo con ese nombre".into());
+    }
+    std::fs::rename(viejo, &nuevo).map_err(|e| e.to_string())?;
+    Ok(nuevo.display().to_string())
+}
+
 fn expandir_casa(ruta: &str) -> PathBuf {
     if let Some(resto) = ruta.strip_prefix("~/").or_else(|| ruta.strip_prefix("~\\"))
         && let Some(casa) = dirs::home_dir()
@@ -99,4 +151,26 @@ fn limpiar(ruta: &Path) -> PathBuf {
         }
     }
     fuera
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn crear_y_renombrar_desde_el_arbol() {
+        let dir = std::env::temp_dir().join(format!("kyu-prueba-arbol-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let carpeta = dir.display().to_string();
+        assert!(archivo_crear(carpeta.clone(), "../fuera.txt".into()).is_err());
+        assert!(archivo_crear(carpeta.clone(), "a:b".into()).is_err());
+        let a = archivo_crear(carpeta.clone(), " nuevo.ts ".into()).unwrap();
+        assert!(a.ends_with("nuevo.ts"));
+        assert!(archivo_crear(carpeta.clone(), "nuevo.ts".into()).is_err());
+        archivo_crear(carpeta.clone(), "otro.ts".into()).unwrap();
+        assert!(archivo_renombrar(a.clone(), "otro.ts".into()).is_err());
+        let b = archivo_renombrar(a, "Nuevo.ts".into()).unwrap();
+        assert!(b.ends_with("Nuevo.ts"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

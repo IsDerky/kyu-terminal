@@ -8,7 +8,7 @@ import { create } from "zustand";
 import { aplanar, heredar } from "./tamanos";
 
 export type Item =
-  | { id: string; tipo: "terminal"; perfil: string; titulo: string; carpeta: string | null; deClaude?: boolean; /** Nombre puesto a mano (Renombrar): manda sobre el título. */ nombre?: string }
+  | { id: string; tipo: "terminal"; perfil: string; titulo: string; carpeta: string | null; deClaude?: boolean; /** Nombre puesto a mano (Renombrar): manda sobre el título. */ nombre?: string; /** Color e icono puestos a mano (ids de estiloPestana.ts). */ color?: string; icono?: string }
   | {
       id: string;
       tipo: "archivo";
@@ -73,6 +73,8 @@ interface Estado {
   nuevaPestana: (perfil: string, panel?: string, carpeta?: string | null) => void;
   /** Pone (o quita, con null) el nombre a mano de una terminal. */
   renombrarItem: (item: string, nombre: string | null) => void;
+  /** Color o icono de una pestaña de terminal (null = quitarlo). */
+  pintarItem: (item: string, cambio: { color?: string | null; icono?: string | null }) => void;
   /** Cambia una pestaña por otra en el mismo sitio (Reiniciar la terminal). */
   reemplazarItem: (viejo: string, nuevo: Item) => void;
   dividir: (dir: Direccion, perfil: string, panel?: string) => void;
@@ -469,6 +471,19 @@ export const useKyu = create<Estado>((set, get) => {
         const { nombre: _, ...resto } = it;
         const limpio = nombre?.trim();
         return { items: { ...s.items, [item]: limpio ? { ...resto, nombre: limpio } : resto } };
+      }),
+
+    pintarItem: (item, cambio) =>
+      set((s) => {
+        const it = s.items[item];
+        if (!it || it.tipo !== "terminal") return s;
+        const nuevo = { ...it };
+        for (const k of ["color", "icono"] as const) {
+          if (cambio[k] === undefined) continue;
+          if (cambio[k]) nuevo[k] = cambio[k]!;
+          else delete nuevo[k];
+        }
+        return { items: { ...s.items, [item]: nuevo } };
       }),
 
     reemplazarItem: (viejo, nuevo) =>

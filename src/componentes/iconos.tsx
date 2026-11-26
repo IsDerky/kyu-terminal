@@ -10,9 +10,9 @@ const ICONOS: Record<string, LucideIcon> = {
   terminal: Terminal,
 };
 
-export function IconoPerfil({ perfil, size = 13 }: { perfil?: Perfil; size?: number }) {
+export function IconoPerfil({ perfil, size = 13, color }: { perfil?: Perfil; size?: number; color?: string }) {
   const Icono = ICONOS[perfil?.icono ?? "terminal"] ?? Terminal;
-  return <Icono size={size} strokeWidth={1.8} style={{ color: perfil?.color }} className="flex-none" />;
+  return <Icono size={size} strokeWidth={1.8} style={{ color: color ?? perfil?.color }} className="flex-none" />;
 }
 
 export function IconoArchivo({ size = 13 }: { size?: number }) {

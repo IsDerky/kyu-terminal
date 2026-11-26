@@ -7,10 +7,17 @@ import { leerArchivo } from "./nucleo";
 import { tamanos } from "./tamanos";
 
 const CLAVE = "kyu:sesion";
+
+/** Lo puesto a mano en una pestaña de terminal (nombre, color, icono), sin claves vacías. */
+const marcasDe = (t: { nombre?: string; color?: string; icono?: string }) => ({
+  ...(t.nombre ? { nombre: t.nombre } : {}),
+  ...(t.color ? { color: t.color } : {}),
+  ...(t.icono ? { icono: t.icono } : {}),
+});
 const ESPERA = 800;
 
 type ItemGuardado =
-  | { tipo: "terminal"; perfil: string; carpeta: string | null; titulo: string; nombre?: string }
+  | { tipo: "terminal"; perfil: string; carpeta: string | null; titulo: string; nombre?: string; color?: string; icono?: string }
   | { tipo: "archivo"; ruta: string; linea: number; columna: number }
   | { tipo: "arbol" }
   /** Conversación en una pestaña de panel (sin `conv`: estaba vacía, vuelve vacía). */
@@ -79,7 +86,7 @@ function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGu
       if (it.tipo === "arbol") return { tipo: "arbol" };
       if (it.tipo === "claude") return { tipo: "claude", conv: guardarConversacion(it.cid) ?? undefined };
       if (it.tipo === "cambios") return { tipo: "cambios", raiz: it.raiz };
-      if (it.tipo === "terminal") return { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo, ...(it.nombre ? { nombre: it.nombre } : {}) };
+      if (it.tipo === "terminal") return { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo, ...marcasDe(it) };
       if (it.tipo === "archivo") return { tipo: "archivo", ruta: it.ruta, linea: it.linea, columna: it.columna };
       return { tipo: "arbol" }; // no llega: «problemas» se filtra arriba
     });
@@ -219,7 +226,7 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
           it = { id: nuevoId("c"), tipo: "claude", cid };
         } else if (i.tipo === "terminal") {
           const perfil = perfiles.includes(i.perfil) ? i.perfil : porDefecto;
-          it = { id: nuevoId("t"), tipo: "terminal", perfil, titulo: i.titulo || perfil, carpeta: i.carpeta, ...(i.nombre ? { nombre: i.nombre } : {}) };
+          it = { id: nuevoId("t"), tipo: "terminal", perfil, titulo: i.titulo || perfil, carpeta: i.carpeta, ...marcasDe(i) };
         } else {
           if (perdidos.has(i.ruta)) return;
           it = { id: nuevoId("a"), tipo: "archivo", ruta: i.ruta, sucio: false, linea: i.linea || 1, columna: i.columna || 1, salto: 1 };

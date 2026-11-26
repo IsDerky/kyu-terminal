@@ -12,8 +12,10 @@ import {
   Copy,
   CopyPlus,
   Diff,
+  FilePlus,
   FileText,
   FolderOpen,
+  Palette,
   Pencil,
   Play,
   Plus,
@@ -29,8 +31,9 @@ import {
   X,
 } from "lucide-react";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { useSelectorEstilo } from "./estiloPestana";
 import { cabecera, limpiarSeparadores, opcion, separador, useMenu, type Elemento } from "./menu";
 import { insertarEnCaja, irAClaude, mencionDe, nuevaConversacion, useClaude, verCambios } from "./claude";
 import { destinoDe, esDeShell, nombreDestino, usarCodigo } from "./comandoClaude";
@@ -70,9 +73,10 @@ export function abrirMenuPestana(item: string, panel: string, x: number, y: numb
     const carpeta = carpetaDeTerminal(item);
     elementos.push(
       opcion(Pencil, "Renombrar", () => window.dispatchEvent(new CustomEvent("kyu-renombrar", { detail: item }))),
+      opcion(Palette, "Color e icono…", () => useSelectorEstilo.getState().abrir(item, x, y)),
       opcion(CopyPlus, "Duplicar", () => k.nuevaPestana(it.perfil, panel, carpeta)),
       opcion(RotateCcw, "Reiniciar la terminal", () => {
-        const nueva: Item = { id: nuevoId("t"), tipo: "terminal", perfil: it.perfil, titulo: it.perfil, carpeta, ...(it.nombre ? { nombre: it.nombre } : {}) };
+        const nueva: Item = { id: nuevoId("t"), tipo: "terminal", perfil: it.perfil, titulo: it.perfil, carpeta, ...(it.nombre ? { nombre: it.nombre } : {}), ...(it.color ? { color: it.color } : {}), ...(it.icono ? { icono: it.icono } : {}) };
         destruir(item);
         useKyu.getState().reemplazarItem(item, nueva);
       }),
@@ -82,12 +86,14 @@ export function abrirMenuPestana(item: string, panel: string, x: number, y: numb
         separador,
         opcion(Copy, "Copiar la carpeta", () => void writeText(carpeta)),
         opcion(FolderOpen, "Mostrar la carpeta en el Explorador", () => void revealItemInDir(carpeta)),
+        opcion(Code, "Abrir la carpeta en VS Code", () => abrirEnVSCode(carpeta)),
       );
     }
   } else if (it.tipo === "archivo") {
     elementos.push(
       opcion(Copy, "Copiar la ruta", () => void writeText(it.ruta)),
       opcion(FolderOpen, "Mostrar en el Explorador", () => void revealItemInDir(it.ruta)),
+      opcion(Code, "Abrir en VS Code", () => abrirEnVSCode(it.ruta)),
       opcion(AtSign, "Mencionar a Claude", () => mencionar(it.ruta), { estilo: "claude" }),
     );
   }
@@ -172,7 +178,15 @@ export function abrirMenuMensaje(cid: string, entrada: number, objetivo: HTMLEle
 }
 
 /** Fila del árbol de archivos. `deClaude`: lo ha cambiado Claude en esta conversación. */
-export function abrirMenuArbol(ruta: string, carpeta: boolean, raiz: string, deClaude: boolean, x: number, y: number) {
+export function abrirMenuArbol(
+  ruta: string,
+  carpeta: boolean,
+  raiz: string,
+  deClaude: boolean,
+  x: number,
+  y: number,
+  editar: (e: EditarArbol) => void,
+) {
   const k = useKyu.getState();
   const cid = useClaude.getState().ultimas[k.activo] ?? null;
   const dirDe = carpeta ? ruta.replace(/[\\/]+$/, "") : ruta.replace(/[\\/][^\\/]*$/, "");
@@ -184,7 +198,10 @@ export function abrirMenuArbol(ruta: string, carpeta: boolean, raiz: string, deC
   })();
   const elementos: Elemento[] = [];
   if (!carpeta) elementos.push(opcion(FileText, "Abrir", () => k.abrirArchivo(ruta, 1, 1)));
-  elementos.push(opcion(FolderOpen, "Mostrar en el Explorador", () => void revealItemInDir(ruta)));
+  elementos.push(
+    opcion(Code, "Abrir en VS Code", () => abrirEnVSCode(ruta)),
+    opcion(FolderOpen, "Mostrar en el Explorador", () => void revealItemInDir(ruta)),
+  );
   if (!carpeta && deClaude && cid) {
     elementos.push(opcion(Diff, "Ver lo que cambió Claude", () => void verCambios(cid, ruta)));
   }
@@ -195,16 +212,25 @@ export function abrirMenuArbol(ruta: string, carpeta: boolean, raiz: string, deC
     opcion(Copy, "Copiar la ruta relativa", () => void writeText(relativaA(ruta, raiz).replace(/\\/g, "/"))),
     opcion(SquareTerminal, "Abrir una terminal aquí", () => k.nuevaPestana(perfil, undefined, dirDe)),
   );
-  if (!carpeta) {
-    elementos.push(
-      separador,
-      opcion(Trash2, "Borrar", () => void borrar(ruta), { estilo: "peligro" }),
-    );
-  }
+  elementos.push(
+    separador,
+    opcion(FilePlus, carpeta ? "Nuevo archivo aquí" : "Nuevo archivo", () => editar({ tipo: "nuevo", ruta: dirDe })),
+    opcion(Pencil, "Renombrar", () => editar({ tipo: "renombrar", ruta }), { atajo: "F2" }),
+  );
+  if (!carpeta) elementos.push(opcion(Trash2, "Borrar", () => void borrarDelArbol(ruta), { estilo: "peligro", atajo: "Supr" }));
   useMenu.getState().abrir({ x, y, elementos: limpiarSeparadores(elementos) });
 }
 
-async function borrar(ruta: string) {
+/** Lo que pide el menú al árbol: una caja para el nombre (archivo nuevo en `ruta`, o renombrar `ruta`). */
+export interface EditarArbol {
+  tipo: "nuevo" | "renombrar";
+  ruta: string;
+}
+
+/** En VS Code (por su enlace `vscode://file/…`, el mismo que usa el editor). */
+export const abrirEnVSCode = (ruta: string) => void openUrl(`vscode://file/${ruta.replace(/\\/g, "/")}`);
+
+export async function borrarDelArbol(ruta: string) {
   const nombre = ruta.split(/[\\/]/).pop();
   const seguro = await ask(`¿Borrar ${nombre}? No va a la papelera.`, {
     title: "Kyu",

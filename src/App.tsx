@@ -29,6 +29,7 @@ import { preguntarPorSeleccion } from "./lib/seleccion";
 import { vigilarActualizaciones } from "./lib/actualizar";
 import { vigilarGit } from "./lib/git";
 import MenuContextual from "./componentes/MenuContextual";
+import SelectorEstilo from "./componentes/SelectorEstilo";
 import { abrirMenuGeneral, abrirMenuTexto } from "./lib/menus";
 
 /** Panel del que se vino a Claude con Ctrl+Mayús+C (para volver con la misma tecla). */
@@ -272,6 +273,7 @@ export default function App() {
       )}
       {paleta && <Paleta config={config} />}
       <MenuContextual />
+      <SelectorEstilo />
     </div>
   );
 }

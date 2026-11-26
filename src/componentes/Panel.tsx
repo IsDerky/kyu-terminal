@@ -16,6 +16,17 @@ import { IconoAgente, IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
 import { ARRASTRE_RUTA, espacioDe, nombreAgente, useClaude } from "../lib/claude";
 import { useActividad } from "../lib/actividad";
+import { colorDe, iconoDe } from "../lib/estiloPestana";
+import type { Item } from "../lib/estado";
+import type { Perfil } from "../lib/nucleo";
+
+/** Icono de una pestaña de terminal: el puesto a mano (con su color) o el del perfil. */
+function IconoPestana({ it, perfil }: { it: Extract<Item, { tipo: "terminal" }>; perfil: Perfil | undefined }) {
+  const Icono = iconoDe(it.icono);
+  const color = colorDe(it.color);
+  if (!Icono) return <IconoPerfil perfil={perfil} size={12} color={color} />;
+  return <Icono size={12} strokeWidth={1.8} className="flex-none" style={color ? { color } : undefined} />;
+}
 
 /** Punto en la pestaña: ámbar que late mientras corre algo; verde o rojo si acabó sin
  *  estar a la vista, hasta que se abre la pestaña. */
@@ -152,6 +163,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                             ? "Errores y avisos del último build o lint"
                             : it.carpeta ?? it.perfil
                 }
+                style={it.tipo === "terminal" && it.color ? { boxShadow: `inset 0 -2px 0 ${colorDe(it.color)}` } : undefined}
                 className={`group flex h-[22px] min-w-0 max-w-48 cursor-default items-center gap-1.5 rounded-[5px] pl-2 pr-1 text-[12px] ${
                   esActivo ? "bg-hover text-texto" : "text-tenue hover:text-texto"
                 }`}
@@ -162,7 +174,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                       <Mascota alto={9} />
                     </span>
                   ) : (
-                    <IconoPerfil perfil={perfilDe(it.perfil)} size={12} />
+                    <IconoPestana it={it} perfil={perfilDe(it.perfil)} />
                   )
                 ) : it.tipo === "arbol" ? (
                   <FolderTree size={12} strokeWidth={1.8} className="flex-none" />

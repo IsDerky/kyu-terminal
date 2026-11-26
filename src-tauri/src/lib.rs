@@ -76,6 +76,8 @@ pub fn run() {
             archivos::archivo_leer,
             archivos::archivo_guardar,
             archivos::archivo_borrar,
+            archivos::archivo_crear,
+            archivos::archivo_renombrar,
             entorno::entorno_leer,
             puertos::puerto_quien,
             puertos::proceso_matar,
