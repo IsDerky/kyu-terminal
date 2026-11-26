@@ -100,6 +100,7 @@ pub fn run() {
             sesiones::archivos_buscar,
             claude::claude_responder,
             claude::claude_parar,
+            claude::claude_opcion,
             claude::claude_cerrar,
             claude::claude_cerrar_todas,
             cuentas::claude_cuentas,

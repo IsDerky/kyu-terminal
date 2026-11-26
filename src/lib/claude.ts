@@ -10,9 +10,12 @@ import {
   enviarClaude,
   historialClaude,
   pararClaude,
+  opcionAgente,
   responderClaude,
   type EventoClaude,
+  type OpcionAgente,
 } from "./nucleo";
+import { ajustesGuardados, catalogoAgente, guardarAjustes, guardarCatalogoAgente, opcionesVistas, opcionPor } from "./agentes";
 import { paneles, useKyu } from "./estado";
 import { leerArchivo } from "./nucleo";
 import { contar, diffLineas } from "./diff";
@@ -30,6 +33,7 @@ import {
   modosDisponibles,
   prefsGuardadas,
   type Catalogo,
+  type Comando,
   type Preferencias,
   type UsoContexto,
 } from "./claudeOpciones";
@@ -117,6 +121,16 @@ export type EstadoConv = "parado" | "arrancando" | "pensando" | "listo" | "cerra
 export interface Conversacion {
   /** Otro agente por ACP en vez de Claude («antigravity», «gemini»); null = Claude. */
   agente: string | null;
+  /** Agente ACP: sus opciones tal como las tiene ahora (null = aún no ha arrancado). */
+  opcionesAgente: OpcionAgente[] | null;
+  /** Agente ACP: lo elegido en los menús (id de la opción → valor); se pone al arrancar. */
+  ajustesAgente: Record<string, string>;
+  /** Agente ACP: sus comandos con barra (null = los guardados de la última vez). */
+  comandosAgente: Comando[] | null;
+  /** Tamaño de la ventana de contexto si lo dice el agente (ACP). */
+  ventana: number | null;
+  /** Reanudando una conversación de ACP: el agente la está repitiendo. */
+  cargando: boolean;
   claudeId: number | null;
   /** Cambia con cada proceso: los eventos de uno ya cerrado se ignoran. */
   generacion: number;
@@ -216,6 +230,11 @@ export const nombreAgente = (c: Pick<Conversacion, "agente"> | undefined) =>
 
 export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Conversacion => ({
   agente: null,
+  opcionesAgente: null,
+  ajustesAgente: {},
+  comandosAgente: null,
+  ventana: null,
+  cargando: false,
   claudeId: null,
   generacion: 0,
   carpeta: null,
@@ -408,7 +427,39 @@ export function nuevaConversacion(espacio: string, agente: string | null = null)
 export function ponerAgente(cid: string, agente: string | null) {
   const c = useClaude.getState().conversaciones[cid];
   if (!c || c.claudeId !== null || c.entradas.length) return;
-  cambiar(cid, () => ({ agente }));
+  cambiar(cid, () => ({ agente, ajustesAgente: agente ? ajustesGuardados(agente) : {}, opcionesAgente: null, comandosAgente: null }));
+}
+
+/** Opciones de un agente para los menús: las suyas si está en marcha, si no las guardadas con lo elegido encima. */
+export function opcionesDe(c: Conversacion): OpcionAgente[] {
+  if (!c.agente) return [];
+  return opcionesVistas(c.opcionesAgente ?? catalogoAgente(c.agente).opciones, c.ajustesAgente);
+}
+
+/** Comandos con barra de la conversación: los del agente o los de Claude. */
+export function comandosDe(c: Conversacion, deClaude: Comando[]): Comando[] {
+  if (!c.agente) return deClaude;
+  return c.comandosAgente ?? catalogoAgente(c.agente).comandos;
+}
+
+/** Cambia una opción del agente (modelo, razonamiento, modo): en vivo si está en marcha, si no al arrancar. */
+export async function cambiarOpcionAgente(cid: string, clave: string, valor: string) {
+  const c = conversacion(cid);
+  if (!c.agente) return;
+  const ajustesAgente = { ...c.ajustesAgente, [clave]: valor };
+  guardarAjustes(c.agente, ajustesAgente);
+  cambiar(cid, (x) => ({
+    ajustesAgente,
+    opcionesAgente: x.opcionesAgente?.map((o) => (o.id === clave ? { ...o, actual: valor } : o)) ?? null,
+  }));
+  if (c.claudeId === null) return;
+  try {
+    // La respuesta llega como opcionesAgente (con lo que de verdad ha quedado).
+    await opcionAgente(c.claudeId, clave, valor);
+  } catch (e) {
+    cambiar(cid, () => ({ opcionesAgente: c.opcionesAgente }));
+    añadir(cid, { tipo: "error", texto: `No se pudo cambiar: ${e}` });
+  }
 }
 
 function nuevaConversacionClaude(espacio: string): string {
@@ -492,14 +543,44 @@ export function carpetaDelEspacio(espacio: string): string | null {
 
 /** Tamaño de la ventana de contexto: el que dijo Claude o, si aún no, según el modelo. */
 export const limiteContexto = (c: Conversacion) =>
-  c.contexto?.maxTokens || (/\[1m\]/i.test(c.modelo + (c.eleccionModelo ?? "")) ? 1_000_000 : 200_000);
+  c.ventana || c.contexto?.maxTokens || (/\[1m\]/i.test(c.modelo + (c.eleccionModelo ?? "")) ? 1_000_000 : 200_000);
 
 function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
   if (useClaude.getState().conversaciones[espacio]?.generacion !== generacion) return;
   switch (ev.tipo) {
     case "iniciado":
-      cambiar(espacio, (c) => ({ modelo: ev.modelo, modo: ev.modo || c.modo, sesion: ev.sesion || c.sesion }));
+      // El modo de un agente vive en sus opciones; c.modo es el de Claude.
+      cambiar(espacio, (c) => ({ modelo: ev.modelo, modo: c.agente ? c.modo : ev.modo || c.modo, sesion: ev.sesion || c.sesion }));
       return;
+    case "opcionesAgente": {
+      const agente = conversacion(espacio).agente;
+      if (agente) guardarCatalogoAgente(agente, { opciones: ev.opciones });
+      cambiar(espacio, () => ({ opcionesAgente: ev.opciones }));
+      return;
+    }
+    case "comandos": {
+      const agente = conversacion(espacio).agente;
+      if (agente) guardarCatalogoAgente(agente, { comandos: ev.comandos });
+      cambiar(espacio, () => ({ comandosAgente: ev.comandos }));
+      return;
+    }
+    case "mensajeTuyo":
+      añadir(espacio, { tipo: "tu", texto: ev.texto });
+      return;
+    case "cargada": {
+      const c = conversacion(espacio);
+      if (!c.cargando) return;
+      cambiar(espacio, (x) => ({
+        cargando: false,
+        estado: "listo",
+        entradas: [
+          ...cerrarRazonamiento(x.entradas).map((e) => (e.tipo === "claude" && e.enCurso ? { ...e, enCurso: false } : e)),
+          { id: ++contador, tipo: "aviso", texto: "Reanudada: sigue donde lo dejaste" },
+        ],
+      }));
+      alAcabarTurno(espacio);
+      return;
+    }
     case "estado":
       cambiar(espacio, () => ({ compactando: ev.estado === "compacting" }));
       return;
@@ -596,7 +677,7 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       });
       return;
     case "contexto":
-      cambiar(espacio, () => ({ tokens: ev.tokens }));
+      cambiar(espacio, (c) => ({ tokens: ev.tokens, ventana: ev.limite ?? c.ventana }));
       return;
     case "limite": {
       const s = useClaude.getState();
@@ -644,8 +725,8 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       return;
     case "cerrado":
       // Al volver a escribir se sigue la misma conversación (--resume), en la misma carpeta.
-      // Un agente ACP no se puede reanudar (aún): al volver a escribir empieza otra sesión.
-      cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, reanudar: c.agente ? null : c.sesion }));
+      // Con un agente ACP igual (session/load), sin que repita lo que ya se ve.
+      cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, cargando: false, reanudar: c.sesion }));
       // Cerrado a media respuesta: lo que esperaba en cola vuelve a la caja.
       parados.delete(espacio);
       devolverCola(espacio);
@@ -818,6 +899,13 @@ export async function cambiarModo(espacio: string, modo: string) {
 /** Mayús+Tab: el siguiente modo. */
 export function siguienteModo(espacio: string) {
   const c = conversacion(espacio);
+  if (c.agente) {
+    const o = opcionPor(opcionesDe(c), "mode");
+    if (!o?.valores.length) return;
+    const i = o.valores.findIndex((v) => v.valor === o.actual);
+    void cambiarOpcionAgente(espacio, o.id, o.valores[(i + 1) % o.valores.length].valor);
+    return;
+  }
   const lista = modosDisponibles(modeloDe(useClaude.getState().catalogo, c.eleccionModelo));
   const i = lista.findIndex((m) => m.id === c.modo);
   void cambiarModo(espacio, lista[(i + 1) % lista.length].id);
@@ -919,6 +1007,43 @@ export async function reanudar(espacio: string, carpeta: string, id: string, tit
 }
 
 /**
+ * Vuelve a abrir una conversación con un agente ACP (al restaurar la sesión): el agente la
+ * carga (`session/load`) y la repite, así sale en el panel tal como la tiene él.
+ */
+export async function reanudarAgente(cid: string, agente: string, carpeta: string, sesion: string) {
+  const antes = conversacion(cid);
+  if (antes.claudeId !== null) void cerrarClaude(antes.claudeId);
+  const generacion = ++contador;
+  useClaude.setState((s) => ({
+    conversaciones: {
+      ...s.conversaciones,
+      [cid]: {
+        ...vacia(),
+        agente,
+        ajustesAgente: ajustesGuardados(agente),
+        carpeta,
+        sesion,
+        reanudar: sesion,
+        cargando: true,
+        estado: "arrancando",
+        desde: Date.now(),
+        generacion,
+      },
+    },
+  }));
+  try {
+    const id = await abrirClaude(carpeta, { agente, reanudar: sesion, ajustes: ajustesGuardados(agente) }, (ev) =>
+      alEvento(cid, generacion, ev),
+    );
+    if (conversacion(cid).generacion !== generacion) return void cerrarClaude(id);
+    cambiar(cid, () => ({ claudeId: id }));
+  } catch (e) {
+    cambiar(cid, () => ({ cargando: false, estado: "cerrado" }));
+    añadir(cid, { tipo: "error", texto: String(e) });
+  }
+}
+
+/**
  * Manda un mensaje con lo adjunto en ese momento (o, con `deCola`, lo que llevaba al ponerlo
  * en cola). Si Claude está trabajando, se queda en cola y sale al acabar el turno.
  */
@@ -929,7 +1054,7 @@ export async function enviar(espacio: string, texto: string, deCola?: EnCola) {
   // Comandos que resuelve Kyu sin Claude.
   const orden = texto.trim().toLowerCase();
   if (orden === "/clear" || orden === "/new") return nueva(espacio);
-  if (orden === "/context" && c.claudeId !== null) {
+  if (orden === "/context" && c.claudeId !== null && !c.agente) {
     useClaude.setState({ verContexto: espacio });
     return void refrescarContexto(espacio);
   }
@@ -973,6 +1098,9 @@ export async function enviar(espacio: string, texto: string, deCola?: EnCola) {
           reanudarEn: c.reanudarEn,
           cuenta: c.cuenta,
           agente: c.agente,
+          ajustes: c.agente ? c.ajustesAgente : undefined,
+          // La conversación ya está en el panel: que el agente no la repita.
+          callado: !!(c.agente && c.reanudar),
         },
         (ev) => alEvento(espacio, generacion, ev),
       );
@@ -1108,7 +1236,8 @@ function alAcabarTurno(espacio: string) {
   ponerCola(espacio, resto);
   // Un comando que resuelve Kyu (/clear, /context) no abre turno: se sigue con la cola.
   const orden = primero.texto.trim().toLowerCase();
-  const local = orden === "/clear" || orden === "/new" || (orden === "/context" && conversacion(espacio).claudeId !== null);
+  const cv = conversacion(espacio);
+  const local = orden === "/clear" || orden === "/new" || (orden === "/context" && cv.claudeId !== null && !cv.agente);
   void enviar(espacio, primero.texto, primero);
   if (local) alAcabarTurno(espacio);
 }
@@ -1143,7 +1272,15 @@ export function nueva(espacio: string) {
     verContexto: s.verContexto === espacio ? null : s.verContexto,
     conversaciones: {
       ...s.conversaciones,
-      [espacio]: { ...vacia(), agente: c.agente, eleccionModelo: c.eleccionModelo, modo: c.modo, esfuerzo: c.esfuerzo, cuenta: c.cuenta },
+      [espacio]: {
+        ...vacia(),
+        agente: c.agente,
+        ajustesAgente: c.ajustesAgente,
+        eleccionModelo: c.eleccionModelo,
+        modo: c.modo,
+        esfuerzo: c.esfuerzo,
+        cuenta: c.cuenta,
+      },
     },
   }));
 }

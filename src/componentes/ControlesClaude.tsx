@@ -10,7 +10,9 @@ import {
   cambiarEsfuerzo,
   cambiarModelo,
   cambiarModo,
+  cambiarOpcionAgente,
   enviar,
+  opcionesDe,
   esfuerzoEnCaliente,
   limiteContexto,
   useClaude,
@@ -31,6 +33,8 @@ import {
 } from "../lib/claudeOpciones";
 import { agotada, claveCuenta, describir, horaReinicio, peor, porcentaje, useLimites } from "../lib/limites";
 import { useSesiones } from "../lib/sesiones";
+import { nombreValor, opcionPor } from "../lib/agentes";
+import type { OpcionAgente } from "../lib/nucleo";
 
 const miles = (n: number) => n.toLocaleString("es-ES");
 const k = (n: number) => (n >= 1000 ? `${(n / 1000).toLocaleString("es-ES", { maximumFractionDigits: n < 10_000 ? 1 : 0 })}k` : String(n));
@@ -422,11 +426,40 @@ function SelectorAgente({ espacio, c }: { espacio: string; c: Conversacion }) {
   );
 }
 
-/** Barra de una conversación con otro agente: sin modo, modelo ni esfuerzo de Claude. */
+/** Modo de un agente: icono y color como los de Claude para los que se parecen. */
+const MODO_AGENTE: Record<string, string> = { default: "default", "accept-edits": "acceptEdits", auto: "auto", plan: "plan" };
+
+/** Barra de una conversación con otro agente: sus opciones (modo, modelo, razonamiento). */
 function BarraAgente({ espacio, c, alArroba, alImagen }: { espacio: string; c: Conversacion; alArroba: () => void; alImagen: () => void }) {
+  const opciones = opcionesDe(c);
+  const modo = opcionPor(opciones, "mode");
+  const modelo = opcionPor(opciones, "model");
+  const razonamiento = opcionPor(opciones, "thought_level");
+  const otras = opciones.filter((o) => o !== modo && o !== modelo && o !== razonamiento);
+  const enMarcha = c.claudeId !== null;
+  const m = datosModo(MODO_AGENTE[modo?.actual ?? ""] ?? "default");
+  const valores = (o: OpcionAgente): Opcion[] => o.valores.map((v) => ({ valor: v.valor, titulo: v.nombre, ayuda: v.ayuda ?? undefined }));
+  const elegir = (o: OpcionAgente) => (v: string | null) => v && void cambiarOpcionAgente(espacio, o.id, v);
   return (
     <div className="@container relative flex h-8 items-center gap-0.5 pl-1.5 pr-16">
       <SelectorAgente espacio={espacio} c={c} />
+      {modo && (
+        <Desplegable
+          cabecera="Modo · Mayús+Tab"
+          fijo
+          ayuda={`${nombreValor(modo)}: ${modo.valores.find((v) => v.valor === modo.actual)?.ayuda ?? ""} (Mayús+Tab para cambiar)`}
+          valor={modo.actual}
+          alElegir={elegir(modo)}
+          ancho={290}
+          etiqueta={
+            <span className={`flex min-w-0 items-center gap-1.5 ${m.color || "text-tenue"}`}>
+              <m.Icono size={12} strokeWidth={2} className="flex-none" />
+              <span className="hidden truncate @[20rem]:inline">{nombreValor(modo)}</span>
+            </span>
+          }
+          opciones={valores(modo)}
+        />
+      )}
       <button
         type="button"
         title="Mencionar un archivo (@)"
@@ -444,10 +477,59 @@ function BarraAgente({ espacio, c, alArroba, alImagen }: { espacio: string; c: C
         <ImagePlus size={12} strokeWidth={2} />
       </button>
       <span className="ml-auto" />
-      {c.modelo && (
-        <span title="Modelo que contesta" className="truncate px-1.5 text-[11.5px] text-tenue">
-          {c.modelo}
-        </span>
+      {otras.map((o) => (
+        <Desplegable
+          key={o.id}
+          cabecera={o.nombre}
+          derecha
+          fijo
+          ayuda={o.nombre}
+          valor={o.actual}
+          alElegir={elegir(o)}
+          ancho={240}
+          etiqueta={<span className="truncate text-tenue">{nombreValor(o)}</span>}
+          opciones={valores(o)}
+        />
+      ))}
+      {modelo ? (
+        <Desplegable
+          cabecera="Modelo"
+          derecha
+          ayuda={enMarcha ? `Modelo de ${nombreAgente(c)} (se aplica desde el próximo mensaje)` : `Modelo de ${nombreAgente(c)}`}
+          valor={modelo.actual}
+          alElegir={elegir(modelo)}
+          ancho={280}
+          etiqueta={
+            <span className="flex min-w-0 items-center text-tenue">
+              <span className="truncate">{nombreValor(modelo)}</span>
+            </span>
+          }
+          opciones={valores(modelo)}
+        />
+      ) : (
+        c.modelo && (
+          <span title="Modelo que contesta" className="truncate px-1.5 text-[11.5px] text-tenue">
+            {c.modelo}
+          </span>
+        )
+      )}
+      {razonamiento && (
+        <Desplegable
+          cabecera="Razonamiento"
+          derecha
+          fijo
+          ayuda="Cuánto piensa el modelo antes de contestar"
+          valor={razonamiento.actual}
+          alElegir={elegir(razonamiento)}
+          ancho={210}
+          etiqueta={
+            <span className="flex items-center gap-1.5 text-tenue">
+              <Gauge size={12} strokeWidth={1.8} className="flex-none" />
+              <span className="hidden @[17rem]:inline">{nombreValor(razonamiento)}</span>
+            </span>
+          }
+          opciones={valores(razonamiento)}
+        />
       )}
     </div>
   );

@@ -88,10 +88,28 @@ pub enum Evento {
         resumen: String,
         input: Value,
     },
-    /// Tokens que ocupa la conversación ahora mismo.
+    /// Tokens que ocupa la conversación ahora mismo. `limite`: el tamaño de la ventana, si el
+    /// agente lo dice (los de ACP; Claude lo da en el desglose).
     Contexto {
         tokens: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        limite: Option<u64>,
     },
+    /// Opciones de un agente ACP (modelo, razonamiento, modo…) con su valor actual. Llega al
+    /// empezar y cada vez que cambia alguna.
+    OpcionesAgente {
+        opciones: Value,
+    },
+    /// Comandos con barra de un agente ACP, con la forma de los de Claude (name, description).
+    Comandos {
+        comandos: Value,
+    },
+    /// Un mensaje tuyo de una conversación de ACP que se está reanudando (lo repite el agente).
+    MensajeTuyo {
+        texto: String,
+    },
+    /// La conversación de ACP reanudada ya está cargada: se puede escribir.
+    Cargada,
     /// Uso de la cuenta (`rate_limit_event`): sesión de 5 h y semana, de 0 a 1, y cuándo se
     /// reinician (segundos Unix). `estado`: allowed, allowed_warning o rejected.
     Limite {
@@ -161,6 +179,10 @@ pub struct Opciones {
     cuenta: Option<String>,
     /// Otro agente por ACP en vez de Claude Code («antigravity», «gemini»).
     agente: Option<String>,
+    /// ACP: opciones elegidas antes de empezar (id de la opción → valor), p. ej. model o mode.
+    ajustes: Option<HashMap<String, String>>,
+    /// ACP con `reanudar`: el panel ya tiene la conversación, no hace falta que la repita.
+    callado: Option<bool>,
 }
 
 /// Imagen pegada o soltada en el panel: tipo MIME y datos en base64.
@@ -214,7 +236,16 @@ pub fn claude_abrir(
         .ok_or("no hay carpeta donde arrancar Claude")?;
     let id = claudes.siguiente.fetch_add(1, Ordering::Relaxed);
     if let Some(agente) = opciones.agente.as_deref().filter(|a| !a.is_empty()) {
-        let (sesion, _) = crate::acp::abrir(agente, carpeta, eventos)?;
+        let (sesion, _) = crate::acp::abrir(
+            agente,
+            carpeta,
+            crate::acp::Arranque {
+                reanudar: opciones.reanudar.clone().filter(|v| !v.is_empty()),
+                callado: opciones.callado.unwrap_or(false),
+                ajustes: opciones.ajustes.clone().unwrap_or_default(),
+            },
+            eventos,
+        )?;
         claudes
             .acp
             .lock()
@@ -501,6 +532,18 @@ pub fn claude_responder(
     })
 }
 
+/// Cambia una opción de un agente ACP (`session/set_config_option`): modelo, razonamiento, modo.
+#[tauri::command]
+pub fn claude_opcion(
+    claudes: State<'_, Claudes>,
+    id: u32,
+    clave: String,
+    valor: String,
+) -> Result<(), String> {
+    con_acp(&claudes, id, |s| s.opcion(&clave, &valor))
+        .unwrap_or_else(|| Err("esto solo se puede con otros agentes".into()))
+}
+
 /// Para lo que esté haciendo Claude (como Esc en `claude`).
 #[tauri::command]
 pub fn claude_parar(claudes: State<'_, Claudes>, id: u32) -> Result<(), String> {
@@ -567,6 +610,7 @@ fn traducir(v: &Value) -> Vec<Evento> {
             });
             sal.push(Evento::Contexto {
                 tokens: m["post_tokens"].as_u64().unwrap_or(0),
+                limite: None,
             });
         }
         "stream_event" if v["parent_tool_use_id"].is_null() => {
@@ -616,7 +660,10 @@ fn traducir(v: &Value) -> Vec<Evento> {
             .filter_map(|k| uso[*k].as_u64())
             .sum::<u64>();
             if tokens > 0 {
-                sal.push(Evento::Contexto { tokens });
+                sal.push(Evento::Contexto {
+                    tokens,
+                    limite: None,
+                });
             }
             for bloque in v["message"]["content"].as_array().into_iter().flatten() {
                 match bloque["type"].as_str() {

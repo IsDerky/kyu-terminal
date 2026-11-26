@@ -2,7 +2,7 @@
 // qué espacios, paneles y pestañas hay (también las conversaciones de Claude); al
 // abrir Kyu se vuelve a montar todo. Las shells son nuevas (en su carpeta), no las de antes.
 import { nuevoId, paneles, useKyu, type Direccion, type Espacio, type Item, type Nodo } from "./estado";
-import { nuevaDePanel, reanudar, useClaude } from "./claude";
+import { nuevaDePanel, reanudar, reanudarAgente, useClaude } from "./claude";
 import { leerArchivo } from "./nucleo";
 import { tamanos } from "./tamanos";
 
@@ -27,6 +27,8 @@ interface ConversacionGuardada {
   titulo: string;
   /** Cuenta de Claude con la que iba (sin poner = la de siempre). */
   cuenta?: string;
+  /** Otro agente por ACP («antigravity»); sin poner = Claude. */
+  agente?: string;
 }
 
 interface EspacioGuardado {
@@ -56,13 +58,13 @@ interface SesionGuardada {
 function guardarConversacion(cid: string, c = useClaude.getState()): ConversacionGuardada | null {
   const conv = c.conversaciones[cid];
   const primero = conv?.entradas.find((x) => x.tipo === "tu");
-  // Las de otro agente (ACP) no se pueden reanudar todavía: no se guardan.
-  if (!conv?.sesion || !conv.carpeta || conv.agente || primero?.tipo !== "tu") return null;
+  if (!conv?.sesion || !conv.carpeta || primero?.tipo !== "tu") return null;
   return {
     sesion: conv.sesion,
     carpeta: conv.carpeta,
     titulo: primero.texto.split("\n")[0].slice(0, 60),
     cuenta: conv.cuenta ?? undefined,
+    agente: conv.agente ?? undefined,
   };
 }
 
@@ -268,6 +270,10 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
 
   useKyu.setState({ espacios, items, activo });
   // Las conversaciones se cargan del historial; Claude arranca al escribir (--resume).
-  for (const { cid, conv } of dePanel) void reanudar(cid, conv.carpeta, conv.sesion, conv.titulo, conv.cuenta ?? null).catch(() => {});
+  // Las de otro agente (ACP) las carga el propio agente, que las repite.
+  for (const { cid, conv } of dePanel) {
+    if (conv.agente) void reanudarAgente(cid, conv.agente, conv.carpeta, conv.sesion);
+    else void reanudar(cid, conv.carpeta, conv.sesion, conv.titulo, conv.cuenta ?? null).catch(() => {});
+  }
   return true;
 }

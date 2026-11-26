@@ -28,7 +28,21 @@ const AGENTES: &[(&str, &str, &str, &[&str])] = &[
 enum Peticion {
     Inicializar,
     NuevaSesion,
+    /// `session/load` de una conversación guardada.
+    Cargar,
+    /// `session/set_config_option`.
+    Opcion,
     Turno(Instant),
+}
+
+/// Cómo empezar: seguir una conversación guardada y con qué opciones.
+#[derive(Default)]
+pub struct Arranque {
+    pub reanudar: Option<String>,
+    /// El panel ya enseña la conversación: lo que repite el agente al cargarla no se manda.
+    pub callado: bool,
+    /// Id de la opción → valor, para ponerlas nada más empezar.
+    pub ajustes: HashMap<String, String>,
 }
 
 #[derive(Default)]
@@ -45,6 +59,15 @@ struct Estado {
     abiertas: HashSet<String>,
     /// Nombre del agente (de `initialize`), por si no dice qué modelo usa.
     agente: String,
+    arranque: Arranque,
+    /// Mientras llega lo que repite el agente al reanudar.
+    cargando: bool,
+    /// Trozos de un mensaje tuyo repetido al reanudar, hasta que llega otra cosa.
+    tuyo: String,
+    /// `configOptions` tal como las da el agente.
+    opciones: Vec<Value>,
+    /// Cambios de opción sin respuesta: los mensajes esperan a que acaben.
+    ajustando: usize,
 }
 
 pub struct Sesion {
@@ -145,6 +168,7 @@ fn buscar(programa: &str) -> Option<PathBuf> {
 pub fn abrir(
     agente: &str,
     carpeta: PathBuf,
+    arranque: Arranque,
     eventos: Channel<Evento>,
 ) -> Result<(Sesion, String), String> {
     let (_, nombre_agente, programa, args) = AGENTES
@@ -184,6 +208,7 @@ pub fn abrir(
     let errores = hijo.stderr.take().ok_or("sin stderr")?;
     let estado = Arc::new(Mutex::new(Estado {
         agente: nombre_agente.to_string(),
+        arranque,
         ..Default::default()
     }));
 
@@ -287,14 +312,63 @@ fn atender(v: &Value, e: &mut Estado, entrada: &Mutex<ChildStdin>, cwd: &str) ->
                 {
                     e.agente = n.to_string();
                 }
-                if let Err(err) = pedir(
-                    entrada,
-                    e,
-                    "session/new",
-                    json!({ "cwd": cwd, "mcpServers": [] }),
-                    Peticion::NuevaSesion,
-                ) {
+                let sabe_cargar = v["result"]["agentCapabilities"]["loadSession"] == true;
+                let r = match e.arranque.reanudar.clone() {
+                    Some(id) if sabe_cargar => {
+                        e.cargando = true;
+                        pedir(
+                            entrada,
+                            e,
+                            "session/load",
+                            json!({ "sessionId": id, "cwd": cwd, "mcpServers": [] }),
+                            Peticion::Cargar,
+                        )
+                    }
+                    _ => nueva_sesion(entrada, e, cwd),
+                };
+                if let Err(err) = r {
                     sal.push(Evento::Error { texto: err });
+                }
+            }
+            Peticion::Cargar => {
+                e.cargando = false;
+                soltar_tuyo(e, &mut sal);
+                for t in e.abiertas.drain() {
+                    sal.push(Evento::ResultadoHerramienta {
+                        id: t,
+                        error: false,
+                    });
+                }
+                if !error.is_null() {
+                    // No se pudo seguirla (borrada, de otra versión…): se empieza otra.
+                    sal.push(Evento::Error {
+                        texto: format!(
+                            "No se pudo reanudar la conversación ({}); sigue en una nueva.",
+                            mensaje(error)
+                        ),
+                    });
+                    sal.push(Evento::Cargada);
+                    if let Err(err) = nueva_sesion(entrada, e, cwd) {
+                        sal.push(Evento::Error { texto: err });
+                    }
+                    return sal;
+                }
+                let sesion = e.arranque.reanudar.clone().unwrap_or_default();
+                sal.push(Evento::Cargada);
+                empezar(&v["result"], sesion, e, entrada, &mut sal);
+            }
+            Peticion::Opcion => {
+                e.ajustando = e.ajustando.saturating_sub(1);
+                if !error.is_null() {
+                    sal.push(Evento::Error {
+                        texto: format!("No se pudo cambiar la opción: {}", mensaje(error)),
+                    });
+                } else if let Some(l) = v["result"]["configOptions"].as_array() {
+                    e.opciones = l.clone();
+                }
+                avisar_opciones(e, &mut sal);
+                if e.ajustando == 0 {
+                    soltar_cola(e, entrada, &mut sal);
                 }
             }
             Peticion::NuevaSesion => {
@@ -313,26 +387,7 @@ fn atender(v: &Value, e: &mut Estado, entrada: &Mutex<ChildStdin>, cwd: &str) ->
                 }
                 let r = &v["result"];
                 let sesion = r["sessionId"].as_str().unwrap_or("").to_string();
-                // El nombre del modelo en uso («Gemini 4 Hydrogen (High)»), no su id.
-                let actual = r["models"]["currentModelId"].as_str();
-                let modelo = r["models"]["availableModels"]
-                    .as_array()
-                    .and_then(|l| l.iter().find(|m| m["modelId"].as_str() == actual))
-                    .and_then(|m| m["name"].as_str())
-                    .or(actual)
-                    .map(String::from)
-                    .unwrap_or_else(|| e.agente.clone());
-                sal.push(Evento::Iniciado {
-                    modelo,
-                    sesion: sesion.clone(),
-                    modo: r["modes"]["currentModeId"].as_str().unwrap_or("").into(),
-                });
-                e.sesion = Some(sesion.clone());
-                for prompt in std::mem::take(&mut e.cola) {
-                    if let Err(err) = turno(entrada, e, &sesion, prompt) {
-                        sal.push(Evento::Error { texto: err });
-                    }
-                }
+                empezar(r, sesion, e, entrada, &mut sal);
             }
             Peticion::Turno(desde) => {
                 let duracion = desde.elapsed().as_millis() as u64;
@@ -401,6 +456,167 @@ fn atender(v: &Value, e: &mut Estado, entrada: &Mutex<ChildStdin>, cwd: &str) ->
     sal
 }
 
+fn nueva_sesion(entrada: &Mutex<ChildStdin>, e: &mut Estado, cwd: &str) -> Result<(), String> {
+    pedir(
+        entrada,
+        e,
+        "session/new",
+        json!({ "cwd": cwd, "mcpServers": [] }),
+        Peticion::NuevaSesion,
+    )
+}
+
+/// La sesión ya existe (nueva o reanudada): opciones al panel, las elegidas antes de empezar
+/// al agente y, cuando las acepte, los mensajes que esperaban.
+fn empezar(
+    r: &Value,
+    sesion: String,
+    e: &mut Estado,
+    entrada: &Mutex<ChildStdin>,
+    sal: &mut Vec<Evento>,
+) {
+    e.sesion = Some(sesion.clone());
+    e.opciones = r["configOptions"].as_array().cloned().unwrap_or_default();
+    if e.opciones.is_empty() {
+        // Sin configOptions: el nombre del modelo de `models`, si lo hay.
+        let actual = r["models"]["currentModelId"].as_str();
+        let modelo = r["models"]["availableModels"]
+            .as_array()
+            .and_then(|l| l.iter().find(|m| m["modelId"].as_str() == actual))
+            .and_then(|m| m["name"].as_str())
+            .or(actual)
+            .map(String::from)
+            .unwrap_or_else(|| e.agente.clone());
+        sal.push(Evento::Iniciado {
+            modelo,
+            sesion: sesion.clone(),
+            modo: r["modes"]["currentModeId"].as_str().unwrap_or("").into(),
+        });
+    } else {
+        avisar_opciones(e, sal);
+    }
+    for (clave, valor) in std::mem::take(&mut e.arranque.ajustes) {
+        let Some(o) = e.opciones.iter().find(|o| o["id"] == clave.as_str()) else {
+            continue;
+        };
+        let existe = o["options"]
+            .as_array()
+            .is_some_and(|l| l.iter().any(|x| x["value"] == valor.as_str()));
+        if !existe || o["currentValue"] == valor.as_str() {
+            continue;
+        }
+        match poner_opcion(entrada, e, &sesion, &clave, &valor) {
+            Ok(()) => {}
+            Err(err) => sal.push(Evento::Error { texto: err }),
+        }
+    }
+    soltar_cola(e, entrada, sal);
+}
+
+fn poner_opcion(
+    entrada: &Mutex<ChildStdin>,
+    e: &mut Estado,
+    sesion: &str,
+    clave: &str,
+    valor: &str,
+) -> Result<(), String> {
+    e.ajustando += 1;
+    let r = pedir(
+        entrada,
+        e,
+        "session/set_config_option",
+        json!({ "sessionId": sesion, "configId": clave, "value": valor }),
+        Peticion::Opcion,
+    );
+    if r.is_err() {
+        e.ajustando -= 1;
+    }
+    r
+}
+
+/// Los mensajes en cola, si ya hay sesión y no queda ninguna opción por aplicar.
+fn soltar_cola(e: &mut Estado, entrada: &Mutex<ChildStdin>, sal: &mut Vec<Evento>) {
+    let Some(sesion) = e.sesion.clone() else { return };
+    if e.ajustando > 0 {
+        return;
+    }
+    for prompt in std::mem::take(&mut e.cola) {
+        if let Err(err) = turno(entrada, e, &sesion, prompt) {
+            sal.push(Evento::Error { texto: err });
+        }
+    }
+}
+
+/// Un mensaje tuyo repetido al reanudar, ya completo.
+fn soltar_tuyo(e: &mut Estado, sal: &mut Vec<Evento>) {
+    let texto = std::mem::take(&mut e.tuyo);
+    if !texto.is_empty() && !e.arranque.callado {
+        sal.push(Evento::MensajeTuyo { texto });
+    }
+}
+
+/// Opción por categoría (model, thought_level, mode) o, si no la trae, por id.
+fn opcion_de<'a>(opciones: &'a [Value], cual: &str) -> Option<&'a Value> {
+    opciones
+        .iter()
+        .find(|o| o["category"] == cual)
+        .or_else(|| opciones.iter().find(|o| o["id"] == cual))
+}
+
+/// Nombre del valor actual de una opción («Gemini 4 Hydrogen», «High»).
+fn nombre_actual(o: &Value) -> Option<String> {
+    let actual = &o["currentValue"];
+    o["options"]
+        .as_array()?
+        .iter()
+        .find(|x| &x["value"] == actual)
+        .and_then(|x| x["name"].as_str())
+        .or(actual.as_str())
+        .map(String::from)
+}
+
+/// Opciones al panel (con nombres en vez de ids) y el modelo y el modo que quedan.
+fn avisar_opciones(e: &Estado, sal: &mut Vec<Evento>) {
+    let lista: Vec<Value> = e
+        .opciones
+        .iter()
+        .filter(|o| o["type"] == "select")
+        .map(|o| {
+            let valores: Vec<Value> = o["options"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|x| json!({ "valor": x["value"], "nombre": x["name"], "ayuda": x["description"] }))
+                .collect();
+            json!({
+                "id": o["id"],
+                "nombre": o["name"],
+                "categoria": o["category"],
+                "actual": o["currentValue"],
+                "valores": valores,
+            })
+        })
+        .collect();
+    sal.push(Evento::OpcionesAgente {
+        opciones: Value::Array(lista),
+    });
+    let modelo = opcion_de(&e.opciones, "model").and_then(nombre_actual);
+    let razonamiento = opcion_de(&e.opciones, "thought_level").and_then(nombre_actual);
+    let modelo = match (modelo, razonamiento) {
+        (Some(m), Some(r)) => format!("{m} ({r})"),
+        (Some(m), None) => m,
+        _ => e.agente.clone(),
+    };
+    sal.push(Evento::Iniciado {
+        modelo,
+        sesion: e.sesion.clone().unwrap_or_default(),
+        modo: opcion_de(&e.opciones, "mode")
+            .and_then(|o| o["currentValue"].as_str())
+            .unwrap_or("")
+            .into(),
+    });
+}
+
 fn mensaje(error: &Value) -> String {
     let m = error["message"].as_str().unwrap_or("error del agente");
     match error["data"].as_str() {
@@ -412,7 +628,25 @@ fn mensaje(error: &Value) -> String {
 /// `session/update`: texto, razonamiento, herramientas y uso.
 fn actualizar(u: &Value, e: &mut Estado, sal: &mut Vec<Evento>) {
     let texto = || u["content"]["text"].as_str().unwrap_or("").to_string();
-    match u["sessionUpdate"].as_str().unwrap_or("") {
+    let tipo = u["sessionUpdate"].as_str().unwrap_or("");
+    // Al reanudar, el agente repite la conversación: tus mensajes, sus respuestas y herramientas.
+    if e.cargando {
+        if tipo == "user_message_chunk" {
+            if u["content"]["type"] == "text" {
+                e.tuyo.push_str(&texto());
+            }
+            return;
+        }
+        soltar_tuyo(e, sal);
+        let repetido = matches!(
+            tipo,
+            "agent_message_chunk" | "agent_thought_chunk" | "tool_call" | "tool_call_update" | "plan"
+        );
+        if repetido && e.arranque.callado {
+            return;
+        }
+    }
+    match tipo {
         "agent_message_chunk" if u["content"]["type"] == "text" => {
             sal.push(Evento::Parcial { texto: texto() })
         }
@@ -429,23 +663,71 @@ fn actualizar(u: &Value, e: &mut Estado, sal: &mut Vec<Evento>) {
             }
             // Las actualizaciones de una que no se había visto (sin título no se sabe qué es) la crean.
             if (tipo == "tool_call" || !u["title"].is_null()) && e.ensenadas.insert(id.clone()) {
-                herramienta(u, &id, sal);
+                herramienta(u, &id, e.cargando, sal);
                 e.abiertas.insert(id.clone());
             }
             terminada(u, &id, e, sal);
         }
         "usage_update" => {
             if let Some(t) = u["used"].as_u64() {
-                sal.push(Evento::Contexto { tokens: t });
+                sal.push(Evento::Contexto {
+                    tokens: t,
+                    limite: u["size"].as_u64().filter(|n| *n > 0),
+                });
+            }
+        }
+        "available_commands_update" => {
+            let comandos: Vec<Value> = u["availableCommands"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|c| {
+                    let nombre = c["name"].as_str()?;
+                    Some(json!({
+                        "name": nombre,
+                        "description": c["description"].as_str().unwrap_or(""),
+                        "argumentHint": c["input"]["hint"].as_str().unwrap_or(""),
+                    }))
+                })
+                .collect();
+            sal.push(Evento::Comandos {
+                comandos: Value::Array(comandos),
+            });
+        }
+        "config_option_update" => {
+            if let Some(l) = u["configOptions"].as_array() {
+                e.opciones = l.clone();
+                avisar_opciones(e, sal);
+            }
+        }
+        "current_mode_update" => {
+            let Some(m) = u["currentModeId"].as_str() else {
+                return;
+            };
+            match e.opciones.iter_mut().find(|o| o["category"] == "mode" || o["id"] == "mode") {
+                Some(o) => {
+                    o["currentValue"] = json!(m);
+                    avisar_opciones(e, sal);
+                }
+                None => sal.push(Evento::Iniciado {
+                    modelo: e.agente.clone(),
+                    sesion: e.sesion.clone().unwrap_or_default(),
+                    modo: m.into(),
+                }),
             }
         }
         _ => {}
     }
 }
 
-fn herramienta(u: &Value, id: &str, sal: &mut Vec<Evento>) {
+/// `repetida`: de una conversación reanudada; ya pasó, no hay «antes» que guardar.
+fn herramienta(u: &Value, id: &str, repetida: bool, sal: &mut Vec<Evento>) {
     let (nombre, input) = como_claude(u);
-    let (ruta, antes, nuevo) = crate::claude::foto_antes(&nombre, &input);
+    let (ruta, antes, nuevo) = if repetida {
+        (None, None, false)
+    } else {
+        crate::claude::foto_antes(&nombre, &input)
+    };
     sal.push(Evento::Herramienta {
         id: id.to_string(),
         resumen: resumen_de(u, &nombre, &input),
@@ -560,9 +842,22 @@ impl Sesion {
         }
         let mut e = self.estado.lock().map_err(|_| "estado roto")?;
         match e.sesion.clone() {
-            Some(s) => turno(&self.entrada, &mut e, &s, prompt),
-            None => {
+            Some(s) if e.ajustando == 0 => turno(&self.entrada, &mut e, &s, prompt),
+            _ => {
                 e.cola.push(prompt);
+                Ok(())
+            }
+        }
+    }
+
+    /// Cambia una opción (model, thought_level, mode…). Antes de tener sesión se guarda y se
+    /// pone al empezar.
+    pub fn opcion(&self, clave: &str, valor: &str) -> Result<(), String> {
+        let mut e = self.estado.lock().map_err(|_| "estado roto")?;
+        match e.sesion.clone() {
+            Some(s) => poner_opcion(&self.entrada, &mut e, &s, clave, valor),
+            None => {
+                e.arranque.ajustes.insert(clave.into(), valor.into());
                 Ok(())
             }
         }
@@ -645,6 +940,60 @@ mod pruebas {
         assert_eq!(n, "Write");
         assert_eq!(i["file_path"], r"C:\t\hola.txt");
         assert_eq!(i["content"], "hola");
+    }
+
+    #[test]
+    fn opciones_y_nombre_del_modelo() {
+        let opciones: Vec<Value> = serde_json::from_str(r#"[
+            {"id":"model","name":"Model","category":"model","type":"select","currentValue":"g4","options":[{"value":"g4","name":"Gemini 4"},{"value":"fl","name":"Flash"}]},
+            {"id":"thought_level","name":"Thinking Level","category":"thought_level","type":"select","currentValue":"high","options":[{"value":"low","name":"Low"},{"value":"high","name":"High"}]},
+            {"id":"mode","name":"Mode","category":"mode","type":"select","currentValue":"plan","options":[{"value":"default","name":"Default"},{"value":"plan","name":"Plan"}]}
+        ]"#).unwrap();
+        let e = Estado {
+            opciones,
+            sesion: Some("s1".into()),
+            ..Default::default()
+        };
+        let mut sal = Vec::new();
+        avisar_opciones(&e, &mut sal);
+        match &sal[0] {
+            Evento::OpcionesAgente { opciones } => {
+                assert_eq!(opciones.as_array().unwrap().len(), 3);
+                assert_eq!(opciones[1]["valores"][1]["nombre"], "High");
+            }
+            otro => panic!("{otro:?}"),
+        }
+        match &sal[1] {
+            Evento::Iniciado { modelo, modo, sesion } => {
+                assert_eq!(modelo, "Gemini 4 (High)");
+                assert_eq!(modo, "plan");
+                assert_eq!(sesion, "s1");
+            }
+            otro => panic!("{otro:?}"),
+        }
+    }
+
+    #[test]
+    fn al_reanudar_se_juntan_tus_mensajes() {
+        let mut e = Estado {
+            cargando: true,
+            ..Default::default()
+        };
+        let mut sal = Vec::new();
+        for t in ["Hola, ", "¿qué tal?"] {
+            let u = json!({ "sessionUpdate": "user_message_chunk", "content": { "type": "text", "text": t } });
+            actualizar(&u, &mut e, &mut sal);
+        }
+        assert!(sal.is_empty());
+        let u = json!({ "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": "Bien" } });
+        actualizar(&u, &mut e, &mut sal);
+        assert!(matches!(&sal[0], Evento::MensajeTuyo { texto } if texto == "Hola, ¿qué tal?"));
+        assert!(matches!(&sal[1], Evento::Parcial { texto } if texto == "Bien"));
+        // Callado: lo repetido no sale.
+        e.arranque.callado = true;
+        sal.clear();
+        actualizar(&u, &mut e, &mut sal);
+        assert!(sal.is_empty());
     }
 
     #[test]

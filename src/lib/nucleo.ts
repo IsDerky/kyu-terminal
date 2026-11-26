@@ -164,12 +164,25 @@ export type EventoClaude =
   | { tipo: "cadena"; uuid: string }
   | { tipo: "resultadoHerramienta"; id: string; error: boolean }
   | { tipo: "permiso"; idPeticion: string; herramienta: string; resumen: string; input: unknown }
-  | { tipo: "contexto"; tokens: number }
+  | { tipo: "contexto"; tokens: number; limite?: number }
+  | { tipo: "opcionesAgente"; opciones: OpcionAgente[] }
+  | { tipo: "comandos"; comandos: { name: string; description: string; argumentHint?: string }[] }
+  | { tipo: "mensajeTuyo"; texto: string }
+  | { tipo: "cargada" }
   | { tipo: "sugerencia"; texto: string }
   | { tipo: "limite"; estado: string; sesion: Ventana | null; semana: Ventana | null }
   | { tipo: "fin"; coste: number; error: boolean; duracion: number; resultado: string | null }
   | { tipo: "error"; texto: string }
   | { tipo: "cerrado" };
+
+/** Opción de un agente ACP (modelo, razonamiento, modo…) con su valor actual. */
+export interface OpcionAgente {
+  id: string;
+  nombre: string;
+  categoria: string | null;
+  actual: string;
+  valores: { valor: string; nombre: string; ayuda: string | null }[];
+}
 
 /** Lo elegido en el panel antes de arrancar (`--model`, `--permission-mode`, `--effort`). */
 export interface OpcionesClaude {
@@ -184,6 +197,10 @@ export interface OpcionesClaude {
   cuenta?: string | null;
   /** Otro agente por ACP («antigravity»); null = Claude Code. */
   agente?: string | null;
+  /** ACP: opciones elegidas antes de empezar (id → valor). */
+  ajustes?: Record<string, string>;
+  /** ACP con `reanudar`: el panel ya tiene la conversación (que no la repita). */
+  callado?: boolean;
 }
 
 export interface CuentaClaude {
@@ -219,6 +236,9 @@ export function abrirClaude(
   eventos.onmessage = alEvento;
   return invoke<number>("claude_abrir", { carpeta, opciones, eventos });
 }
+
+/** Cambia una opción de un agente ACP (model, thought_level, mode…). */
+export const opcionAgente = (id: number, clave: string, valor: string) => invoke("claude_opcion", { id, clave, valor });
 
 export const enviarClaude = (id: number, texto: string, imagenes: ImagenClaude[] = []) =>
   invoke("claude_enviar", { id, texto, imagenes });

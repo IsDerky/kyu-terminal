@@ -4,6 +4,7 @@ import { ArrowUp, AtSign, Check, Clock, FolderOpen, History, ImageIcon, Info, Li
 import {
   añadirImagenes,
   nombreAgente,
+  comandosDe,
   ARRASTRE_RUTA,
   insertarEnCaja,
   mencionDe,
@@ -632,7 +633,8 @@ function CajaEntrada({
       el?.setSelectionRange(fin, fin);
     });
   };
-  const lista = useClaude((s) => s.catalogo?.commands ?? SIN_COMANDOS);
+  const deClaude = useClaude((s) => s.catalogo?.commands ?? SIN_COMANDOS);
+  const lista = comandosDe(c, deClaude);
   const area = useRef<HTMLTextAreaElement>(null);
   const [elegido, setElegido] = useState(0);
   const [sinMenu, setSinMenu] = useState(false);
@@ -743,7 +745,7 @@ function CajaEntrada({
                     : sugerencia
                       ? `${sugerencia}  · Tab`
                       : c.agente
-                        ? `Escribe a ${nombreAgente(c)} · @ archivos`
+                        ? `Escribe a ${nombreAgente(c)} · @ archivos · / comandos`
                         : "Escribe a Claude · @ archivos · / comandos"
           }
           onChange={(e) => {
