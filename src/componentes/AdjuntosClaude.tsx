@@ -1,9 +1,9 @@
 // Panel de Claude: menciones @archivo, miniaturas de imágenes y conversaciones guardadas.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { File, Folder, Search, X } from "lucide-react";
-import { reanudar } from "../lib/claude";
+import { reanudar, reanudarAgente } from "../lib/claude";
 import type { ImagenAdjunta } from "../lib/imagenes";
-import { sesionesClaude, type SesionGuardada } from "../lib/nucleo";
+import { acpSesiones, sesionesClaude, type SesionGuardada } from "../lib/nucleo";
 
 // ---------- @archivo ----------
 
@@ -107,21 +107,44 @@ const hace = (ms: number) => {
   return new Date(ms).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 };
 
-/** Conversaciones guardadas de `carpeta`, pedidas al montar. */
-function useSesiones(carpeta: string | null) {
-  const [lista, setLista] = useState<SesionGuardada[] | null>(null);
+/** Conversación guardada con, si es de un agente ACP, la carpeta donde se tuvo. */
+type Guardada = SesionGuardada & { carpeta?: string | null };
+
+const mismaCarpeta = (a: string | null | undefined, b: string | null) =>
+  !!a && !!b && a.replace(/[\\/]+$/, "").toLowerCase() === b.replace(/[\\/]+$/, "").toLowerCase();
+
+/** Conversaciones guardadas de `carpeta` (de Claude, o del agente si hay `agente`), pedidas al montar. */
+function useSesiones(carpeta: string | null, agente: string | null = null) {
+  const [lista, setLista] = useState<Guardada[] | null>(null);
   useEffect(() => {
     if (!carpeta) return;
     let vivo = true;
     setLista(null);
-    sesionesClaude(carpeta)
-      .then((l) => vivo && setLista(l))
-      .catch(() => vivo && setLista([]));
+    const pedir: Promise<Guardada[]> = agente
+      ? acpSesiones(agente, carpeta).then((l) => {
+          const todas = l.map((s) => ({
+            id: s.id,
+            titulo: s.titulo,
+            ultimo: mismaCarpeta(s.carpeta, carpeta) ? null : `en ${nombreCarpeta(s.carpeta)}`,
+            fecha: s.fecha ? Date.parse(s.fecha) : 0,
+            bytes: 0,
+            carpeta: s.carpeta,
+          }));
+          return [...todas.filter((s) => !s.ultimo), ...todas.filter((s) => s.ultimo)];
+        })
+      : sesionesClaude(carpeta);
+    pedir.then((l) => vivo && setLista(l)).catch(() => vivo && setLista([]));
     return () => {
       vivo = false;
     };
-  }, [carpeta]);
+  }, [carpeta, agente]);
   return lista;
+}
+
+/** Sigue una conversación guardada: con Claude carga su historial; con un agente, la carga él. */
+function seguir(espacio: string, carpeta: string, s: Guardada, agente: string | null) {
+  if (agente) void reanudarAgente(espacio, agente, s.carpeta ?? carpeta, s.id);
+  else void reanudar(espacio, carpeta, s.id, s.titulo);
 }
 
 function FilaSesion({ s, actual, alElegir }: { s: SesionGuardada; actual: boolean; alElegir: () => void }) {
@@ -148,14 +171,16 @@ export function ListaSesiones({
   espacio,
   carpeta,
   actual,
+  agente = null,
   alCerrar,
 }: {
   espacio: string;
   carpeta: string | null;
   actual: string | null;
+  agente?: string | null;
   alCerrar: () => void;
 }) {
-  const lista = useSesiones(carpeta);
+  const lista = useSesiones(carpeta, agente);
   const [filtro, setFiltro] = useState("");
   const caja = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -204,7 +229,7 @@ export function ListaSesiones({
             actual={s.id === actual}
             alElegir={() => {
               alCerrar();
-              if (carpeta) void reanudar(espacio, carpeta, s.id, s.titulo);
+              if (carpeta) seguir(espacio, carpeta, s, agente);
             }}
           />
         ))}
@@ -214,14 +239,14 @@ export function ListaSesiones({
 }
 
 /** En el panel vacío: las 3 últimas conversaciones de la carpeta, para seguir una. */
-export function Recientes({ espacio, carpeta }: { espacio: string; carpeta: string | null }) {
-  const lista = useSesiones(carpeta);
+export function Recientes({ espacio, carpeta, agente = null }: { espacio: string; carpeta: string | null; agente?: string | null }) {
+  const lista = useSesiones(carpeta, agente);
   if (!lista?.length || !carpeta) return null;
   return (
     <div className="mt-5 w-full max-w-[300px] text-left">
       <p className="mb-1 px-2.5 text-[10.5px] font-medium uppercase tracking-wider text-muy">Seguir una conversación</p>
       {lista.slice(0, 3).map((s) => (
-        <FilaSesion key={s.id} s={s} actual={false} alElegir={() => void reanudar(espacio, carpeta, s.id, s.titulo)} />
+        <FilaSesion key={s.id} s={s} actual={false} alElegir={() => seguir(espacio, carpeta, s, agente)} />
       ))}
     </div>
   );

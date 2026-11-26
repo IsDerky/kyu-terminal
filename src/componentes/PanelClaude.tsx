@@ -44,6 +44,7 @@ import {
   SelectorCuenta,
 } from "./ControlesClaude";
 import { EtiquetaFondo, TiraTareas } from "./Tareas";
+import { FlotantesClaude, IconoMas, MenuMas, PieAgente } from "./MasClaude";
 import { ListaSesiones, mencionEnCursor, MenuArchivos, Miniaturas, Recientes } from "./AdjuntosClaude";
 import { imagenesDe, type ImagenAdjunta } from "../lib/imagenes";
 import { buscarArchivos } from "../lib/nucleo";
@@ -54,7 +55,7 @@ import { herramienta, relativa } from "../lib/herramientas";
 import Markdown from "./Markdown";
 import Permiso from "./Permiso";
 import { BotonVerCambios, PasosSubagente, Plan, Preguntas, preguntasDe, Razonamiento, ResumenCambios, VolverAqui } from "./TandaClaude";
-import { Mascota } from "./iconos";
+import { IconoAgente } from "./iconos";
 import { corto, useGasto } from "../lib/gasto";
 
 
@@ -167,7 +168,7 @@ export default function PanelClaude({
     >
       <header className="flex h-11 flex-none items-center gap-2 border-b border-borde pl-3.5 pr-2">
         <span className="flex items-center gap-2 text-[13px] font-semibold">
-          <Mascota alto={15} />
+          <IconoAgente agente={c.agente} alto={15} />
           {c.agente && <span className="text-[12px] font-medium text-tenue">{nombreAgente(c)}</span>}
         </span>
         <span
@@ -200,10 +201,19 @@ export default function PanelClaude({
         <BotonCabecera titulo="Otra conversación en una pestaña de este panel (Ctrl+Mayús+K)" onClick={() => conversacionEnPanel(espacioReal)}>
           <SquarePen size={14} strokeWidth={1.8} />
         </BotonCabecera>
+        <MenuMas
+          cid={espacio}
+          c={c}
+          boton={(onClick) => (
+            <BotonCabecera titulo="Más: servidores MCP, permisos, memoria, exportar" onClick={onClick}>
+              <IconoMas />
+            </BotonCabecera>
+          )}
+        />
       </header>
 
       {verSesiones && (
-        <ListaSesiones espacio={espacio} carpeta={carpeta} actual={c.sesion} alCerrar={() => setVerSesiones(false)} />
+        <ListaSesiones espacio={espacio} carpeta={carpeta} actual={c.sesion} agente={c.agente} alCerrar={() => setVerSesiones(false)} />
       )}
       {soltando && (
         <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center border-2 border-dashed border-claude/60 bg-panel/80">
@@ -222,6 +232,7 @@ export default function PanelClaude({
       )}
 
       {verContexto && <DesgloseContexto espacio={espacio} c={c} alCerrar={() => ponerVerContexto(false)} />}
+      <FlotantesClaude cid={espacio} c={c} carpeta={carpeta} />
 
       <ListaEntradas espacio={espacio} c={c} carpeta={carpeta} grande />
 
@@ -232,6 +243,7 @@ export default function PanelClaude({
         <span className="ml-auto" />
         {!c.agente && <SelectorCuenta espacio={espacio} c={c} />}
         {!c.agente && <LimiteCuenta c={c} />}
+        <PieAgente c={c} />
         <BarraGasto />
         {c.coste > 0 && <span title="Coste de la conversación">{dolares(c.coste)}</span>}
       </footer>
@@ -307,13 +319,13 @@ function ListaEntradas({ espacio, c, carpeta, grande }: { espacio: string; c: Co
   if (vacia) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
-        <Mascota alto={34} />
+        <IconoAgente agente={c.agente} alto={34} />
         <p className="text-[14px] font-medium">¿En qué te ayudo?</p>
         <p className="text-[12px] leading-relaxed text-tenue">
           {nombreAgente(c)} trabajará en <span className="font-mono text-[11.5px] text-texto">{nombreCarpeta(carpeta)}</span>, la
           carpeta del terminal con el foco.
         </p>
-        <Recientes espacio={espacio} carpeta={carpeta} />
+        <Recientes espacio={espacio} carpeta={carpeta} agente={c.agente} />
       </div>
     );
   }
@@ -439,7 +451,7 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
             <span title={e.resumen} className="min-w-0 truncate font-mono text-[11.5px]">
               {relativa(e.resumen, carpeta)}
             </span>
-            {e.fondo && <EtiquetaFondo fondo={e.fondo} />}
+            {e.fondo && <EtiquetaFondo cid={espacio} fondo={e.fondo} />}
             <span className={e.fondo ? "flex-none" : "ml-auto flex-none"}>
               {e.fondo && !e.fondo.estado ? (
                 <Loader2 size={13} className="animate-spin text-claude2" />

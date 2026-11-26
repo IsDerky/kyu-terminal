@@ -169,6 +169,8 @@ export type EventoClaude =
   | { tipo: "comandos"; comandos: { name: string; description: string; argumentHint?: string }[] }
   | { tipo: "mensajeTuyo"; texto: string }
   | { tipo: "cargada" }
+  | { tipo: "planAgente"; nombre: string; enlace: string | null }
+  | { tipo: "titulo"; texto: string }
   | { tipo: "tareas"; tareas: Tarea[] }
   | { tipo: "tareaNueva"; herramienta: string; texto: string; activo: string | null }
   | { tipo: "tareaId"; herramienta: string; id: string }
@@ -202,6 +204,29 @@ export interface SesionActiva {
   fecha: number;
   cuenta: string;
 }
+
+/** Conversación guardada de un agente ACP (session/list). */
+export interface SesionAgente {
+  id: string;
+  titulo: string;
+  carpeta: string | null;
+  fecha: string | null;
+}
+export const acpSesiones = (agente: string, carpeta: string) => invoke<SesionAgente[]>("acp_sesiones", { agente, carpeta });
+/** Abre una consola con el inicio de sesión del agente. */
+export const acpEntrar = (agente: string) => invoke("acp_entrar", { agente });
+
+/** Regla de permiso guardada de Claude Code. */
+export interface ReglaPermiso {
+  archivo: string;
+  ambito: "usuario" | "proyecto" | "local";
+  tipo: "allow" | "ask" | "deny";
+  regla: string;
+}
+export const permisosLeer = (carpeta: string | null) => invoke<ReglaPermiso[]>("permisos_leer", { carpeta });
+export const permisosQuitar = (archivo: string, tipo: string, regla: string) => invoke("permisos_quitar", { archivo, tipo, regla });
+/** Guarda la conversación en Documentos\Kyu\conversaciones; devuelve la ruta. */
+export const exportarConversacion = (nombre: string, contenido: string) => invoke<string>("conversacion_exportar", { nombre, contenido });
 
 /** Sesiones de Claude con actividad en los últimos 2 min, sin las de `excluir` (las de Kyu). */
 export const claudeActivas = (excluir: string[]) => invoke<SesionActiva[]>("claude_activas", { excluir });

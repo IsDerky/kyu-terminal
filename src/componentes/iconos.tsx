@@ -1,4 +1,4 @@
-import { Box, ChevronRight, FileText, Server, SquareTerminal, Terminal, type LucideIcon } from "lucide-react";
+import { Box, ChevronRight, FileText, Server, Sparkles, SquareTerminal, Terminal, type LucideIcon } from "lucide-react";
 import type { Perfil } from "../lib/nucleo";
 
 const ICONOS: Record<string, LucideIcon> = {
@@ -64,4 +64,37 @@ export function LogoKyu({ size = 20 }: { size?: number }) {
       <path d="M21 31l7 3-7 2zM43 31l-7 3 7 2z" fill="#151518" />
     </svg>
   );
+}
+
+// Muñeco pixelado de Antigravity: hermano de la mascota de Claude, azul y flotando
+// (boceto bocetos/kyu/kyu-logo-antigravity.html, variante 1).
+const ANTIGRAVITY = [
+  [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [2, 1], [3, 1], [5, 1], [6, 1], [8, 1], [9, 1],
+  [2, 2], [3, 2], [4, 2], [5, 2], [6, 2], [7, 2], [8, 2], [9, 2], [3, 3], [4, 3], [5, 3], [6, 3], [7, 3], [8, 3], [4, 4], [7, 4],
+];
+const ESTELA = [[1, 6], [10, 6], [2, 7], [9, 7]];
+
+/** `alto` en px; el ancho es 1,5 veces, como la mascota de Claude. */
+export function MascotaAntigravity({ alto = 16 }: { alto?: number }) {
+  return (
+    <svg viewBox="0 0 12 8" width={alto * 1.5} height={alto} shapeRendering="crispEdges" className="flex-none">
+      <g fill="#60a5fa">
+        {ANTIGRAVITY.map(([x, y], i) => (
+          <rect key={i} x={x} y={y} width={1.04} height={1.04} />
+        ))}
+      </g>
+      <g fill="#60a5fa" opacity={0.35}>
+        {ESTELA.map(([x, y], i) => (
+          <rect key={i} x={x} y={y} width={1} height={1} />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+/** Icono de quien contesta: la mascota de Claude o la del agente ACP. */
+export function IconoAgente({ agente, alto = 16 }: { agente: string | null | undefined; alto?: number }) {
+  if (agente === "antigravity") return <MascotaAntigravity alto={alto} />;
+  if (agente) return <Sparkles size={alto} strokeWidth={1.8} className="flex-none text-sky-400" />;
+  return <Mascota alto={alto} />;
 }

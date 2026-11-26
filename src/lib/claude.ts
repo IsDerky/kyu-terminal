@@ -4,7 +4,9 @@
 import { create } from "zustand";
 import {
   abrirClaude,
+  guardarArchivo as archivoGuardar,
   cerrarClaude,
+  exportarConversacion,
   controlClaude,
   type ConfigVista,
   enviarClaude,
@@ -18,6 +20,7 @@ import {
 } from "./nucleo";
 import { ajustesGuardados, catalogoAgente, guardarAjustes, guardarCatalogoAgente, opcionesVistas, opcionPor } from "./agentes";
 import { paneles, useKyu } from "./estado";
+import { ejecutarParaConversacion } from "./mcp";
 import { leerArchivo } from "./nucleo";
 import { contar, diffLineas } from "./diff";
 import { recargarRuta } from "./editores";
@@ -136,6 +139,10 @@ export interface Conversacion {
   cargando: boolean;
   /** Lista de tareas del agente (la última que escribió). */
   tareas: Tarea[];
+  /** Título que le dio el agente o Claude Code (si no, el primer mensaje). */
+  titulo: string | null;
+  /** Plan o cuota de la cuenta del agente ACP. */
+  planAgente: { nombre: string; enlace: string | null } | null;
   /** Lo que corre ahora en segundo plano, con desde cuándo. */
   fondo: { id: string; tipo: string; descripcion: string; desde: number }[];
   claudeId: number | null;
@@ -229,7 +236,7 @@ export interface EnCola {
 }
 
 /** Agentes por ACP que se pueden elegir en el panel (id → nombre). */
-export const AGENTES: Record<string, string> = { antigravity: "Antigravity" };
+export const AGENTES: Record<string, string> = { antigravity: "Antigravity", gemini: "Gemini CLI" };
 
 /** Quién contesta en la conversación: «Claude» o el nombre del agente. */
 export const nombreAgente = (c: Pick<Conversacion, "agente"> | undefined) =>
@@ -244,6 +251,8 @@ export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Convers
   cargando: false,
   tareas: [],
   fondo: [],
+  titulo: null,
+  planAgente: null,
   claudeId: null,
   generacion: 0,
   carpeta: null,
@@ -506,6 +515,7 @@ export function cerrarConversacion(cid: string) {
 
 /** Título de una conversación para su pestaña: su primer mensaje. */
 export function tituloDe(c: Conversacion | undefined): string {
+  if (c?.titulo) return c.titulo.length > 32 ? c.titulo.slice(0, 32).trimEnd() + "…" : c.titulo;
   const primero = c?.entradas.find((e) => e.tipo === "tu");
   const t = primero?.tipo === "tu" ? primero.texto.replace(/\s+/g, " ").trim() : "";
   return t ? (t.length > 32 ? t.slice(0, 32).trimEnd() + "…" : t) : "Nueva";
@@ -610,6 +620,12 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       }));
       return;
     }
+    case "titulo":
+      cambiar(espacio, () => ({ titulo: ev.texto }));
+      return;
+    case "planAgente":
+      cambiar(espacio, () => ({ planAgente: { nombre: ev.nombre, enlace: ev.enlace } }));
+      return;
     case "mensajeTuyo":
       añadir(espacio, { tipo: "tu", texto: ev.texto });
       return;
@@ -762,6 +778,7 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
         entradas: cerrarRazonamiento(c.entradas).map((e) => (e.tipo === "claude" && e.enCurso ? { ...e, enCurso: false } : e)),
       }));
       void refrescarContexto(espacio);
+      void ponerTitulo(espacio);
       void resumirCambios(espacio);
       void refrescarGasto();
       alAcabarTurno(espacio);
@@ -886,6 +903,119 @@ ${valla}`;
 }
 
 const miles = (n: number) => n.toLocaleString("es-ES");
+
+/** Tras el primer turno de Claude: un título corto para la pestaña y el historial (se guarda en la sesión). */
+async function ponerTitulo(cid: string) {
+  const c = conversacion(cid);
+  const primero = c.entradas.find((e) => e.tipo === "tu");
+  if (c.claudeId === null || c.agente || c.titulo || primero?.tipo !== "tu" || pidiendoTitulo.has(cid)) return;
+  pidiendoTitulo.add(cid);
+  try {
+    const r = await controlClaude<{ title?: string }>(c.claudeId, {
+      subtype: "generate_session_title",
+      description: primero.texto.slice(0, 2000),
+      persist: true,
+    });
+    if (r?.title) cambiar(cid, () => ({ titulo: r.title! }));
+  } catch {
+    // Sin título se queda el primer mensaje.
+  } finally {
+    pidiendoTitulo.delete(cid);
+  }
+}
+const pidiendoTitulo = new Set<string>();
+
+/** Para algo que Claude dejó en segundo plano (`stop_task`). */
+export async function pararFondo(cid: string, tarea: string) {
+  const c = conversacion(cid);
+  if (c.claudeId === null || c.agente) return;
+  try {
+    await controlClaude(c.claudeId, { subtype: "stop_task", task_id: tarea });
+  } catch (e) {
+    añadir(cid, { tipo: "error", texto: `No se pudo parar: ${e}` });
+  }
+}
+
+/** Estado de un servidor MCP de la conversación (`mcp_status`). */
+export interface ServidorMcp {
+  name: string;
+  status: string;
+  error?: string;
+  scope?: string;
+  serverInfo?: { name?: string; version?: string };
+}
+export async function servidoresMcp(cid: string): Promise<ServidorMcp[] | null> {
+  const c = conversacion(cid);
+  if (c.claudeId === null || c.agente) return null;
+  const r = await controlClaude<{ mcpServers?: ServidorMcp[] }>(c.claudeId, { subtype: "mcp_status" });
+  return r?.mcpServers ?? [];
+}
+
+/** Paneles flotantes de la conversación que abren /mcp y /permissions. */
+export type Flotante = "mcp" | "permisos" | null;
+export const useFlotante = create<{ por: Record<string, Flotante> }>(() => ({ por: {} }));
+export const ponerFlotante = (cid: string, f: Flotante) => useFlotante.setState((s) => ({ por: { ...s.por, [cid]: f } }));
+
+/** CLAUDE.md del proyecto de la conversación (su carpeta o la del terminal con el foco). */
+function memoriaProyecto(cid: string): string | null {
+  const c = conversacion(cid);
+  const carpeta = c.carpeta ?? carpetaDelEspacio(espacioDe(cid));
+  return carpeta ? `${carpeta.replace(/[\\/]+$/, "")}\\CLAUDE.md` : null;
+}
+
+/** «#nota»: la apunta al final del CLAUDE.md del proyecto (como el # de Claude Code). */
+async function apuntarMemoria(cid: string, nota: string) {
+  const ruta = memoriaProyecto(cid);
+  if (!ruta) return añadir(cid, { tipo: "error", texto: "No hay carpeta de proyecto donde apuntarlo" });
+  const antes = await leerArchivo(ruta).catch(() => "");
+  const salto = antes && !antes.endsWith("\n") ? "\n" : "";
+  try {
+    await archivoGuardar(ruta, `${antes}${salto}- ${nota}\n`);
+    recargarRuta(ruta);
+    añadir(cid, { tipo: "aviso", texto: `Apuntado en el CLAUDE.md del proyecto: «${nota}»` });
+  } catch (e) {
+    añadir(cid, { tipo: "error", texto: `No se pudo apuntar: ${e}` });
+  }
+}
+
+/** /memory: abre el CLAUDE.md del proyecto (lo crea vacío si no hay). */
+export async function abrirMemoria(cid: string) {
+  const ruta = memoriaProyecto(cid);
+  if (!ruta) return;
+  const hay = await leerArchivo(ruta).then(() => true, () => false);
+  if (!hay) await archivoGuardar(ruta, "").catch(() => {});
+  useKyu.getState().abrirArchivo(ruta, 1, 1);
+}
+
+/** La conversación en Markdown: tus mensajes, las respuestas y cada herramienta en una línea. */
+function comoMarkdown(c: Conversacion): string {
+  const quien = nombreAgente(c);
+  const partes = [`# ${c.titulo ?? tituloDe(c)}`, "", [quien, c.modelo, c.carpeta].filter(Boolean).join(" · "), ""];
+  for (const e of c.entradas) {
+    if (e.tipo === "tu") partes.push("## Tú", "", e.texto, "");
+    else if (e.tipo === "claude") partes.push(`## ${quien}`, "", e.texto, "");
+    else if (e.tipo === "herramienta") partes.push(`> ${e.nombre} ${e.resumen}`.trimEnd(), "");
+    else if (e.tipo === "aviso" || e.tipo === "error") partes.push(`*${e.texto}*`, "");
+  }
+  return partes.join("\n");
+}
+
+/** /export: guarda la conversación como .md en Documentos\\Kyu\\conversaciones y la abre. */
+export async function exportar(cid: string) {
+  const c = conversacion(cid);
+  if (!c.entradas.length) return;
+  // Hora local (toISOString va en UTC).
+  const d = new Date();
+  const dos = (n: number) => String(n).padStart(2, "0");
+  const fecha = `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())} ${dos(d.getHours())}-${dos(d.getMinutes())}`;
+  try {
+    const ruta = await exportarConversacion(`${fecha} ${tituloDe(c).replace(/…$/, "")}`, comoMarkdown(c));
+    añadir(cid, { tipo: "aviso", texto: `Exportada en ${ruta}` });
+    useKyu.getState().abrirArchivo(ruta, 1, 1);
+  } catch (e) {
+    añadir(cid, { tipo: "error", texto: `No se pudo exportar: ${e}` });
+  }
+}
 
 /** Pide a Claude el desglose del contexto y lo guarda en la conversación. */
 export async function refrescarContexto(espacio: string) {
@@ -1046,6 +1176,7 @@ export async function reanudar(espacio: string, carpeta: string, id: string, tit
         carpeta,
         reanudar: id,
         sesion: id,
+        titulo: titulo || null,
         ultimoUuid,
         entradas,
       },
@@ -1101,6 +1232,24 @@ export async function enviar(espacio: string, texto: string, deCola?: EnCola) {
   // Comandos que resuelve Kyu sin Claude.
   const orden = texto.trim().toLowerCase();
   if (orden === "/clear" || orden === "/new") return nueva(espacio);
+  if (orden === "/export") return void exportar(espacio);
+  if (!c.agente && (orden === "/mcp" || orden === "/permissions")) return ponerFlotante(espacio, orden === "/mcp" ? "mcp" : "permisos");
+  if (!c.agente && orden === "/memory") return void abrirMemoria(espacio);
+  // «#nota» la apunta en la memoria del proyecto; «!orden» la ejecuta en el panel «Claude».
+  if (!deCola && !c.agente && /^#\s*\S/.test(texto.trim())) return void apuntarMemoria(espacio, texto.trim().replace(/^#\s*/, ""));
+  if (!deCola && /^!\s*\S/.test(texto.trim())) {
+    const o = texto.trim().replace(/^!\s*/, "");
+    añadir(espacio, { tipo: "aviso", texto: `Ejecutando en el panel «Claude»: ${o}` });
+    void ejecutarParaConversacion(espacio, o).then((motivo) =>
+      añadir(
+        espacio,
+        motivo
+          ? { tipo: "error", texto: `No se pudo ejecutar: ${motivo}` }
+          : { tipo: "aviso", texto: "Salida adjunta: escribe tu pregunta o Intro para que la revise" },
+      ),
+    );
+    return;
+  }
   if (orden === "/context" && c.claudeId !== null && !c.agente) {
     useClaude.setState({ verContexto: espacio });
     return void refrescarContexto(espacio);

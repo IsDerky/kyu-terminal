@@ -62,7 +62,7 @@ function guardarConversacion(cid: string, c = useClaude.getState()): Conversacio
   return {
     sesion: conv.sesion,
     carpeta: conv.carpeta,
-    titulo: primero.texto.split("\n")[0].slice(0, 60),
+    titulo: conv.titulo ?? primero.texto.split("\n")[0].slice(0, 60),
     cuenta: conv.cuenta ?? undefined,
     agente: conv.agente ?? undefined,
   };

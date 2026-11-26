@@ -134,6 +134,36 @@ async function ejecutar(espacio: string, args: Record<string, unknown>): Promise
   };
 }
 
+/**
+ * Modo «!» del panel (como en Claude Code): ejecuta la orden en el panel «Claude» del espacio y,
+ * al acabar, la deja adjunta (orden y salida) a lo próximo que se escriba en la conversación.
+ * Devuelve null si ha ido bien o el motivo si no.
+ */
+export async function ejecutarParaConversacion(cid: string, orden: string): Promise<string | null> {
+  const espacio = espacioDeConversacion(cid);
+  let id: string;
+  try {
+    id = await terminalClaude(espacio);
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+  const s = sesion(id)!;
+  if (s.bloques.entradaActual()?.trim()) return "el panel «Claude» tiene algo escrito a medias";
+  const antes = s.bloques.lista.at(-1);
+  await escribirPty(s.ptyId!, orden + "\r");
+  // Hasta 10 min; lo que tarde más se sigue viendo en el panel.
+  for (let i = 0; i < 4000; i++) {
+    await esperar(150);
+    if (antes && (antes.estado === "ok" || antes.estado === "mal")) {
+      const t = textoBloque(s.term, antes);
+      if (!t) continue;
+      useClaude.setState((x) => ({ adjuntos: { ...x.adjuntos, [cid]: t } }));
+      return null;
+    }
+  }
+  return "la orden sigue en marcha en el panel «Claude»";
+}
+
 async function atender(ll: Llamada): Promise<Resultado> {
   const espacio = espacioDe(ll.claude);
   if (!espacio) return { texto: "Esta conversación ya no tiene espacio en Kyu.", error: true };

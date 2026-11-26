@@ -16,6 +16,7 @@ mod git;
 mod grabar;
 mod mcp;
 mod memoria;
+mod permisos;
 mod pty;
 mod puertos;
 mod sesiones;
@@ -103,6 +104,11 @@ pub fn run() {
             claude::claude_parar,
             claude::claude_opcion,
             activas::claude_activas,
+            acp::acp_sesiones,
+            acp::acp_entrar,
+            permisos::permisos_leer,
+            permisos::permisos_quitar,
+            archivos::conversacion_exportar,
             claude::claude_cerrar,
             claude::claude_cerrar_todas,
             cuentas::claude_cuentas,

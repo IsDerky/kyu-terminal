@@ -42,6 +42,31 @@ pub fn archivo_guardar(ruta: String, contenido: String) -> Result<(), String> {
     std::fs::write(&ruta, contenido).map_err(|e| e.to_string())
 }
 
+/// Guarda una conversación exportada en Documentos\Kyu\conversaciones y devuelve la ruta.
+#[tauri::command]
+pub fn conversacion_exportar(nombre: String, contenido: String) -> Result<String, String> {
+    let dir = dirs::document_dir()
+        .or_else(dirs::home_dir)
+        .ok_or("no encuentro la carpeta Documentos")?
+        .join("Kyu")
+        .join("conversaciones");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // Sin caracteres que Windows no admite en un nombre.
+    let limpio: String = nombre
+        .chars()
+        .map(|c| {
+            if "<>:\"/\\|?*".contains(c) || c.is_control() {
+                '-'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let ruta = dir.join(format!("{}.md", limpio.trim()));
+    std::fs::write(&ruta, contenido).map_err(|e| e.to_string())?;
+    Ok(ruta.display().to_string())
+}
+
 /// Borra un archivo (no carpetas): «Deshacer» de un archivo que creó Claude.
 #[tauri::command]
 pub fn archivo_borrar(ruta: String) -> Result<(), String> {

@@ -1,7 +1,7 @@
 // Lista de tareas del agente (encima de la caja) y lo que deja en segundo plano.
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Circle, ListChecks, Loader2 } from "lucide-react";
-import type { Conversacion } from "../lib/claude";
+import { Check, ChevronDown, ChevronUp, Circle, ListChecks, Loader2, Square } from "lucide-react";
+import { pararFondo, type Conversacion } from "../lib/claude";
 import { useKyu } from "../lib/estado";
 import type { Tarea } from "../lib/nucleo";
 
@@ -38,12 +38,13 @@ export function BarraTareas({ tareas, className = "" }: { tareas: Tarea[]; class
 }
 
 /** En una herramienta lanzada en segundo plano: cuánto lleva o cómo acabó, y su salida. */
-export function EtiquetaFondo({ fondo }: { fondo: { desde: number; estado?: string; salida?: string | null } }) {
+export function EtiquetaFondo({ cid, fondo }: { cid: string; fondo: { id: string; desde: number; estado?: string; salida?: string | null } }) {
   const acabada = !!fondo.estado;
   const mal = acabada && fondo.estado !== "completed";
   return (
     <span className="ml-auto flex flex-none items-center gap-1.5 text-[11px] text-muy">
       {acabada ? (mal ? `segundo plano · ${fondo.estado}` : "segundo plano · acabada") : <>segundo plano · <Cronometro desde={fondo.desde} /></>}
+      {!acabada && <BotonParar cid={cid} tarea={fondo.id} />}
       {fondo.salida && (
         <button
           type="button"
@@ -54,6 +55,30 @@ export function EtiquetaFondo({ fondo }: { fondo: { desde: number; estado?: stri
           Ver salida
         </button>
       )}
+    </span>
+  );
+}
+
+/** Para algo que Claude dejó en segundo plano. Es un span: va dentro de filas que ya son botón. */
+export function BotonParar({ cid, tarea }: { cid: string; tarea: string }) {
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      title="Parar esto (sigue la conversación)"
+      onClick={(e) => {
+        e.stopPropagation();
+        void pararFondo(cid, tarea);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.stopPropagation();
+          void pararFondo(cid, tarea);
+        }
+      }}
+      className="grid size-4 flex-none cursor-pointer place-items-center rounded text-muy hover:bg-hover hover:text-mal"
+    >
+      <Square size={9} strokeWidth={2.4} />
     </span>
   );
 }

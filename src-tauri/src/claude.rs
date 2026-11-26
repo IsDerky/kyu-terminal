@@ -110,6 +110,15 @@ pub enum Evento {
     },
     /// La conversación de ACP reanudada ya está cargada: se puede escribir.
     Cargada,
+    /// Título de la conversación (lo pone el agente ACP o lo genera Claude Code).
+    Titulo {
+        texto: String,
+    },
+    /// Plan o cuota de la cuenta del agente ACP («Antigravity Starter Quota») y dónde mejorarlo.
+    PlanAgente {
+        nombre: String,
+        enlace: Option<String>,
+    },
     /// Lista de tareas del agente (TodoWrite de Claude, `plan` de ACP), entera cada vez:
     /// [{texto, activo, estado: pending|in_progress|completed}].
     Tareas {

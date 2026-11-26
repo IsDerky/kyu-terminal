@@ -12,9 +12,9 @@ import VistaArbol from "./VistaArbol";
 const PanelClaude = lazy(() => import("./PanelClaude"));
 const VistaCambios = lazy(() => import("./VistaCambios"));
 const VistaProblemas = lazy(() => import("./VistaProblemas"));
-import { IconoArchivo, IconoPerfil, Mascota } from "./iconos";
+import { IconoAgente, IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
-import { ARRASTRE_RUTA, espacioDe, useClaude } from "../lib/claude";
+import { ARRASTRE_RUTA, espacioDe, nombreAgente, useClaude } from "../lib/claude";
 import { useActividad } from "../lib/actividad";
 
 /** Punto en la pestaña: ámbar que late mientras corre algo; verde o rojo si acabó sin
@@ -167,7 +167,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                 ) : it.tipo === "arbol" ? (
                   <FolderTree size={12} strokeWidth={1.8} className="flex-none" />
                 ) : it.tipo === "claude" ? (
-                  <Mascota alto={9} />
+                  <IconoPestanaClaude cid={it.cid} />
                 ) : it.tipo === "cambios" ? (
                   <GitCommitHorizontal size={12} strokeWidth={1.8} className="flex-none" />
                 ) : it.tipo === "problemas" ? (
@@ -308,10 +308,14 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
 /** Nombre de la pestaña de una conversación: su primer mensaje, o «Claude» si está vacía. */
 function NombreConversacion({ cid }: { cid: string }) {
   const titulo = useClaude((s) => {
-    const primero = s.conversaciones[cid]?.entradas.find((e) => e.tipo === "tu");
+    const c = s.conversaciones[cid];
+    // El título que puso el agente o generó Claude manda sobre el primer mensaje.
+    if (c?.titulo) return c.titulo.slice(0, 40);
+    const primero = c?.entradas.find((e) => e.tipo === "tu");
     return primero?.tipo === "tu" ? primero.texto.split("\n")[0].slice(0, 40) : "";
   });
-  return <>{titulo || "Claude"}</>;
+  const quien = useClaude((s) => nombreAgente(s.conversaciones[cid]));
+  return <>{titulo || quien}</>;
 }
 
 function ZonaSoltar({ zona }: { zona: Zona }) {
@@ -346,4 +350,10 @@ function BotonBarra({
       {children}
     </button>
   );
+}
+
+/** Icono de la pestaña de una conversación: el de quien contesta en ella. */
+function IconoPestanaClaude({ cid }: { cid: string }) {
+  const agente = useClaude((s) => s.conversaciones[cid]?.agente);
+  return <IconoAgente agente={agente} alto={9} />;
 }

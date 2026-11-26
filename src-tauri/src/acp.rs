@@ -376,7 +376,7 @@ fn atender(v: &Value, e: &mut Estado, entrada: &Mutex<ChildStdin>, cwd: &str) ->
                     // -32000 = auth_required: falta entrar con la cuenta.
                     let texto = if error["code"].as_i64() == Some(-32000) {
                         format!(
-                            "{} no tiene la sesión iniciada. Abre una terminal y ejecuta `agy acp --login` para entrar con tu cuenta de Google; luego vuelve a escribir aquí.",
+                            "{} no tiene la sesión iniciada. Pulsa «Entrar» abajo (o ejecuta `agy acp --login`) para entrar con tu cuenta de Google; luego vuelve a escribir aquí.",
                             e.agente
                         )
                     } else {
@@ -476,6 +476,15 @@ fn empezar(
     sal: &mut Vec<Evento>,
 ) {
     e.sesion = Some(sesion.clone());
+    // Plan de la cuenta (Antigravity: «Antigravity Starter Quota»).
+    if let Some(n) = r["_meta"]["antigravity"]["tier"]["name"].as_str() {
+        sal.push(Evento::PlanAgente {
+            nombre: n.to_string(),
+            enlace: r["_meta"]["antigravity"]["tier"]["upgradeUri"]
+                .as_str()
+                .map(String::from),
+        });
+    }
     e.opciones = r["configOptions"].as_array().cloned().unwrap_or_default();
     if e.opciones.is_empty() {
         // Sin configOptions: el nombre del modelo de `models`, si lo hay.
@@ -693,6 +702,11 @@ fn actualizar(u: &Value, e: &mut Estado, sal: &mut Vec<Evento>) {
             sal.push(Evento::Tareas {
                 tareas: Value::Array(l),
             });
+        }
+        "session_info_update" => {
+            if let Some(t) = u["title"].as_str().filter(|t| !t.is_empty()) {
+                sal.push(Evento::Titulo { texto: t.into() });
+            }
         }
         "available_commands_update" => {
             let comandos: Vec<Value> = u["availableCommands"]
@@ -936,6 +950,133 @@ impl Sesion {
     pub fn matar(&mut self) {
         let _ = self.hijo.kill();
     }
+}
+
+/// Ruta del programa de un agente conocido.
+fn programa_de(agente: &str) -> Result<(&'static str, PathBuf), String> {
+    let (_, nombre, programa, _) = AGENTES
+        .iter()
+        .find(|a| a.0 == agente)
+        .ok_or_else(|| format!("no conozco el agente «{agente}»"))?;
+    let ruta = buscar(programa).ok_or_else(|| {
+        format!("no encuentro {nombre} ({programa}); instálalo y vuelve a probar")
+    })?;
+    Ok((nombre, ruta))
+}
+
+#[derive(serde::Serialize)]
+pub struct SesionAgente {
+    id: String,
+    titulo: String,
+    carpeta: Option<String>,
+    /// Fecha ISO de la última actividad.
+    fecha: Option<String>,
+}
+
+/// Conversaciones guardadas del agente (`session/list`): lo arranca un momento, pregunta y lo
+/// cierra. La más reciente primero.
+fn listar(agente: &str, carpeta: &str) -> Result<Vec<SesionAgente>, String> {
+    let (_, ruta) = programa_de(agente)?;
+    let args = AGENTES
+        .iter()
+        .find(|a| a.0 == agente)
+        .map(|a| a.3)
+        .unwrap_or(&[]);
+    let mut cmd = Command::new(&ruta);
+    cmd.args(args)
+        .current_dir(carpeta)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let mut hijo = cmd.spawn().map_err(|e| e.to_string())?;
+    let mut entrada = hijo.stdin.take().ok_or("sin stdin")?;
+    let salida = hijo.stdout.take().ok_or("sin stdout")?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for linea in BufReader::new(salida).lines().map_while(Result::ok) {
+            if let Ok(v) = serde_json::from_str::<Value>(&linea)
+                && tx.send(v).is_err()
+            {
+                return;
+            }
+        }
+    });
+    let mut pedir = |id: u64, metodo: &str, params: Value| {
+        writeln!(
+            entrada,
+            "{}",
+            json!({ "jsonrpc": "2.0", "id": id, "method": metodo, "params": params })
+        )
+        .and_then(|_| entrada.flush())
+    };
+    let r = (|| {
+        pedir(1, "initialize", json!({ "protocolVersion": 1, "clientCapabilities": { "fs": { "readTextFile": false, "writeTextFile": false }, "terminal": false } }))
+            .map_err(|e| e.to_string())?;
+        let limite = Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let falta = limite.saturating_duration_since(Instant::now());
+            let v = rx
+                .recv_timeout(falta)
+                .map_err(|_| "el agente no ha contestado".to_string())?;
+            match v["id"].as_u64() {
+                Some(1) => pedir(2, "session/list", json!({ "cwd": carpeta }))
+                    .map_err(|e| e.to_string())?,
+                Some(2) if !v["error"].is_null() => return Err(mensaje(&v["error"])),
+                Some(2) => return Ok(v["result"]["sessions"].clone()),
+                _ => {}
+            }
+        }
+    })();
+    let _ = hijo.kill();
+    let mut l: Vec<SesionAgente> = r?
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|s| SesionAgente {
+            id: s["sessionId"].as_str().unwrap_or("").to_string(),
+            titulo: s["title"]
+                .as_str()
+                .unwrap_or("Conversación sin título")
+                .to_string(),
+            carpeta: s["cwd"].as_str().map(ruta_local),
+            fecha: s["updatedAt"].as_str().map(String::from),
+        })
+        .filter(|s| !s.id.is_empty())
+        .collect();
+    l.sort_by(|a, b| b.fecha.cmp(&a.fecha));
+    Ok(l)
+}
+
+#[tauri::command]
+pub async fn acp_sesiones(agente: String, carpeta: String) -> Result<Vec<SesionAgente>, String> {
+    tauri::async_runtime::spawn_blocking(move || listar(&agente, &carpeta))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Abre una consola con el inicio de sesión del agente (`agy acp --login`: el navegador hace el resto).
+#[tauri::command]
+pub fn acp_entrar(agente: String) -> Result<(), String> {
+    let (_, ruta) = programa_de(&agente)?;
+    let mut cmd = Command::new(&ruta);
+    match agente.as_str() {
+        "antigravity" => cmd.args(["acp", "--login"]),
+        _ => &mut cmd,
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+        cmd.creation_flags(CREATE_NEW_CONSOLE);
+    }
+    cmd.spawn()
+        .map(|_| ())
+        .map_err(|e| format!("no se pudo abrir el inicio de sesión: {e}"))
 }
 
 #[cfg(test)]

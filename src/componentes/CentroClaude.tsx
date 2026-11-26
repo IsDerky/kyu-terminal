@@ -18,7 +18,7 @@ import {
 import { useKyu } from "../lib/estado";
 import { claudeActivas, type SesionActiva } from "../lib/nucleo";
 import { nombreEspacio } from "./BarraTitulo";
-import { avance, BarraTareas, Cronometro, tiempo } from "./Tareas";
+import { avance, BarraTareas, BotonParar, Cronometro, tiempo } from "./Tareas";
 
 type Grupo = "trabajando" | "esperan" | "acabadas" | "vacias";
 
@@ -274,6 +274,7 @@ function Fila({ cid, c, espacio, onClick }: { cid: string; c: Conversacion; espa
                 <span className="ml-auto flex-none text-muy">
                   <Cronometro desde={f.desde} />
                 </span>
+                {!c.agente && <BotonParar cid={cid} tarea={f.id} />}
               </span>
             ))}
           </span>
