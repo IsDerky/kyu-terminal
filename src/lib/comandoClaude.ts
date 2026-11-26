@@ -80,9 +80,22 @@ function encaja(t: Terminal, d: Destino): boolean {
     const re = new RegExp(`^ssh(?:\\.exe)?\\s+(?:-\\S+\\s+)*(?:[\\w.-]+@)?${d.host.replace(/[.]/g, "\\.")}(?:\\s|$)`, "i");
     return corre !== null && re.test(corre.trim());
   }
-  // En local: la shell tiene que estar libre (con el prompt delante).
-  if (corre !== null) return false;
-  return d.tipo === "wsl" ? esWsl(t.perfil) : esPowershell(t.perfil);
+  // `wsl` lanzado a mano desde PowerShell: el bash de dentro no manda marcas, así que para
+  // Kyu sigue «corriendo `wsl`» (como con ssh). Esa pestaña vale para órdenes de WSL.
+  if (corre !== null) return d.tipo === "wsl" && WSL_A_MANO.test(corre.trim());
+  // Una pestaña de PowerShell donde se ha entrado con `wsl` es WSL a todos los efectos: su
+  // prompt manda una carpeta de Linux. Ahí no se proponen órdenes de PowerShell.
+  const enLinux = dentroDeLinux(s);
+  return d.tipo === "wsl" ? esWsl(t.perfil) || enLinux : esPowershell(t.perfil) && !enLinux;
+}
+
+const WSL_A_MANO = /^(?:wsl|ubuntu|debian)(?:\.exe)?(?:\s+(?:-d|--distribution)\s+\S+)?\s*$/i;
+
+/** La última carpeta que mandó la shell es de Linux (/home/…, /mnt/c/…): estamos en WSL. */
+function dentroDeLinux(s: Sesion): boolean {
+  if (!navigator.userAgent.includes("Windows")) return false;
+  const ruta = [...s.bloques.lista].reverse().find((b) => b.ruta)?.ruta;
+  return !!ruta && ruta.startsWith("/");
 }
 
 /** Terminal donde va: primero en el espacio de la conversación, luego en cualquiera. */
@@ -97,7 +110,9 @@ function buscarTerminal(espacio: string, d: Destino): string | null {
 
 function preparar(cid: string, entrada: number, comando: string, destino: Destino) {
   const item = buscarTerminal(espacioDe(cid), destino);
-  if (item) sesion(item)?.auto?.proponer(comando, destino.tipo !== "ssh");
+  // Sin marcas de la shell (ssh, o `wsl` a mano) la propuesta se sigue por el cursor.
+  const s = item ? sesion(item) : undefined;
+  if (s) s.auto?.proponer(comando, destino.tipo !== "ssh" && enMarcha(s) === null);
   poner(cid, { comando, destino, item, entrada });
 }
 
