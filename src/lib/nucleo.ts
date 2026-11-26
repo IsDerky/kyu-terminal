@@ -169,11 +169,42 @@ export type EventoClaude =
   | { tipo: "comandos"; comandos: { name: string; description: string; argumentHint?: string }[] }
   | { tipo: "mensajeTuyo"; texto: string }
   | { tipo: "cargada" }
+  | { tipo: "tareas"; tareas: Tarea[] }
+  | { tipo: "tareaNueva"; herramienta: string; texto: string; activo: string | null }
+  | { tipo: "tareaId"; herramienta: string; id: string }
+  | { tipo: "tareaCambio"; id: string; estado: string | null; texto: string | null; activo: string | null }
+  | { tipo: "segundoPlano"; tareas: { id: string; tipo: string; descripcion: string }[] }
+  | { tipo: "tareaFondo"; id: string; herramienta: string | null; descripcion: string }
+  | { tipo: "tareaFondoFin"; id: string; herramienta: string | null; estado: string; salida: string | null }
   | { tipo: "sugerencia"; texto: string }
   | { tipo: "limite"; estado: string; sesion: Ventana | null; semana: Ventana | null }
   | { tipo: "fin"; coste: number; error: boolean; duracion: number; resultado: string | null }
   | { tipo: "error"; texto: string }
   | { tipo: "cerrado" };
+
+/** Una tarea de la lista del agente (TodoWrite de Claude, plan de ACP). */
+export interface Tarea {
+  texto: string;
+  /** Cómo se dice mientras se hace («Escribiendo la migración»). */
+  activo: string | null;
+  estado: "pending" | "in_progress" | "completed" | string;
+  /** TaskCreate: id que le dio Claude Code y la herramienta que la creó (hasta tener el id). */
+  id?: string;
+  herramienta?: string;
+}
+
+/** Sesión de Claude Code trabajando fuera de Kyu (escribió en su .jsonl hace poco). */
+export interface SesionActiva {
+  id: string;
+  carpeta: string | null;
+  titulo: string;
+  herramienta: string | null;
+  fecha: number;
+  cuenta: string;
+}
+
+/** Sesiones de Claude con actividad en los últimos 2 min, sin las de `excluir` (las de Kyu). */
+export const claudeActivas = (excluir: string[]) => invoke<SesionActiva[]>("claude_activas", { excluir });
 
 /** Opción de un agente ACP (modelo, razonamiento, modo…) con su valor actual. */
 export interface OpcionAgente {

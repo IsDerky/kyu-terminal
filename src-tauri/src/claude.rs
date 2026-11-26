@@ -110,6 +110,47 @@ pub enum Evento {
     },
     /// La conversación de ACP reanudada ya está cargada: se puede escribir.
     Cargada,
+    /// Lista de tareas del agente (TodoWrite de Claude, `plan` de ACP), entera cada vez:
+    /// [{texto, activo, estado: pending|in_progress|completed}].
+    Tareas {
+        tareas: Value,
+    },
+    /// TaskCreate (Claude Code 2.1): una tarea nueva; su id llega luego con `TareaId`.
+    TareaNueva {
+        herramienta: String,
+        texto: String,
+        activo: Option<String>,
+    },
+    /// El id que Claude Code le dio a la tarea creada por esa herramienta.
+    TareaId {
+        herramienta: String,
+        id: String,
+    },
+    /// TaskUpdate: lo que cambia de una tarea (estado «deleted» = quitarla).
+    TareaCambio {
+        id: String,
+        estado: Option<String>,
+        texto: Option<String>,
+        activo: Option<String>,
+    },
+    /// Lo que corre en segundo plano ahora (`background_tasks_changed`), la lista entera:
+    /// [{id, tipo, descripcion}].
+    SegundoPlano {
+        tareas: Value,
+    },
+    /// Algo empieza en segundo plano; `herramienta` = la que lo lanzó (Bash, Agent…).
+    TareaFondo {
+        id: String,
+        herramienta: Option<String>,
+        descripcion: String,
+    },
+    /// Algo en segundo plano ha acabado: completed, failed, killed… y dónde está su salida.
+    TareaFondoFin {
+        id: String,
+        herramienta: Option<String>,
+        estado: String,
+        salida: Option<String>,
+    },
     /// Uso de la cuenta (`rate_limit_event`): sesión de 5 h y semana, de 0 a 1, y cuándo se
     /// reinician (segundos Unix). `estado`: allowed, allowed_warning o rejected.
     Limite {
@@ -588,6 +629,29 @@ pub fn claude_cerrar_todas(claudes: State<'_, Claudes>) {
     }
 }
 
+/// «Task #3 created successfully: …» (resultado de TaskCreate) → «3».
+fn id_tarea_creada(contenido: &Value) -> Option<String> {
+    let t = match contenido {
+        Value::String(s) => s.as_str(),
+        Value::Array(l) => l.iter().find_map(|b| b["text"].as_str())?,
+        _ => return None,
+    };
+    let resto = t.strip_prefix("Task #")?;
+    let id: String = resto.chars().take_while(char::is_ascii_digit).collect();
+    (!id.is_empty() && resto[id.len()..].starts_with(" created")).then_some(id)
+}
+
+/// La entrada de TodoWrite → [{texto, activo, estado}].
+fn tareas_de_todo(input: &Value) -> Value {
+    let l: Vec<Value> = input["todos"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|t| json!({ "texto": t["content"], "activo": t["activeForm"], "estado": t["status"] }))
+        .collect();
+    Value::Array(l)
+}
+
 /// Un mensaje de stream-json → los eventos que interesan al panel.
 fn traducir(v: &Value) -> Vec<Evento> {
     let tipo = v["type"].as_str().unwrap_or("");
@@ -598,6 +662,30 @@ fn traducir(v: &Value) -> Vec<Evento> {
             modelo: texto(&v["model"]),
             sesion: texto(&v["session_id"]),
             modo: texto(&v["permissionMode"]),
+        }),
+        "system" if v["subtype"] == "background_tasks_changed" => {
+            let tareas: Vec<Value> = v["tasks"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|t| json!({ "id": t["task_id"], "tipo": t["task_type"], "descripcion": t["description"] }))
+                .collect();
+            sal.push(Evento::SegundoPlano {
+                tareas: Value::Array(tareas),
+            });
+        }
+        "system" if v["subtype"] == "task_started" && v["is_backgrounded"] != false => {
+            sal.push(Evento::TareaFondo {
+                id: texto(&v["task_id"]),
+                herramienta: v["tool_use_id"].as_str().map(String::from),
+                descripcion: texto(&v["description"]),
+            })
+        }
+        "system" if v["subtype"] == "task_notification" => sal.push(Evento::TareaFondoFin {
+            id: texto(&v["task_id"]),
+            herramienta: v["tool_use_id"].as_str().map(String::from),
+            estado: texto(&v["status"]),
+            salida: v["output_file"].as_str().map(String::from),
         }),
         "system" if v["subtype"] == "status" => sal.push(Evento::Estado {
             estado: v["status"].as_str().map(String::from),
@@ -678,6 +766,29 @@ fn traducir(v: &Value) -> Vec<Evento> {
                     }
                     Some("tool_use") => {
                         let nombre = texto(&bloque["name"]);
+                        let input = &bloque["input"];
+                        let cadena = |k: &str| input[k].as_str().map(String::from);
+                        match nombre.as_str() {
+                            "TodoWrite" => sal.push(Evento::Tareas {
+                                tareas: tareas_de_todo(input),
+                            }),
+                            "TaskCreate" => sal.push(Evento::TareaNueva {
+                                herramienta: texto(&bloque["id"]),
+                                texto: cadena("subject").unwrap_or_default(),
+                                activo: cadena("activeForm"),
+                            }),
+                            "TaskUpdate" => sal.push(Evento::TareaCambio {
+                                // A veces llega como número.
+                                id: match &input["taskId"] {
+                                    Value::String(s) => s.clone(),
+                                    otro => otro.to_string(),
+                                },
+                                estado: cadena("status"),
+                                texto: cadena("subject"),
+                                activo: cadena("activeForm"),
+                            }),
+                            _ => {}
+                        }
                         let (ruta, antes, nuevo) = foto_antes(&nombre, &bloque["input"]);
                         sal.push(Evento::Herramienta {
                             id: texto(&bloque["id"]),
@@ -702,6 +813,12 @@ fn traducir(v: &Value) -> Vec<Evento> {
             }
             for bloque in v["message"]["content"].as_array().into_iter().flatten() {
                 if bloque["type"] == "tool_result" {
+                    if let Some(id) = id_tarea_creada(&bloque["content"]) {
+                        sal.push(Evento::TareaId {
+                            herramienta: texto(&bloque["tool_use_id"]),
+                            id,
+                        });
+                    }
                     sal.push(Evento::ResultadoHerramienta {
                         id: texto(&bloque["tool_use_id"]),
                         error: bloque["is_error"].as_bool().unwrap_or(false),
@@ -850,6 +967,22 @@ pub(crate) fn buscar_programa(configurado: Option<&str>) -> Option<PathBuf> {
 #[cfg(test)]
 mod pruebas {
     use super::*;
+
+    #[test]
+    fn id_de_la_tarea_creada() {
+        assert_eq!(
+            id_tarea_creada(&json!("Task #12 created successfully: Hola")).as_deref(),
+            Some("12")
+        );
+        assert_eq!(
+            id_tarea_creada(
+                &json!([{ "type": "text", "text": "Task #3 created successfully: x" }])
+            )
+            .as_deref(),
+            Some("3")
+        );
+        assert_eq!(id_tarea_creada(&json!("Task #3 updated")), None);
+    }
 
     #[test]
     fn lee_el_limite_de_la_cuenta() {

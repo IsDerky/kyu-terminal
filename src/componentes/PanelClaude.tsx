@@ -43,6 +43,7 @@ import {
   MenuComandos,
   SelectorCuenta,
 } from "./ControlesClaude";
+import { EtiquetaFondo, TiraTareas } from "./Tareas";
 import { ListaSesiones, mencionEnCursor, MenuArchivos, Miniaturas, Recientes } from "./AdjuntosClaude";
 import { imagenesDe, type ImagenAdjunta } from "../lib/imagenes";
 import { buscarArchivos } from "../lib/nucleo";
@@ -438,8 +439,11 @@ function VistaEntrada({ entrada: e, espacio, carpeta }: { entrada: Entrada; espa
             <span title={e.resumen} className="min-w-0 truncate font-mono text-[11.5px]">
               {relativa(e.resumen, carpeta)}
             </span>
-            <span className="ml-auto flex-none">
-              {e.estado === "ejecutando" ? (
+            {e.fondo && <EtiquetaFondo fondo={e.fondo} />}
+            <span className={e.fondo ? "flex-none" : "ml-auto flex-none"}>
+              {e.fondo && !e.fondo.estado ? (
+                <Loader2 size={13} className="animate-spin text-claude2" />
+              ) : e.estado === "ejecutando" ? (
                 <Loader2 size={13} className="animate-spin text-muy" />
               ) : e.estado === "ok" ? (
                 <Check size={13} className="text-ok" />
@@ -683,6 +687,7 @@ function CajaEntrada({
       <div className={grande ? "mx-auto w-full max-w-[780px]" : undefined}>
       <Cola espacio={espacio} alEditar={editarDeCola} />
       {/* Pegado al borde de arriba de la caja, como una pestaña. */}
+      <TiraTareas c={c} />
       {!c.agente && <AvisoLimite espacio={espacio} c={c} />}
       <div
         // Una pestaña de archivo soltada sobre la caja queda como @ruta (en vez de moverse).

@@ -536,7 +536,9 @@ fn poner_opcion(
 
 /// Los mensajes en cola, si ya hay sesión y no queda ninguna opción por aplicar.
 fn soltar_cola(e: &mut Estado, entrada: &Mutex<ChildStdin>, sal: &mut Vec<Evento>) {
-    let Some(sesion) = e.sesion.clone() else { return };
+    let Some(sesion) = e.sesion.clone() else {
+        return;
+    };
     if e.ajustando > 0 {
         return;
     }
@@ -640,7 +642,11 @@ fn actualizar(u: &Value, e: &mut Estado, sal: &mut Vec<Evento>) {
         soltar_tuyo(e, sal);
         let repetido = matches!(
             tipo,
-            "agent_message_chunk" | "agent_thought_chunk" | "tool_call" | "tool_call_update" | "plan"
+            "agent_message_chunk"
+                | "agent_thought_chunk"
+                | "tool_call"
+                | "tool_call_update"
+                | "plan"
         );
         if repetido && e.arranque.callado {
             return;
@@ -676,6 +682,18 @@ fn actualizar(u: &Value, e: &mut Estado, sal: &mut Vec<Evento>) {
                 });
             }
         }
+        // Plan del agente: la lista entera cada vez.
+        "plan" => {
+            let l: Vec<Value> = u["entries"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|t| json!({ "texto": t["content"], "activo": Value::Null, "estado": t["status"] }))
+                .collect();
+            sal.push(Evento::Tareas {
+                tareas: Value::Array(l),
+            });
+        }
         "available_commands_update" => {
             let comandos: Vec<Value> = u["availableCommands"]
                 .as_array()
@@ -704,7 +722,11 @@ fn actualizar(u: &Value, e: &mut Estado, sal: &mut Vec<Evento>) {
             let Some(m) = u["currentModeId"].as_str() else {
                 return;
             };
-            match e.opciones.iter_mut().find(|o| o["category"] == "mode" || o["id"] == "mode") {
+            match e
+                .opciones
+                .iter_mut()
+                .find(|o| o["category"] == "mode" || o["id"] == "mode")
+            {
                 Some(o) => {
                     o["currentValue"] = json!(m);
                     avisar_opciones(e, sal);
@@ -964,7 +986,11 @@ mod pruebas {
             otro => panic!("{otro:?}"),
         }
         match &sal[1] {
-            Evento::Iniciado { modelo, modo, sesion } => {
+            Evento::Iniciado {
+                modelo,
+                modo,
+                sesion,
+            } => {
                 assert_eq!(modelo, "Gemini 4 (High)");
                 assert_eq!(modo, "plan");
                 assert_eq!(sesion, "s1");

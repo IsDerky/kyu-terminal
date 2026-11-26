@@ -45,7 +45,7 @@ pub struct SesionGuardada {
 }
 
 /// Los primeros y los últimos `n` bytes del archivo, por líneas enteras.
-fn trozos(ruta: &Path, n: u64) -> (String, String) {
+pub(crate) fn trozos(ruta: &Path, n: u64) -> (String, String) {
     let Ok(mut f) = File::open(ruta) else {
         return Default::default();
     };
@@ -128,7 +128,7 @@ fn texto_usuario(v: &Value) -> Option<String> {
     Some(t.to_string())
 }
 
-fn titulo_de(principio: &str, fin: &str) -> Option<String> {
+pub(crate) fn titulo_de(principio: &str, fin: &str) -> Option<String> {
     let lineas = |s: &str| {
         s.lines()
             .filter_map(|l| serde_json::from_str::<Value>(l).ok())

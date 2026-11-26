@@ -14,6 +14,7 @@ import {
   responderClaude,
   type EventoClaude,
   type OpcionAgente,
+  type Tarea,
 } from "./nucleo";
 import { ajustesGuardados, catalogoAgente, guardarAjustes, guardarCatalogoAgente, opcionesVistas, opcionPor } from "./agentes";
 import { paneles, useKyu } from "./estado";
@@ -67,6 +68,8 @@ export type Entrada =
       ruta?: string;
       /** Subagente (Task): cuántas herramientas lleva y la última. */
       pasos?: number;
+      /** Lanzada en segundo plano: desde cuándo y, al acabar, cómo y dónde está su salida. */
+      fondo?: { id: string; desde: number; estado?: string; salida?: string | null };
       ultimoPaso?: { nombre: string; resumen: string };
     }
   | {
@@ -131,6 +134,10 @@ export interface Conversacion {
   ventana: number | null;
   /** Reanudando una conversación de ACP: el agente la está repitiendo. */
   cargando: boolean;
+  /** Lista de tareas del agente (la última que escribió). */
+  tareas: Tarea[];
+  /** Lo que corre ahora en segundo plano, con desde cuándo. */
+  fondo: { id: string; tipo: string; descripcion: string; desde: number }[];
   claudeId: number | null;
   /** Cambia con cada proceso: los eventos de uno ya cerrado se ignoran. */
   generacion: number;
@@ -235,6 +242,8 @@ export const vacia = (prefs: Preferencias = useClaude.getState().prefs): Convers
   comandosAgente: null,
   ventana: null,
   cargando: false,
+  tareas: [],
+  fondo: [],
   claudeId: null,
   generacion: 0,
   carpeta: null,
@@ -564,6 +573,43 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
       cambiar(espacio, () => ({ comandosAgente: ev.comandos }));
       return;
     }
+    case "tareas":
+      cambiar(espacio, () => ({ tareas: ev.tareas }));
+      return;
+    case "tareaNueva":
+      cambiar(espacio, (c) => ({ tareas: [...c.tareas, { texto: ev.texto, activo: ev.activo, estado: "pending", herramienta: ev.herramienta }] }));
+      return;
+    case "tareaId":
+      cambiar(espacio, (c) => ({ tareas: c.tareas.map((t) => (t.herramienta === ev.herramienta ? { ...t, id: ev.id } : t)) }));
+      return;
+    case "tareaCambio":
+      cambiar(espacio, (c) => ({
+        tareas:
+          ev.estado === "deleted"
+            ? c.tareas.filter((t) => t.id !== ev.id)
+            : c.tareas.map((t) =>
+                t.id === ev.id ? { ...t, estado: ev.estado ?? t.estado, texto: ev.texto ?? t.texto, activo: ev.activo ?? t.activo } : t,
+              ),
+      }));
+      return;
+    case "segundoPlano":
+      cambiar(espacio, (c) => ({
+        fondo: ev.tareas.map((t) => ({ ...t, desde: c.fondo.find((x) => x.id === t.id)?.desde ?? Date.now() })),
+      }));
+      return;
+    case "tareaFondo":
+    case "tareaFondoFin": {
+      if (!ev.herramienta) return;
+      const fin = ev.tipo === "tareaFondoFin" ? { estado: ev.estado, salida: ev.salida } : {};
+      cambiar(espacio, (c) => ({
+        entradas: c.entradas.map((e) =>
+          e.tipo === "herramienta" && e.idHerramienta === ev.herramienta
+            ? { ...e, fondo: { id: ev.id, desde: e.fondo?.desde ?? Date.now(), ...e.fondo, ...fin } }
+            : e,
+        ),
+      }));
+      return;
+    }
     case "mensajeTuyo":
       añadir(espacio, { tipo: "tu", texto: ev.texto });
       return;
@@ -726,7 +772,8 @@ function alEvento(espacio: string, generacion: number, ev: EventoClaude) {
     case "cerrado":
       // Al volver a escribir se sigue la misma conversación (--resume), en la misma carpeta.
       // Con un agente ACP igual (session/load), sin que repita lo que ya se ve.
-      cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, cargando: false, reanudar: c.sesion }));
+      // Lo que corría en segundo plano muere con el proceso.
+      cambiar(espacio, (c) => ({ estado: "cerrado", claudeId: null, cargando: false, reanudar: c.sesion, fondo: [] }));
       // Cerrado a media respuesta: lo que esperaba en cola vuelve a la caja.
       parados.delete(espacio);
       devolverCola(espacio);

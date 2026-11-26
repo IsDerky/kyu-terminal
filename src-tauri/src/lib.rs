@@ -3,6 +3,7 @@
 //! del equipo (RAM) y habla con Claude Code.
 
 mod acp;
+mod activas;
 mod ajustes;
 mod arbol;
 mod archivos;
@@ -101,6 +102,7 @@ pub fn run() {
             claude::claude_responder,
             claude::claude_parar,
             claude::claude_opcion,
+            activas::claude_activas,
             claude::claude_cerrar,
             claude::claude_cerrar_todas,
             cuentas::claude_cuentas,
