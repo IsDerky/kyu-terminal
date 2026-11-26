@@ -449,12 +449,7 @@ function SelectorAgente({ espacio, c }: { espacio: string; c: Conversacion }) {
         ...Object.entries(AGENTES).map(([id, nombre]) => ({
           valor: id,
           titulo: nombre,
-          ayuda:
-            id === "antigravity"
-              ? "Antigravity CLI (agy): modelos de Google con tu cuenta"
-              : id === "gemini"
-                ? "Gemini CLI (gemini --acp), si lo tienes instalado"
-                : undefined,
+          ayuda: id === "antigravity" ? "Antigravity CLI (agy): modelos de Google con tu cuenta" : undefined,
         })),
       ]}
     />

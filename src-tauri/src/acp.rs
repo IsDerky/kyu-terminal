@@ -1,5 +1,4 @@
-//! Agentes que hablan ACP (Agent Client Protocol): Antigravity CLI (`agy acp`), Gemini CLI
-//! (`gemini --acp`) o cualquier otro. JSON-RPC 2.0 por stdio, una línea por mensaje.
+//! Agentes que hablan ACP (Agent Client Protocol): de momento Antigravity CLI (`agy acp`). JSON-RPC 2.0 por stdio, una línea por mensaje.
 //!
 //! Se traduce a los mismos `Evento` que Claude Code, así el panel sirve para los dos: los
 //! trozos de texto son `Parcial`, las herramientas `Herramienta` / `ResultadoHerramienta`, las
@@ -19,10 +18,7 @@ use tauri::ipc::Channel;
 use crate::claude::Evento;
 
 /// Agentes conocidos: id → (nombre para el panel, programa, argumentos).
-const AGENTES: &[(&str, &str, &str, &[&str])] = &[
-    ("antigravity", "Antigravity", "agy", &["acp"]),
-    ("gemini", "Gemini CLI", "gemini", &["--acp"]),
-];
+const AGENTES: &[(&str, &str, &str, &[&str])] = &[("antigravity", "Antigravity", "agy", &["acp"])];
 
 /// Lo que espera respuesta del agente (por id de JSON-RPC).
 enum Peticion {

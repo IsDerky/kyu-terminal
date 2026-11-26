@@ -227,7 +227,7 @@ pub struct Opciones {
     reanudar_en: Option<String>,
     /// Cuenta de kyu.toml (`cuentas_claude`); sin poner = la de siempre.
     cuenta: Option<String>,
-    /// Otro agente por ACP en vez de Claude Code («antigravity», «gemini»).
+    /// Otro agente por ACP en vez de Claude Code («antigravity»).
     agente: Option<String>,
     /// ACP: opciones elegidas antes de empezar (id de la opción → valor), p. ej. model o mode.
     ajustes: Option<HashMap<String, String>>,

@@ -125,7 +125,7 @@ type SinId<T> = T extends unknown ? Omit<T, "id"> : never;
 export type EstadoConv = "parado" | "arrancando" | "pensando" | "listo" | "cerrado";
 
 export interface Conversacion {
-  /** Otro agente por ACP en vez de Claude («antigravity», «gemini»); null = Claude. */
+  /** Otro agente por ACP en vez de Claude («antigravity»); null = Claude. */
   agente: string | null;
   /** Agente ACP: sus opciones tal como las tiene ahora (null = aún no ha arrancado). */
   opcionesAgente: OpcionAgente[] | null;
@@ -238,7 +238,7 @@ export interface EnCola {
 }
 
 /** Agentes por ACP que se pueden elegir en el panel (id → nombre). */
-export const AGENTES: Record<string, string> = { antigravity: "Antigravity", gemini: "Gemini CLI" };
+export const AGENTES: Record<string, string> = { antigravity: "Antigravity" };
 
 /** Quién contesta en la conversación: «Claude» o el nombre del agente. */
 export const nombreAgente = (c: Pick<Conversacion, "agente"> | undefined) =>
