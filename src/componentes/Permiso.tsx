@@ -73,7 +73,8 @@ function Que({ quien, nombre, herramienta: h, resumen }: { quien: string; nombre
   );
 }
 
-/** Las teclas solo se enseñan con el foco dentro del panel, que es cuando funcionan. */
+/** Las teclas solo se ven con el foco dentro del panel (cuando funcionan), pero su hueco está
+ *  siempre: si aparecieran al primer clic, los botones se moverían bajo el ratón. */
 function BotonPermiso({
   principal,
   tecla,
@@ -98,7 +99,7 @@ function BotonPermiso({
       {children}
       {tecla && (
         <kbd
-          className={`hidden rounded px-1 font-ui text-[10px] group-focus-within/claude:inline ${
+          className={`invisible rounded px-1 font-ui text-[10px] group-focus-within/claude:visible ${
             principal ? "bg-white/20 text-white" : "bg-hover text-muy"
           }`}
         >

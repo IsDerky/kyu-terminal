@@ -340,7 +340,7 @@ function BotonPlan({ principal, tecla, onClick, children }: { principal?: boolea
     >
       {children}
       {tecla && (
-        <kbd className={`hidden rounded px-1 font-ui text-[10px] group-focus-within/claude:inline ${principal ? "bg-white/20 text-white" : "bg-hover text-muy"}`}>
+        <kbd className={`invisible rounded px-1 font-ui text-[10px] group-focus-within/claude:visible ${principal ? "bg-white/20 text-white" : "bg-hover text-muy"}`}>
           {tecla}
         </kbd>
       )}
