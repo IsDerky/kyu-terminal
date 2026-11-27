@@ -19,7 +19,8 @@ export default function BarraRunbook({ cid, c }: { cid: string; c: Conversacion 
   const pasos = useMemo(() => pasosDe(texto), [texto]);
   const progreso = useRunbook((s) => (ultima && s.porConv[cid]?.entrada === ultima.id ? s.porConv[cid] : null));
   const [sinSalida, setSinSalida] = useState(false);
-  if (ocupado || !ultima || !esRunbook(texto, pasos)) return null;
+  const activo = useRunbook((s) => s.activo);
+  if (!activo || ocupado || !ultima || !esRunbook(texto, pasos)) return null;
   const i = progreso?.paso ?? 0;
   if (i >= pasos.length) return null;
   const paso = pasos[i];

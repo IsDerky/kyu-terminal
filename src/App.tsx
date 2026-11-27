@@ -24,6 +24,7 @@ import { configurarEditores, editor } from "./lib/editores";
 import { cerrarActual, cerrarItem, moverFoco } from "./lib/acciones";
 import { restaurarSesion, vigilarSesion } from "./lib/restaurar";
 import { vigilarComandos } from "./lib/comandoClaude";
+import { configurarRunbook } from "./lib/runbook";
 import { configurarLimite } from "./lib/gasto";
 import { preguntarPorSeleccion } from "./lib/seleccion";
 import { vigilarActualizaciones } from "./lib/actualizar";
@@ -80,6 +81,7 @@ export default function App() {
       configurarEditores(c.fuente, c.tema.fuente_tamano);
       configurarLimite(c.limite_diario);
       configurarClaude(c);
+      configurarRunbook(c.runbook);
       vigilarActualizaciones(c.actualizaciones);
       const porDefecto = c.perfiles[0]?.nombre ?? "";
       // Lo de la última vez; si no hay (o está apagado en Ajustes), un espacio nuevo.
@@ -228,6 +230,7 @@ export default function App() {
                 aplicarFuente(c.fuente, c.tema.fuente_tamano);
                 configurarLimite(c.limite_diario);
                 configurarClaude(c);
+                configurarRunbook(c.runbook);
                 vigilarActualizaciones(c.actualizaciones);
                 setConfig(c);
               })

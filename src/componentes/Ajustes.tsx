@@ -260,6 +260,12 @@ export default function Ajustes({ config, alCambiar }: { config: ConfigVista; al
               >
                 <Interruptor valor={a.sugerencias_claude} alCambiar={(v) => void guardar("sugerencias_claude", v ? null : false)} />
               </Campo>
+              <Campo
+                titulo="Pasos de Claude (runbook)"
+                detalle="Si una respuesta trae varias órdenes o «Paso N», una barra encima de la caja las va dando de una en una: Preparar, Hecho (adjunta la salida) y Saltar."
+              >
+                <Interruptor valor={a.runbook} alCambiar={(v) => void guardar("runbook", v ? true : null)} />
+              </Campo>
               <Campo titulo="Herramientas de Kyu" detalle="Claude puede ejecutar órdenes en un panel «Claude» a la vista (siempre con tu permiso) y leer tus terminales.">
                 <span className="text-[12px] text-ok">Activas</span>
               </Campo>

@@ -129,6 +129,7 @@ perfiles_ssh = true                     # un perfil por cada Host de ~/.ssh/conf
 aviso_segundos = 10                     # 0 = sin avisos
 limite_diario = 0                       # miles de tokens de salida de Claude al día; 0 = sin límite
 sugerencias_claude = true
+runbook = false                         # barra con los pasos de Claude encima de la caja
 
 # Si pones perfiles, sustituyen a los detectados.
 [[perfiles]]

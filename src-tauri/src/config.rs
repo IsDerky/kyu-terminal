@@ -42,6 +42,8 @@ pub struct Config {
     /// Respuesta que propone Claude Code tras cada turno, en gris en la caja del panel
     /// (Tab la usa). Sin poner = sí.
     pub sugerencias_claude: Option<bool>,
+    /// Barra de pasos (runbook) encima de la caja cuando Claude da varias órdenes. Sin poner = no.
+    pub runbook: Option<bool>,
     /// Cuentas de Claude entre las que elegir en el panel. Sin ninguna = la de siempre.
     pub cuentas_claude: Vec<CuentaClaude>,
     /// Cuentas de Antigravity en Windows (intercambio de credencial). Sin ninguna = la de siempre.
@@ -78,6 +80,10 @@ impl Config {
 
     pub fn sugerencias_claude(&self) -> bool {
         self.sugerencias_claude.unwrap_or(true)
+    }
+
+    pub fn runbook(&self) -> bool {
+        self.runbook.unwrap_or(false)
     }
 
     pub fn buscar_actualizaciones(&self) -> bool {
@@ -175,6 +181,7 @@ pub struct ConfigVista {
     /// Nombres de las cuentas de Antigravity (vacío = solo la de siempre, sin selector).
     cuentas_antigravity: Vec<String>,
     sugerencias_claude: bool,
+    runbook: bool,
     /// Buscar versión nueva al abrir (false en la portable: se actualiza a mano).
     actualizaciones: bool,
     portable: bool,
@@ -231,6 +238,7 @@ pub fn config() -> ConfigVista {
             .map(|c| c.nombre.clone())
             .collect(),
         sugerencias_claude: config.sugerencias_claude(),
+        runbook: config.runbook(),
         actualizaciones: config.buscar_actualizaciones() && carpeta_portable().is_none(),
         portable: carpeta_portable().is_some(),
         perfiles,

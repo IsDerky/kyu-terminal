@@ -47,7 +47,10 @@ interface Progreso {
   conSalida: number;
 }
 
-export const useRunbook = create<{ porConv: Record<string, Progreso> }>(() => ({ porConv: {} }));
+/** `activo` sale de Ajustes (runbook en kyu.toml); apagado, ni barra ni primer paso preparado. */
+export const useRunbook = create<{ activo: boolean; porConv: Record<string, Progreso> }>(() => ({ activo: false, porConv: {} }));
+
+export const configurarRunbook = (activo: boolean) => useRunbook.setState({ activo });
 
 export function progresoDe(cid: string, entrada: number): Progreso {
   const p = useRunbook.getState().porConv[cid];

@@ -38,6 +38,8 @@ export interface ConfigVista {
   cuentas_antigravity: string[];
   /** Respuesta propuesta por Claude tras cada turno. */
   sugerencias_claude: boolean;
+  /** Barra de pasos (runbook) cuando Claude da varias órdenes. */
+  runbook: boolean;
   /** Buscar versión nueva al abrir (false en la portable). */
   actualizaciones: boolean;
   portable: boolean;
@@ -120,6 +122,7 @@ export interface AjustesVista {
   perfiles_ssh: boolean;
   limite_diario: number;
   sugerencias_claude: boolean;
+  runbook: boolean;
   buscar_actualizaciones: boolean;
   portable: boolean;
   version: string;

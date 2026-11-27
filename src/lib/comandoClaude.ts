@@ -6,7 +6,7 @@ import { espacioDe, useClaude, type Conversacion } from "./claude";
 import { paneles, useKyu, type Item } from "./estado";
 import { escribirPty } from "./nucleo";
 import { perfilesConfigurados, sesion, type Sesion } from "./terminales";
-import { esRunbook, pasosDe } from "./runbook";
+import { esRunbook, pasosDe, useRunbook } from "./runbook";
 
 export type Destino = { tipo: "ssh"; host: string } | { tipo: "wsl" } | { tipo: "powershell" };
 
@@ -245,7 +245,7 @@ export function vigilarComandos(): () => void {
       hechos.add(clave);
       // Con pasos (runbook) se empieza por el primero; si no, el último comando.
       const pasos = pasosDe(ultima.texto);
-      if (esRunbook(ultima.texto, pasos)) {
+      if (useRunbook.getState().activo && esRunbook(ultima.texto, pasos)) {
         if (!pasos[0].codigo.includes("\n")) preparar(cid, ultima.id, pasos[0].codigo, pasos[0].destino);
         continue;
       }
