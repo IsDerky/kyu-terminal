@@ -58,6 +58,7 @@ import Permiso from "./Permiso";
 import { BotonVerCambios, PasosSubagente, Plan, Preguntas, preguntasDe, Razonamiento, ResumenCambios, VolverAqui } from "./TandaClaude";
 import { IconoAgente } from "./iconos";
 import { corto, useGasto } from "../lib/gasto";
+import AvisoContexto from "./AvisoContexto";
 
 
 const SIN_COMANDOS: Comando[] = [];
@@ -349,6 +350,7 @@ function ListaEntradas({ espacio, c, carpeta, grande }: { espacio: string; c: Co
           <Esperando arrancando={c.claudeId === null} />
         )}
         <ComandoPreparado cid={espacio} />
+        <AvisoContexto cid={espacio} c={c} />
         {c.estado === "cerrado" && (
           <p className="text-center text-[11.5px] text-muy">
             Claude se ha cerrado. Al escribir, sigue esta misma conversación.
