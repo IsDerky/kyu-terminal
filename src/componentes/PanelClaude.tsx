@@ -60,6 +60,7 @@ import { BotonVerCambios, PasosSubagente, Plan, Preguntas, preguntasDe, Razonami
 import { IconoAgente } from "./iconos";
 import { corto, useGasto } from "../lib/gasto";
 import AvisoContexto from "./AvisoContexto";
+import BarraRunbook from "./BarraRunbook";
 
 
 const SIN_COMANDOS: Comando[] = [];
@@ -241,6 +242,7 @@ export default function PanelClaude({
 
       <ListaEntradas espacio={espacio} c={c} carpeta={carpeta} grande />
 
+      <BarraRunbook cid={espacio} c={c} />
       <CajaEntrada enfocar={conFoco} grande espacio={espacio} c={c} carpeta={carpeta} ocupado={ocupado} permiso={permiso?.id ?? null} esPlan={permiso?.herramienta === "ExitPlanMode"} esPregunta={permiso?.herramienta === "AskUserQuestion"} />
 
       <footer className="relative flex h-7 flex-none items-center gap-2 border-t border-borde px-3.5 text-[11px] text-muy">

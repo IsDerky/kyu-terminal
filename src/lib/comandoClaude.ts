@@ -6,6 +6,7 @@ import { espacioDe, useClaude, type Conversacion } from "./claude";
 import { paneles, useKyu, type Item } from "./estado";
 import { escribirPty } from "./nucleo";
 import { perfilesConfigurados, sesion, type Sesion } from "./terminales";
+import { esRunbook, pasosDe } from "./runbook";
 
 export type Destino = { tipo: "ssh"; host: string } | { tipo: "wsl" } | { tipo: "powershell" };
 
@@ -44,7 +45,7 @@ export function comandoDe(texto: string): { comando: string; destino: Destino } 
   return destino ? { comando: lineas[0], destino } : null;
 }
 
-/** Adónde va un bloque: lo que dice justo encima («En WSL:», «En el OptiPlex (`ssh servidor`):»…) o su lenguaje. */
+/** Adónde va un bloque: lo que dice justo encima («En WSL:», «En el servidor (`ssh web`):»…) o su lenguaje. */
 export function destinoDe(lenguaje: string, textoAntes: string): Destino | null {
   const antes = textoAntes.trimEnd().split("\n").filter((l) => l.trim()).slice(-2).join(" ");
   const ssh = /\bssh(?:\.exe)?\s+(?:-\S+\s+)*(?:[\w.-]+@)?([\w.-]+)/i.exec(antes);
@@ -141,7 +142,7 @@ function dentroDeLinux(s: Sesion): boolean {
 }
 
 /** Terminal donde va: primero en el espacio de la conversación, luego en cualquiera. */
-function buscarTerminal(espacio: string, d: Destino): string | null {
+export function buscarTerminal(espacio: string, d: Destino): string | null {
   const k = useKyu.getState();
   const terminales = Object.values(k.items).filter((i): i is Terminal => i.tipo === "terminal" && encaja(i, d));
   if (!terminales.length) return null;
@@ -242,6 +243,12 @@ export function vigilarComandos(): () => void {
       const clave = `${cid}:${ultima.id}`;
       if (hechos.has(clave)) continue;
       hechos.add(clave);
+      // Con pasos (runbook) se empieza por el primero; si no, el último comando.
+      const pasos = pasosDe(ultima.texto);
+      if (esRunbook(ultima.texto, pasos)) {
+        if (!pasos[0].codigo.includes("\n")) preparar(cid, ultima.id, pasos[0].codigo, pasos[0].destino);
+        continue;
+      }
       const r = comandoDe(ultima.texto);
       if (r) preparar(cid, ultima.id, r.comando, r.destino);
     }
