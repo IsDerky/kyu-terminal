@@ -23,7 +23,7 @@ export default function VistaVisor({ visor, conFoco }: { visor: Visor; conFoco: 
   };
 
   const elegir = async (ruta: string) => {
-    if (visor.ruta && ruta.toLowerCase() === visor.ruta.toLowerCase()) return;
+    if (visor.ruta === ruta || (!visor.host && visor.ruta?.toLowerCase() === ruta.toLowerCase())) return;
     if (visor.sucio) {
       const nombre = visor.ruta?.split(/[\\/]/).pop();
       const seguro = await ask(`${nombre} tiene cambios sin guardar. ¿Abrir otro y perderlos?`, {
@@ -51,6 +51,7 @@ export default function VistaVisor({ visor, conFoco }: { visor: Visor; conFoco: 
         <div className="flex w-64 flex-none flex-col border-r border-borde">
           <VistaArbol
             item={visor.id}
+            host={visor.host}
             raizFija={visor.raiz}
             alAbrir={(r) => void elegir(r)}
             elegido={visor.ruta}
@@ -69,6 +70,7 @@ export default function VistaVisor({ visor, conFoco }: { visor: Visor; conFoco: 
               key={`${visor.id}|${visor.ruta}`}
               archivo={{ id: visor.id, tipo: "archivo", ruta: visor.ruta, sucio: visor.sucio, linea: 1, columna: 1, salto: 0 }}
               conFoco={conFoco}
+              remoto={visor.host ? { host: visor.host, soloLectura: /-ro$/i.test(visor.host) } : undefined}
             />
           </Suspense>
         ) : (

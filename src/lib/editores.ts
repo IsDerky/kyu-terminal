@@ -17,6 +17,8 @@ export interface Editor {
   lenguaje: string;
   /** Hueco para las marcas de cambios (unifiedMergeView). */
   comparacion: Compartment;
+  /** Alias de ssh si el archivo es de un servidor. */
+  host?: string;
 }
 
 export const editores = new Map<string, Editor>();
@@ -35,7 +37,7 @@ export const editor = (item: string) => editores.get(item);
 export function recargarRuta(ruta: string) {
   const r = ruta.toLowerCase();
   for (const e of editores.values()) {
-    if (e.ruta.toLowerCase() !== r) continue;
+    if (e.host || e.ruta.toLowerCase() !== r) continue;
     void e.cargado.then(async () => {
       if (e.vista.state.doc.toString() !== e.guardado) return;
       const texto = await leerArchivo(e.ruta).catch(() => null);

@@ -20,6 +20,7 @@ mod memoria;
 mod permisos;
 mod pty;
 mod puertos;
+mod remoto;
 mod sesiones;
 mod sistema;
 mod uso;
@@ -83,6 +84,10 @@ pub fn run() {
             puertos::proceso_matar,
             arbol::arbol_listar,
             arbol::git_estado,
+            remoto::remoto_inicio,
+            remoto::remoto_listar,
+            remoto::remoto_leer,
+            remoto::remoto_guardar,
             git::git_resumen,
             git::git_cambios,
             git::git_diff,

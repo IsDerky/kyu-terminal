@@ -4,7 +4,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { Diff, Undo2, X } from "lucide-react";
 import Markdown from "./Markdown";
 import { editor, recargarRuta } from "../lib/editores";
-import { obtenerEditor, ponerDiff, saltar } from "../lib/editorCodigo";
+import { obtenerEditor, ponerDiff, saltar, type Remoto } from "../lib/editorCodigo";
 import { useKyu, type Item } from "../lib/estado";
 import { borrarArchivo, guardarArchivo } from "../lib/nucleo";
 import { contar, diffLineas } from "../lib/diff";
@@ -17,9 +17,9 @@ type Archivo = Extract<Item, { tipo: "archivo" }>;
 const enVista = new Set<string>();
 
 /** Muestra el editor de la pestaña (que vive en el registro, no aquí). */
-export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; conFoco: boolean }) {
+export default function VistaArchivo({ archivo, conFoco, remoto }: { archivo: Archivo; conFoco: boolean; remoto?: Remoto }) {
   const caja = useRef<HTMLDivElement>(null);
-  const ed = obtenerEditor(archivo.id, archivo.ruta);
+  const ed = obtenerEditor(archivo.id, archivo.ruta, remoto);
   const [error, setError] = useState<string | null>(ed.error);
 
   useEffect(() => {
@@ -155,14 +155,16 @@ export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; c
       </div>
       <div className="flex h-[22px] flex-none items-center gap-3.5 whitespace-nowrap border-t border-borde px-2.5 text-[11px] text-muy">
         <span className="flex-none">{ed.lenguaje}</span>
-        <span className="min-w-0 flex-1 truncate font-mono" title={archivo.ruta}>
-          {archivo.ruta}
+        <span className={`min-w-0 flex-1 truncate font-mono ${remoto ? "text-[#67e8f9]" : ""}`} title={archivo.ruta}>
+          {remoto ? `${remoto.host}:${archivo.ruta}` : archivo.ruta}
         </span>
-        <button type="button" onClick={abrirEnVsCode} className="flex-none hover:text-texto">
-          Abrir en VS Code
-        </button>
+        {!remoto && (
+          <button type="button" onClick={abrirEnVsCode} className="flex-none hover:text-texto">
+            Abrir en VS Code
+          </button>
+        )}
         <span className={`flex-none ${archivo.sucio ? "text-aviso" : ""}`}>
-          {archivo.sucio ? "Sin guardar · Ctrl+S" : "Guardado"}
+          {remoto?.soloLectura ? "Solo lectura" : archivo.sucio ? (remoto ? "Sin guardar · Ctrl+S enseña el diff" : "Sin guardar · Ctrl+S") : "Guardado"}
         </span>
       </div>
     </div>

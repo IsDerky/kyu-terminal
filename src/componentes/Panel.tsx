@@ -3,7 +3,8 @@ import { Bot, ChevronDown, Columns2, FileSearch, FolderTree, GitCommitHorizontal
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import { abrirMenuPestana } from "../lib/menus";
-import type { ConfigVista } from "../lib/nucleo";
+import { remotoInicio, type ConfigVista } from "../lib/nucleo";
+import { message } from "@tauri-apps/plugin-dialog";
 import VistaTerminal from "./VistaTerminal";
 // CodeMirror se carga al abrir el primer archivo.
 const VistaArchivo = lazy(() => import("./VistaArchivo"));
@@ -134,7 +135,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                       : it.tipo === "problemas"
                         ? "Problemas"
                         : it.tipo === "visor"
-                          ? it.ruta?.split(/[\\/]/).pop() ?? "Visor de archivos"
+                          ? `${it.host ? `${it.host} · ` : ""}${it.ruta?.split(/[\\/]/).pop() ?? "Visor de archivos"}`
                           : it.ruta.split(/[\\/]/).pop()!;
             const esActivo = id === panel.activo;
             return (
@@ -165,7 +166,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                           : it.tipo === "problemas"
                             ? "Errores y avisos del último build o lint"
                             : it.tipo === "visor"
-                              ? `Visor de archivos · ${it.ruta ?? it.raiz ?? "carpeta del espacio"}`
+                              ? `Visor de archivos · ${it.host ? `${it.host}:` : ""}${it.ruta ?? it.raiz ?? "carpeta del espacio"}`
                               : it.carpeta ?? it.perfil
                 }
                 style={it.tipo === "terminal" && it.color ? { boxShadow: `inset 0 -2px 0 ${colorDe(it.color)}` } : undefined}
@@ -266,7 +267,18 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                 {
                   icono: <FileSearch size={13} strokeWidth={1.8} className="flex-none text-tenue" />,
                   texto: "Visor de archivos",
-                  hacer: () => useKyu.getState().abrirVisor(carpetaDelEspacio(espacioDeItem), panel.id),
+                  hijos: [
+                    { texto: "Este PC", detalle: "carpeta del espacio", hacer: () => useKyu.getState().abrirVisor(carpetaDelEspacio(espacioDeItem), panel.id) },
+                    ...config.perfiles
+                      .filter((p) => p.nombre.startsWith("SSH · "))
+                      .map((p) => p.nombre.slice("SSH · ".length))
+                      .map((host) => ({
+                        texto: host,
+                        detalle: /-ro$/i.test(host) ? "solo lectura" : undefined,
+                        color: /-ro$/i.test(host) ? "var(--color-muy)" : "#67e8f9",
+                        hacer: () => void abrirVisorRemoto(host, panel.id),
+                      })),
+                  ],
                 },
               ]}
             />
@@ -344,6 +356,16 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
       </div>
     </div>
   );
+}
+
+/** Visor de un servidor: empieza en la carpeta de inicio del usuario de ese alias. */
+async function abrirVisorRemoto(host: string, panel: string) {
+  try {
+    const inicio = await remotoInicio(host);
+    useKyu.getState().abrirVisor(inicio || "/", panel, host);
+  } catch (e) {
+    await message(`No se pudo entrar en ${host}: ${e}`, { title: "Visor de archivos", kind: "error" });
+  }
 }
 
 /** Nombre de la pestaña de una conversación: su primer mensaje, o «Claude» si está vacía. */

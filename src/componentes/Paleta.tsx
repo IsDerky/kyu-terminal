@@ -27,8 +27,10 @@ interface Orden {
 /** Coincidencia «difusa»: las letras de la búsqueda aparecen en orden. Devuelve dónde. */
 function coincide(texto: string, busqueda: string): number[] | null {
   if (!busqueda) return [];
-  const t = texto.toLowerCase();
-  const q = busqueda.toLowerCase().replace(/\s+/g, "");
+  // Sin acentos: «ultima» encuentra «última» (quitar la tilde no cambia las posiciones).
+  const sinTildes = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const t = sinTildes(texto);
+  const q = sinTildes(busqueda).replace(/\s+/g, "");
   const pos: number[] = [];
   let j = 0;
   for (let i = 0; i < t.length && j < q.length; i++) if (t[i] === q[j]) (pos.push(i), j++);

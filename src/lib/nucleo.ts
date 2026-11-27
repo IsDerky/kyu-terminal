@@ -370,6 +370,12 @@ export interface NodoArbol {
 /** Lo que hay en `carpeta` (sin bajar), respetando .gitignore: carpetas primero. */
 export const arbolListar = (carpeta: string) => invoke<NodoArbol[]>("arbol_listar", { carpeta });
 
+/** Servidores por ssh (visor de archivos remoto): el ssh del sistema con tus alias. */
+export const remotoInicio = (host: string) => invoke<string>("remoto_inicio", { host });
+export const remotoListar = (host: string, carpeta: string) => invoke<NodoArbol[]>("remoto_listar", { host, carpeta });
+export const remotoLeer = (host: string, ruta: string) => invoke<string>("remoto_leer", { host, ruta });
+export const remotoGuardar = (host: string, ruta: string, texto: string) => invoke("remoto_guardar", { host, ruta, texto });
+
 /** Archivos con cambios en git del repositorio de `carpeta`: ruta absoluta → M, A, D, R o ?. */
 export const gitEstado = (carpeta: string) => invoke<Record<string, string>>("git_estado", { carpeta });
 

@@ -15,7 +15,9 @@ import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
 import { yaml } from "@codemirror/lang-yaml";
 import { unifiedMergeView } from "@codemirror/merge";
-import { guardarArchivo, leerArchivo } from "./nucleo";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { guardarArchivo, leerArchivo, remotoGuardar, remotoLeer } from "./nucleo";
+import { diffLineas } from "./diff";
 import { useKyu } from "./estado";
 import { editores, estiloEditores, type Editor } from "./editores";
 
@@ -85,8 +87,29 @@ const tema = () =>
     { dark: true },
   );
 
+/** Archivo de un servidor (visor remoto): se lee y se guarda por ssh. */
+export interface Remoto {
+  host: string;
+  soloLectura: boolean;
+}
+
+/** Antes de escribir en un servidor: las líneas que cambian, para confirmarlo. */
+async function confirmarRemoto(host: string, ruta: string, antes: string, ahora: string): Promise<boolean> {
+  const cambios = diffLineas(antes, ahora).filter((l) => l.tipo !== "igual");
+  const muestra = cambios
+    .slice(0, 12)
+    .map((l) => `${l.tipo === "pone" ? "+" : "−"} ${l.texto}`.slice(0, 110));
+  const mas = cambios.length > 12 ? `\n… y ${cambios.length - 12} líneas más` : "";
+  return ask(`${ruta}\n\n${muestra.join("\n")}${mas}`, {
+    title: `¿Guardar en ${host}?`,
+    kind: "warning",
+    okLabel: `Guardar en ${host}`,
+    cancelLabel: "Cancelar",
+  });
+}
+
 /** Crea (si no existe) el editor de la pestaña `item` y carga el archivo. */
-export function obtenerEditor(item: string, ruta: string): Editor {
+export function obtenerEditor(item: string, ruta: string, remoto?: Remoto): Editor {
   const ya = editores.get(item);
   if (ya) return ya;
   const elemento = document.createElement("div");
@@ -99,14 +122,18 @@ export function obtenerEditor(item: string, ruta: string): Editor {
     const e = editores.get(item);
     if (!e) return true;
     const texto = e.vista.state.doc.toString();
-    void guardarArchivo(e.ruta, texto).then(
+    if (remoto?.soloLectura) return true;
+    const escribir = remoto
+      ? confirmarRemoto(remoto.host, e.ruta, e.guardado, texto).then((si) => (si ? remotoGuardar(remoto.host, e.ruta, texto) : Promise.reject(null)))
+      : guardarArchivo(e.ruta, texto);
+    void escribir.then(
       () => {
         e.guardado = texto;
         useKyu.getState().marcarSucio(item, false);
         // Guardar da los cambios por revisados.
         useKyu.getState().quitarDiff(item);
       },
-      (err) => window.alert(`No se pudo guardar ${e.ruta}: ${err}`),
+      (err) => err !== null && window.alert(`No se pudo guardar ${e.ruta}: ${err}`),
     );
     return true;
   };
@@ -132,13 +159,13 @@ export function obtenerEditor(item: string, ruta: string): Editor {
     }),
   });
 
-  const e: Editor = { vista, elemento, ruta, guardado: "", error: null, cargado: Promise.resolve(), lenguaje: nombreLenguaje, comparacion };
-  e.cargado = leerArchivo(ruta).then(
+  const e: Editor = { vista, elemento, ruta, guardado: "", error: null, cargado: Promise.resolve(), lenguaje: nombreLenguaje, comparacion, host: remoto?.host };
+  e.cargado = (remoto ? remotoLeer(remoto.host, ruta) : leerArchivo(ruta)).then(
     (texto) => {
       e.guardado = texto;
       vista.dispatch({
         changes: { from: 0, to: vista.state.doc.length, insert: texto },
-        effects: soloLectura.reconfigure(EditorState.readOnly.of(false)),
+        effects: soloLectura.reconfigure(EditorState.readOnly.of(!!remoto?.soloLectura)),
       });
     },
     (err) => {

@@ -29,7 +29,7 @@ export type Item =
   /** Pestaña «Problemas»: errores y avisos del último build o lint del espacio. */
   | { id: string; tipo: "problemas" }
   /** «Visor de archivos»: árbol de `raiz` a un lado y el archivo elegido (`ruta`) en la misma pestaña. */
-  | { id: string; tipo: "visor"; raiz: string | null; ruta: string | null; sucio: boolean };
+  | { id: string; tipo: "visor"; raiz: string | null; ruta: string | null; sucio: boolean; /** Alias de ssh si es de un servidor. */ host?: string };
 
 export type Direccion = "horizontal" | "vertical";
 
@@ -94,7 +94,7 @@ interface Estado {
   /** Ctrl+Mayús+B: abre la pestaña «Archivos» en el panel con el foco, la enfoca o la cierra. */
   alternarArbol: () => void;
   /** Pestaña «Visor de archivos» con el árbol de `raiz`, en `panel` (o el del foco). */
-  abrirVisor: (raiz: string | null, panel?: string) => void;
+  abrirVisor: (raiz: string | null, panel?: string, host?: string) => void;
   /** Cambia el archivo que enseña un visor. */
   verEnVisor: (item: string, ruta: string | null) => void;
   /** Pone la conversación `cid` como pestaña: en el panel `panel` (o el del foco) o, con
@@ -400,8 +400,8 @@ export const useKyu = create<Estado>((set, get) => {
       }));
     },
 
-    abrirVisor: (raiz, panel) => {
-      const it: Item = { id: nuevoId("v"), tipo: "visor", raiz, ruta: null, sucio: false };
+    abrirVisor: (raiz, panel, host) => {
+      const it: Item = { id: nuevoId("v"), tipo: "visor", raiz, ruta: null, sucio: false, ...(host ? { host } : {}) };
       set((s) => ({ items: { ...s.items, [it.id]: it } }));
       conEspacio((e) => {
         const destino = panel ?? e.foco;

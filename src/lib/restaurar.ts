@@ -23,7 +23,7 @@ type ItemGuardado =
   /** Conversación en una pestaña de panel (sin `conv`: estaba vacía, vuelve vacía). */
   | { tipo: "claude"; conv?: ConversacionGuardada; /** Agente de una conversación vacía (para que no vuelva como Claude). */ agente?: string }
   | { tipo: "cambios"; raiz: string }
-  | { tipo: "visor"; raiz: string | null; ruta: string | null };
+  | { tipo: "visor"; raiz: string | null; ruta: string | null; host?: string };
 
 type NodoGuardado =
   | { tipo: "panel"; items: ItemGuardado[]; activo: number; foco?: boolean }
@@ -91,7 +91,7 @@ function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGu
         return { tipo: "claude", conv, ...(agente ? { agente } : {}) };
       }
       if (it.tipo === "cambios") return { tipo: "cambios", raiz: it.raiz };
-      if (it.tipo === "visor") return { tipo: "visor", raiz: it.raiz, ruta: it.ruta };
+      if (it.tipo === "visor") return { tipo: "visor", raiz: it.raiz, ruta: it.ruta, ...(it.host ? { host: it.host } : {}) };
       if (it.tipo === "terminal") return { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo, ...marcasDe(it) };
       if (it.tipo === "archivo") return { tipo: "archivo", ruta: it.ruta, linea: it.linea, columna: it.columna };
       return { tipo: "arbol" }; // no llega: «problemas» se filtra arriba
@@ -183,7 +183,7 @@ async function archivosPerdidos(s: SesionGuardada) {
   const rutas = new Set<string>();
   const recorrer = (n: NodoGuardado) =>
     n.tipo === "panel"
-      ? n.items.forEach((i) => (i.tipo === "archivo" || (i.tipo === "visor" && i.ruta)) && rutas.add(i.ruta!))
+      ? n.items.forEach((i) => (i.tipo === "archivo" || (i.tipo === "visor" && i.ruta && !i.host)) && rutas.add(i.ruta!))
       : n.hijos.forEach(recorrer);
   s.espacios.forEach((e) => recorrer(e.raiz));
   const perdidos = new Set<string>();
@@ -231,7 +231,7 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
         } else if (i.tipo === "visor") {
           // Si el archivo ya no está, vuelve el visor con el árbol y sin nada elegido.
           const ruta = i.ruta && !perdidos.has(i.ruta) ? i.ruta : null;
-          it = { id: nuevoId("v"), tipo: "visor", raiz: i.raiz, ruta, sucio: false };
+          it = { id: nuevoId("v"), tipo: "visor", raiz: i.raiz, ruta: i.host ? i.ruta : ruta, sucio: false, ...(i.host ? { host: i.host } : {}) };
         } else if (i.tipo === "claude") {
           const cid = nuevaDePanel(espacio);
           if (i.conv) dePanel.push({ cid, conv: i.conv });

@@ -1,11 +1,11 @@
 // Pestaña «Archivos»: el árbol de la carpeta del terminal con el foco del espacio. Las
 // carpetas se abren al clic y un archivo se abre en Kyu. A la derecha, la letra de git
 // (M, A, ?…) y en naranja lo que ha tocado Claude en esta conversación.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, File, FilePlus, Folder, FolderOpen, RefreshCw } from "lucide-react";
 import { useKyu } from "../lib/estado";
 import { ARRASTRE_RUTA, carpetaDelEspacio, nombreAgente, useClaude } from "../lib/claude";
-import { arbolListar, crearArchivo, gitEstado, renombrarArchivo, type NodoArbol } from "../lib/nucleo";
+import { arbolListar, crearArchivo, gitEstado, remotoListar, renombrarArchivo, type NodoArbol } from "../lib/nucleo";
 import { abrirMenuArbol, borrarDelArbol, type EditarArbol } from "../lib/menus";
 import { editores } from "../lib/editores";
 
@@ -105,9 +105,11 @@ interface Props {
   elegido?: string | null;
   /** Botones de más en la cabecera (el visor pone el de plegar). */
   extra?: React.ReactNode;
+  /** Alias de ssh: el árbol es de ese servidor (sin git, sin crear ni renombrar, sin refresco solo). */
+  host?: string;
 }
 
-export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: Props) {
+export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra, host }: Props) {
   const espacio = useKyu((s) => s.activo);
   const raizEspacio = useKyu(() => carpetaDelEspacio(espacio));
   const raiz = raizFija || raizEspacio;
@@ -118,31 +120,45 @@ export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: 
   const quien = useClaude((s) => nombreAgente(s.conversaciones[cid]));
   const [abiertas, setAbiertas] = useState<Set<string>>(() => abiertasDe.get(item) ?? new Set());
   const [listas, setListas] = useState<Record<string, NodoArbol[]>>({});
+  const listasRef = useRef<Record<string, NodoArbol[]>>({});
   const [git, setGit] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [editando, setEditando] = useState<EditarArbol | null>(null);
 
-  const cargar = useCallback(async () => {
+  const cargar = useCallback(async (forzar = false) => {
     if (!raiz) return;
     const dentro = [...abiertas].filter((a) => clave(a).startsWith(clave(raiz)));
-    const carpetas = [raiz, ...dentro];
-    const resultados = await Promise.all(carpetas.map((c) => arbolListar(c).then((l) => [c, l] as const, () => [c, null] as const)));
-    const nuevas: Record<string, NodoArbol[]> = {};
+    // En un servidor cada carpeta es un ssh: solo las que faltan, salvo al pulsar Actualizar.
+    const carpetas = [raiz, ...dentro].filter((c) => !host || forzar || !listasRef.current[clave(c)]);
+    let fallo: string | null = null;
+    const listar = (c: string) => (host ? remotoListar(host, c) : arbolListar(c));
+    const resultados = await Promise.all(
+      carpetas.map((c) =>
+        listar(c).then(
+          (l) => [c, l] as const,
+          (e) => ((fallo ??= String(e)), [c, null] as const),
+        ),
+      ),
+    );
+    const nuevas: Record<string, NodoArbol[]> = host && !forzar ? { ...listasRef.current } : {};
     for (const [c, l] of resultados) if (l) nuevas[clave(c)] = l;
-    setError(nuevas[clave(raiz)] ? null : "No se puede leer esta carpeta");
+    setError(nuevas[clave(raiz)] ? null : host && fallo ? `No se puede leer en ${host}: ${fallo}` : "No se puede leer esta carpeta");
+    listasRef.current = nuevas;
     setListas(nuevas);
+    if (host) return;
     const estado = await gitEstado(raiz).catch(() => ({}) as Record<string, string>);
     const porClave: Record<string, string> = {};
     for (const [r, letra] of Object.entries(estado)) porClave[clave(r)] = letra;
     setGit(porClave);
-  }, [raiz, abiertas]);
+  }, [raiz, abiertas, host]);
 
-  // Al cambiar de carpeta o abrir una, y cada 3 s mientras se ve (lo que va creando Claude o git).
+  // Al cambiar de carpeta o abrir una y, en local, cada 3 s mientras se ve (lo que va creando Claude o git).
   useEffect(() => {
     void cargar();
+    if (host) return;
     const t = setInterval(() => void cargar(), 3000);
     return () => clearInterval(t);
-  }, [cargar]);
+  }, [cargar, host]);
 
   useEffect(() => {
     abiertasDe.set(item, abiertas);
@@ -229,7 +245,7 @@ export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: 
         <button
           type="button"
           title={n.ruta}
-          draggable
+          draggable={!host}
           // Soltado en Claude queda como @ruta.
           onDragStart={(e) => {
             e.dataTransfer.setData(ARRASTRE_RUTA, n.carpeta ? `${n.ruta.replace(/[\\/]+$/, "")}\\` : n.ruta);
@@ -239,9 +255,10 @@ export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: 
           onClick={() => (n.carpeta ? alternar(n.ruta) : abrir(n.ruta))}
           onContextMenu={(e) => {
             e.preventDefault();
-            if (raiz) abrirMenuArbol(n.ruta, n.carpeta, raiz, claude, e.clientX, e.clientY, editar);
+            if (raiz && !host) abrirMenuArbol(n.ruta, n.carpeta, raiz, claude, e.clientX, e.clientY, editar);
           }}
           onKeyDown={(e) => {
+            if (host) return;
             if (e.key === "F2") (e.preventDefault(), editar({ tipo: "renombrar", ruta: n.ruta }));
             if (e.key === "Delete" && !n.carpeta) (e.preventDefault(), void borrarDelArbol(n.ruta));
           }}
@@ -294,11 +311,13 @@ export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: 
   return (
     <div className="flex h-full min-h-0 flex-col bg-panel">
       <div className="flex h-8 flex-none items-center gap-1 border-b border-borde pl-3 pr-1.5 text-[11px] uppercase tracking-wider text-muy">
-        <span className="min-w-0 flex-1 truncate" title={raiz}>
-          {nombreDe(raiz)}
+        {host && <span className="flex-none rounded border border-[#164e57] px-1 normal-case tracking-normal text-[#67e8f9]">{host}</span>}
+        <span className={`min-w-0 flex-1 truncate ${host ? "normal-case tracking-normal" : ""}`} title={raiz}>
+          {host ? raiz : nombreDe(raiz)}
         </span>
         <button
           type="button"
+          hidden={!!host}
           title="Nuevo archivo"
           onClick={() => editar({ tipo: "nuevo", ruta: raiz })}
           className="grid size-6 place-items-center rounded hover:bg-hover hover:text-texto"
@@ -308,7 +327,7 @@ export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: 
         <button type="button" title="Plegar todo" onClick={() => setAbiertas(new Set())} className="grid size-6 place-items-center rounded hover:bg-hover hover:text-texto">
           <ChevronsDownUp size={13} />
         </button>
-        <button type="button" title="Actualizar" onClick={() => void cargar()} className="grid size-6 place-items-center rounded hover:bg-hover hover:text-texto">
+        <button type="button" title="Actualizar" onClick={() => void cargar(true)} className="grid size-6 place-items-center rounded hover:bg-hover hover:text-texto">
           <RefreshCw size={12} />
         </button>
         {extra}
