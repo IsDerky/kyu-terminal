@@ -159,7 +159,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                     : it.tipo === "arbol"
                       ? "Archivos (Ctrl+Mayús+B)"
                       : it.tipo === "claude"
-                        ? "Conversación con Claude"
+                        ? `Conversación con ${nombreAgente(useClaude.getState().conversaciones[it.cid])}`
                         : it.tipo === "cambios"
                           ? `Cambios sin commit en ${it.raiz}`
                           : it.tipo === "problemas"

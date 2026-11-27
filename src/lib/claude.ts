@@ -368,6 +368,23 @@ export function ultimaDe(espacio: string): string | null {
   return conversacionesDe(espacio)[0] ?? null;
 }
 
+/**
+ * Quién recibe lo que se manda a «la última conversación» del espacio (preguntar por un
+ * bloque, mencionar, la selección): su agente, o null = Claude (también si no hay ninguna,
+ * porque entonces se abre una de Claude).
+ */
+export function agenteDestino(espacio: string): string | null {
+  const u = ultimaDe(espacio);
+  return u ? (useClaude.getState().conversaciones[u]?.agente ?? null) : null;
+}
+
+/** Lo mismo, para pintarlo (se actualiza al cambiar de conversación). */
+export const useAgenteDestino = (espacio: string) =>
+  useClaude((s) => {
+    const u = ultimaDe(espacio);
+    return u ? (s.conversaciones[u]?.agente ?? null) : null;
+  });
+
 /** Apunta la conversación como la última usada de su espacio. */
 export function marcarUltima(cid: string) {
   const espacio = espacioDe(cid);
@@ -830,7 +847,7 @@ export async function verCambios(espacio: string, ruta: string) {
   const primera = diffLineas(antes ?? "", ahora).find((l) => l.tipo !== "igual");
   const linea = primera ? (primera.despues ?? primera.antes ?? 1) : 1;
   recargarRuta(ruta);
-  useKyu.getState().abrirArchivo(ruta, linea, 1, { antes });
+  useKyu.getState().abrirArchivo(ruta, linea, 1, { antes, agente: c.agente });
 }
 
 /** Adjunta una orden del terminal a lo próximo que se le escriba a Claude. */

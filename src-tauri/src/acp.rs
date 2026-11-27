@@ -774,7 +774,7 @@ fn herramienta(u: &Value, id: &str, repetida: bool, sal: &mut Vec<Evento>) {
     let (ruta, antes, nuevo) = if repetida {
         (None, None, false)
     } else {
-        crate::claude::foto_antes(&nombre, &input)
+        foto_antes_acp(u, &nombre, &input)
     };
     sal.push(Evento::Herramienta {
         id: id.to_string(),
@@ -784,6 +784,45 @@ fn herramienta(u: &Value, id: &str, repetida: bool, sal: &mut Vec<Evento>) {
         antes,
         nuevo,
     });
+}
+
+/// Cómo estaba el archivo antes de la herramienta. Con Claude basta leer el disco (el aviso
+/// llega antes de escribir), pero agy escribe sin pedir permiso y el aviso puede llegar
+/// después: con el diff de ACP se sabe si era nuevo y se deshace el cambio si ya está hecho.
+fn foto_antes_acp(
+    tc: &Value,
+    nombre: &str,
+    input: &Value,
+) -> (Option<String>, Option<String>, bool) {
+    let diff = tc["content"]
+        .as_array()
+        .and_then(|c| c.iter().find(|x| x["type"] == "diff"));
+    let Some(d) = diff else {
+        return crate::claude::foto_antes(nombre, input);
+    };
+    let Some(ruta) = input["file_path"].as_str().filter(|r| !r.is_empty()) else {
+        return (None, None, false);
+    };
+    if d["oldText"].is_null() {
+        return (Some(ruta.to_string()), None, true);
+    }
+    let viejo = d["oldText"].as_str().unwrap_or("");
+    let nuevo = d["newText"].as_str().unwrap_or("");
+    match crate::claude::foto_antes("Edit", input) {
+        (r, Some(disco), n) => (r, Some(deshacer_si_hecho(&disco, viejo, nuevo)), n),
+        otro => otro,
+    }
+}
+
+/// Si el disco ya tiene `nuevo` y no `viejo`, el cambio está hecho: lo devuelve a como estaba.
+fn deshacer_si_hecho(disco: &str, viejo: &str, nuevo: &str) -> String {
+    let hecho =
+        !nuevo.is_empty() && disco.contains(nuevo) && (viejo.is_empty() || !disco.contains(viejo));
+    if hecho {
+        disco.replacen(nuevo, viejo, 1)
+    } else {
+        disco.to_string()
+    }
 }
 
 fn terminada(u: &Value, id: &str, e: &mut Estado, sal: &mut Vec<Evento>) {
@@ -1118,6 +1157,40 @@ mod pruebas {
         assert_eq!(i["new_string"], "b");
         let nuevo: Value = serde_json::from_str(r#"{"toolCallId":"c2","title":"Crear","kind":"edit","content":[{"type":"diff","path":"C:\\x\\n.rs","newText":"b"}]}"#).unwrap();
         assert_eq!(como_claude(&nuevo).0, "Write");
+    }
+
+    #[test]
+    fn el_antes_de_un_cambio_ya_escrito() {
+        // agy ya escribió: se deshace con el diff (trozo o archivo entero).
+        assert_eq!(
+            deshacer_si_hecho("uno\ndos b\ntres", "dos a", "dos b"),
+            "uno\ndos a\ntres"
+        );
+        assert_eq!(
+            deshacer_si_hecho("nuevo entero", "viejo entero", "nuevo entero"),
+            "viejo entero"
+        );
+        // Aún sin escribir: el disco es el antes.
+        assert_eq!(
+            deshacer_si_hecho("uno\ndos a\ntres", "dos a", "dos b"),
+            "uno\ndos a\ntres"
+        );
+        let dir = std::env::temp_dir().join(format!("kyu-acp-antes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("a.txt");
+        std::fs::write(&f, "x = 2\n").unwrap();
+        let ruta = f.to_string_lossy().to_string();
+        let tc = json!({ "kind": "edit", "content": [{ "type": "diff", "path": ruta, "oldText": "x = 1", "newText": "x = 2" }] });
+        let (n, i) = como_claude(&tc);
+        assert_eq!(foto_antes_acp(&tc, &n, &i).1.as_deref(), Some("x = 1\n"));
+        // Archivo nuevo según el diff, aunque ya exista en disco.
+        let tc = json!({ "kind": "edit", "content": [{ "type": "diff", "path": ruta, "oldText": null, "newText": "x = 2\n" }] });
+        let (n, i) = como_claude(&tc);
+        assert_eq!(
+            foto_antes_acp(&tc, &n, &i),
+            (Some(ruta.clone()), None, true)
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

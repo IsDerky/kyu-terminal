@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, File, FilePlus, Folder, FolderOpen, RefreshCw } from "lucide-react";
 import { useKyu } from "../lib/estado";
-import { ARRASTRE_RUTA, carpetaDelEspacio, useClaude } from "../lib/claude";
+import { ARRASTRE_RUTA, carpetaDelEspacio, nombreAgente, useClaude } from "../lib/claude";
 import { arbolListar, crearArchivo, gitEstado, renombrarArchivo, type NodoArbol } from "../lib/nucleo";
 import { abrirMenuArbol, borrarDelArbol, type EditarArbol } from "../lib/menus";
 import { editores } from "../lib/editores";
@@ -115,6 +115,7 @@ export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: 
   const cid = useClaude((s) => s.ultimas[espacio] ?? "");
   const antesDe = useClaude((s) => s.conversaciones[cid]?.antesDe ?? SIN_CAMBIOS);
   const enCurso = useClaude((s) => s.conversaciones[cid]?.tocados ?? SIN_CAMBIOS);
+  const quien = useClaude((s) => nombreAgente(s.conversaciones[cid]));
   const [abiertas, setAbiertas] = useState<Set<string>>(() => abiertasDe.get(item) ?? new Set());
   const [listas, setListas] = useState<Record<string, NodoArbol[]>>({});
   const [git, setGit] = useState<Record<string, string>>({});
@@ -266,7 +267,7 @@ export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: 
           </span>
           {!n.carpeta && (claude || letra) && (
             <span
-              title={claude ? "Lo ha cambiado Claude en esta conversación" : `git: ${letra}`}
+              title={claude ? `Lo ha cambiado ${quien} en esta conversación` : `git: ${letra}`}
               className={`flex-none font-mono text-[11px] ${claude ? "text-claude2" : letra === "?" || letra === "A" ? "text-ok" : letra === "D" ? "text-mal" : "text-aviso"}`}
             >
               {letra === "?" ? "U" : letra ?? "●"}

@@ -1,14 +1,14 @@
 import { useEffect } from "react";
 import { Check, ClipboardList, ShieldAlert, TriangleAlert, X } from "lucide-react";
 import { corto, useGasto } from "../lib/gasto";
-import { espacioDe, irAConversacion, panelMuestra, pendiente, responder, sitioDe, useClaude, type AvisoFin } from "../lib/claude";
+import { espacioDe, irAConversacion, nombreAgente, panelMuestra, pendiente, responder, sitioDe, useClaude, type AvisoFin } from "../lib/claude";
 import { useKyu } from "../lib/estado";
 import { herramienta, partirRuta, relativa } from "../lib/herramientas";
 import { nombreEspacio } from "./BarraTitulo";
 import { IconoRun } from "./BarraEstado";
 import { useGit, type AvisoCI } from "../lib/git";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Mascota } from "./iconos";
+import { IconoAgente } from "./iconos";
 
 const DURACION_FIN = 8000;
 
@@ -62,7 +62,7 @@ export default function Avisos() {
         if (p.herramienta === "ExitPlanMode" || p.herramienta === "AskUserQuestion") {
           const plan = p.herramienta === "ExitPlanMode";
           return (
-            <Recuadro key={p.id} espacio={nombre(espacio)} onCerrar={null} onClick={() => ver(espacio)}>
+            <Recuadro key={p.id} agente={conversaciones[espacio]?.agente} espacio={nombre(espacio)} onCerrar={null} onClick={() => ver(espacio)}>
               <div className="flex items-center gap-2 text-[12.5px]">
                 <ClipboardList size={14} strokeWidth={1.8} className="flex-none text-acento" />
                 {plan ? "Tiene un plan listo para que lo revises" : "Te ha hecho una pregunta"}
@@ -72,7 +72,7 @@ export default function Avisos() {
           );
         }
         return (
-          <Recuadro key={p.id} espacio={nombre(espacio)} onCerrar={null}>
+          <Recuadro key={p.id} agente={conversaciones[espacio]?.agente} espacio={nombre(espacio)} onCerrar={null}>
             <div className="flex min-w-0 items-start gap-2 text-[12.5px]">
               <ShieldAlert size={14} strokeWidth={1.8} className="mt-0.5 flex-none text-aviso" />
               <span className="min-w-0">
@@ -125,7 +125,7 @@ export default function Avisos() {
         </Recuadro>
       )}
       {fines.map((a) => (
-        <AvisoTerminado key={a.id} aviso={a} espacio={nombre(a.espacio)} />
+        <AvisoTerminado key={a.id} aviso={a} espacio={nombre(a.espacio)} agente={conversaciones[a.espacio]?.agente} />
       ))}
       {ci.map((a) => (
         <AvisoDeCI key={a.id} aviso={a} />
@@ -134,7 +134,7 @@ export default function Avisos() {
   );
 }
 
-function AvisoTerminado({ aviso: a, espacio }: { aviso: AvisoFin; espacio: string | null }) {
+function AvisoTerminado({ aviso: a, espacio, agente }: { aviso: AvisoFin; espacio: string | null; agente: string | null | undefined }) {
   const quitar = () => useClaude.getState().quitarAviso(a.id);
   useEffect(() => {
     const t = setTimeout(quitar, DURACION_FIN);
@@ -142,7 +142,7 @@ function AvisoTerminado({ aviso: a, espacio }: { aviso: AvisoFin; espacio: strin
   }, []);
   const segundos = (a.duracion / 1000).toLocaleString("es-ES", { maximumFractionDigits: a.duracion < 10_000 ? 1 : 0 });
   return (
-    <Recuadro espacio={espacio} onCerrar={quitar} onClick={() => ver(a.espacio)}>
+    <Recuadro agente={agente} espacio={espacio} onCerrar={quitar} onClick={() => ver(a.espacio)}>
       <div className="flex items-center gap-1.5 text-[12.5px]">
         {a.error ? <X size={13} className="text-mal" /> : <Check size={13} className="text-ok" />}
         <span className="font-medium">{a.error ? "Ha terminado con un error" : "Ha terminado"}</span>
@@ -154,11 +154,14 @@ function AvisoTerminado({ aviso: a, espacio }: { aviso: AvisoFin; espacio: strin
 }
 
 function Recuadro({
+  agente = null,
   espacio,
   onCerrar,
   onClick,
   children,
 }: {
+  /** Quién avisa: null = Claude (también el límite diario, que es de Claude). */
+  agente?: string | null;
   espacio: string | null;
   onCerrar: (() => void) | null;
   onClick?: () => void;
@@ -172,8 +175,8 @@ function Recuadro({
       }`}
     >
       <div className="mb-1.5 flex items-center gap-2 text-[11.5px] text-tenue">
-        <Mascota alto={12} />
-        <span className="font-semibold text-texto">Claude</span>
+        <IconoAgente agente={agente} alto={12} />
+        <span className="font-semibold text-texto">{nombreAgente({ agente })}</span>
         {espacio && <span className="truncate">· {espacio}</span>}
         {onCerrar && (
           <button

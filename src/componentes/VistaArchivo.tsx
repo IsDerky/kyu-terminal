@@ -8,6 +8,7 @@ import { obtenerEditor, ponerDiff, saltar } from "../lib/editorCodigo";
 import { useKyu, type Item } from "../lib/estado";
 import { borrarArchivo, guardarArchivo } from "../lib/nucleo";
 import { contar, diffLineas } from "../lib/diff";
+import { nombreAgente } from "../lib/claude";
 import { cerrarItem } from "../lib/acciones";
 
 type Archivo = Extract<Item, { tipo: "archivo" }>;
@@ -58,6 +59,7 @@ export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; c
 
   // Marcas de los cambios de Claude.
   const antes = archivo.diff ? archivo.diff.antes : undefined;
+  const quien = nombreAgente({ agente: archivo.diff?.agente ?? null });
   const [cuenta, setCuenta] = useState<{ puestas: number; quitadas: number } | null>(null);
   useEffect(() => {
     void ponerDiff(archivo.id, antes);
@@ -69,13 +71,13 @@ export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; c
     if (antes === undefined) return;
     const nombre = archivo.ruta.split(/[\\/]/).pop();
     if (antes === null) {
-      if (!(await ask(`Claude creó «${nombre}». ¿Borrarlo?`, { title: "Deshacer cambios", kind: "warning", okLabel: "Borrar", cancelLabel: "Cancelar" }))) return;
+      if (!(await ask(`${quien} creó «${nombre}». ¿Borrarlo?`, { title: "Deshacer cambios", kind: "warning", okLabel: "Borrar", cancelLabel: "Cancelar" }))) return;
       await borrarArchivo(archivo.ruta).catch((e) => window.alert(String(e)));
       void cerrarItem(archivo.id, false);
       return;
     }
     const aviso = archivo.sucio ? " Lo que no has guardado se pierde." : "";
-    if (!(await ask(`¿Dejar «${nombre}» como estaba antes de los cambios de Claude?${aviso}`, { title: "Deshacer cambios", kind: "warning", okLabel: "Deshacer", cancelLabel: "Cancelar" }))) return;
+    if (!(await ask(`¿Dejar «${nombre}» como estaba antes de los cambios de ${quien}?${aviso}`, { title: "Deshacer cambios", kind: "warning", okLabel: "Deshacer", cancelLabel: "Cancelar" }))) return;
     await guardarArchivo(archivo.ruta, antes);
     ed.guardado = "";
     ed.vista.dispatch({ changes: { from: 0, to: ed.vista.state.doc.length, insert: antes } });
@@ -105,7 +107,7 @@ export default function VistaArchivo({ archivo, conFoco }: { archivo: Archivo; c
       {antes !== undefined && (
         <div className="flex h-8 flex-none items-center gap-2 overflow-hidden whitespace-nowrap border-b border-borde bg-claude/[0.07] pl-3 pr-2 text-[12px] text-claude2">
           <Diff size={13} strokeWidth={1.8} className="flex-none" />
-          <span className="flex-none">{antes === null ? "Archivo nuevo de Claude" : "Cambios de Claude"}</span>
+          <span className="flex-none">{antes === null ? `Archivo nuevo de ${quien}` : `Cambios de ${quien}`}</span>
           {cuenta && (
             <span className="flex-none font-mono text-[11.5px]">
               <span className="text-ok">+{cuenta.puestas}</span> <span className="text-mal">−{cuenta.quitadas}</span>

@@ -283,7 +283,7 @@ pub fn claude_abrir(
         .map(PathBuf::from)
         .filter(|c| c.is_dir())
         .or_else(dirs::home_dir)
-        .ok_or("no hay carpeta donde arrancar Claude")?;
+        .ok_or("no hay carpeta donde arrancar el agente")?;
     let id = claudes.siguiente.fetch_add(1, Ordering::Relaxed);
     if let Some(agente) = opciones.agente.as_deref().filter(|a| !a.is_empty()) {
         let (sesion, _) = crate::acp::abrir(

@@ -8,9 +8,9 @@ import { matarProceso, quienEnPuerto } from "../lib/nucleo";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { duracion, textoBloque, textoRam, type Bloque, type Bloques } from "../lib/bloques";
 import type { Autocompletado } from "../lib/autocompletado";
-import { adjuntar } from "../lib/claude";
+import { adjuntar, nombreAgente, useAgenteDestino } from "../lib/claude";
 import { useKyu } from "../lib/estado";
-import { Mascota } from "./iconos";
+import { IconoAgente } from "./iconos";
 
 /** Abre el panel de Claude con la orden y su salida adjuntas, listo para preguntar. */
 function preguntarAClaude(term: Terminal, b: Bloque) {
@@ -248,21 +248,7 @@ function Titulo({
         {b.ocupado && <PuertoOcupado puerto={b.ocupado} />}
         {terminado && b.problemas && <PastillaProblemas b={b} />}
         {(terminado || b.estado === "corre") && b.orden?.trim() && <CopiarOrden orden={b.orden.trim()} />}
-        {terminado && (
-          // La mascota fija en cada bloque terminado; al pasar por encima se despliega.
-          <button
-            type="button"
-            title="Preguntar a Claude por esta orden"
-            onClick={onPreguntar}
-            onMouseDown={(e) => e.preventDefault()}
-            className="group/claude pointer-events-auto flex h-[19px] items-center gap-1.5 rounded-full border border-transparent px-1.5 text-[11.5px] text-claude2 transition-colors hover:border-claude/50 hover:bg-claude/10"
-          >
-            <span className="opacity-55 transition-opacity group-hover/claude:opacity-100">
-              <Mascota alto={10} />
-            </span>
-            <span className="hidden group-hover/claude:inline">Preguntar a Claude</span>
-          </button>
-        )}
+        {terminado && <PreguntarPorBloque onPreguntar={onPreguntar} />}
         <Resultado b={b} />
         <span className="tabular-nums text-muy">{b.hora}</span>
       </span>
@@ -271,6 +257,32 @@ function Titulo({
 }
 
 /** «3 errores · 1 aviso»: abre el panel de problemas con los de este bloque. */
+/**
+ * El icono fijo en cada bloque terminado; al pasar por encima se despliega. Va a la última
+ * conversación del espacio, así que lleva el icono y el nombre de quien contesta en ella.
+ */
+function PreguntarPorBloque({ onPreguntar }: { onPreguntar: () => void }) {
+  const espacio = useKyu((s) => s.activo);
+  const agente = useAgenteDestino(espacio);
+  const quien = nombreAgente({ agente });
+  return (
+    <button
+      type="button"
+      title={`Preguntar a ${quien} por esta orden`}
+      onClick={onPreguntar}
+      onMouseDown={(e) => e.preventDefault()}
+      className={`group/claude pointer-events-auto flex h-[19px] items-center gap-1.5 rounded-full border border-transparent px-1.5 text-[11.5px] transition-colors ${
+        agente ? "text-sky-300 hover:border-sky-400/50 hover:bg-sky-400/10" : "text-claude2 hover:border-claude/50 hover:bg-claude/10"
+      }`}
+    >
+      <span className="opacity-55 transition-opacity group-hover/claude:opacity-100">
+        <IconoAgente agente={agente} alto={10} />
+      </span>
+      <span className="hidden group-hover/claude:inline">Preguntar a {quien}</span>
+    </button>
+  );
+}
+
 function PastillaProblemas({ b }: { b: Bloque }) {
   const lista = b.problemas ?? [];
   const errores = lista.filter((p) => p.nivel === "error").length;

@@ -36,7 +36,7 @@ import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useSelectorEstilo } from "./estiloPestana";
 import { cabecera, limpiarSeparadores, opcion, separador, useMenu, type Elemento } from "./menu";
-import { carpetaDelEspacio, insertarEnCaja, irAClaude, mencionDe, nuevaConversacion, useClaude, verCambios } from "./claude";
+import { agenteDestino, carpetaDelEspacio, insertarEnCaja, nombreAgente, irAClaude, mencionDe, nuevaConversacion, useClaude, verCambios } from "./claude";
 import { destinoDe, esDeShell, nombreDestino, usarCodigo } from "./comandoClaude";
 import { nuevoId, paneles, useKyu, type Item } from "./estado";
 import { cerrarItem } from "./acciones";
@@ -95,7 +95,7 @@ export function abrirMenuPestana(item: string, panel: string, x: number, y: numb
       opcion(Copy, "Copiar la ruta", () => void writeText(it.ruta)),
       opcion(FolderOpen, "Mostrar en el Explorador", () => void revealItemInDir(it.ruta)),
       opcion(Code, "Abrir en VS Code", () => abrirEnVSCode(it.ruta)),
-      opcion(AtSign, "Mencionar a Claude", () => mencionar(it.ruta), { estilo: "claude" }),
+      opcionMencionar(() => mencionar(it.ruta)),
     );
   }
   if (hermanas.length > 1) {
@@ -117,6 +117,12 @@ export function abrirMenuPestana(item: string, panel: string, x: number, y: numb
 /** Una tras otra: si una pregunta (archivo sin guardar) se espera la respuesta. */
 async function cerrarVarias(items: string[]) {
   for (const i of items) await cerrarItem(i);
+}
+
+/** «Mencionar a …» con el nombre de quien contesta en la conversación a la que irá. */
+function opcionMencionar(hacer: () => void) {
+  const agente = agenteDestino(useKyu.getState().activo);
+  return opcion(AtSign, `Mencionar a ${nombreAgente({ agente })}`, hacer, agente ? {} : { estilo: "claude" });
 }
 
 /** @ruta en la caja de la conversación del espacio (la abre si no hay). */
@@ -204,10 +210,11 @@ export function abrirMenuArbol(
     opcion(FolderOpen, "Mostrar en el Explorador", () => void revealItemInDir(ruta)),
   );
   if (!carpeta && deClaude && cid) {
-    elementos.push(opcion(Diff, "Ver lo que cambió Claude", () => void verCambios(cid, ruta)));
+    const quien = nombreAgente(useClaude.getState().conversaciones[cid]);
+    elementos.push(opcion(Diff, `Ver lo que cambió ${quien}`, () => void verCambios(cid, ruta)));
   }
   elementos.push(
-    opcion(AtSign, "Mencionar a Claude", () => mencionar(carpeta ? `${ruta.replace(/[\\/]+$/, "")}\\` : ruta), { estilo: "claude" }),
+    opcionMencionar(() => mencionar(carpeta ? `${ruta.replace(/[\\/]+$/, "")}\\` : ruta)),
     separador,
     opcion(Copy, "Copiar la ruta", () => void writeText(ruta)),
     opcion(Copy, "Copiar la ruta relativa", () => void writeText(relativaA(ruta, raiz).replace(/\\/g, "/"))),

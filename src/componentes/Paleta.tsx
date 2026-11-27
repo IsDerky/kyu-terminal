@@ -5,7 +5,7 @@ import { preguntarPorSeleccion } from "../lib/seleccion";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
 import { textoBloque } from "../lib/bloques";
-import { adjuntar, carpetaDelEspacio, nuevaConversacion } from "../lib/claude";
+import { adjuntar, agenteDestino, carpetaDelEspacio, nombreAgente, nuevaConversacion } from "../lib/claude";
 import { sesion } from "../lib/terminales";
 import { useGit } from "../lib/git";
 import { alternarGrabacion } from "../lib/grabar";
@@ -48,6 +48,8 @@ export default function Paleta({ config }: { config: ConfigVista }) {
     const f = focoActual();
     const perfilFoco = f?.item?.tipo === "terminal" ? f.item.perfil : config.perfiles[0]?.nombre ?? "";
     const porDefecto = config.perfiles[0]?.nombre ?? "";
+    // La orden y la selección van a la última conversación del espacio, sea de quien sea.
+    const quien = nombreAgente({ agente: agenteDestino(k.activo) });
     const lista: Orden[] = [
       { id: "carpeta", grupo: "Espacios", titulo: "Abrir carpeta…", detalle: "un espacio fijo en ella; Kyu la recuerda", atajo: "Ctrl+Mayús+O", icono: FolderOpen, hacer: () => void abrirCarpeta(porDefecto) },
       ...recientes().map((r) => ({
@@ -69,8 +71,8 @@ export default function Paleta({ config }: { config: ConfigVista }) {
       { id: "cerrar", grupo: "Paneles", titulo: "Cerrar pestaña", atajo: "Ctrl+Mayús+W", icono: X, hacer: cerrarActual },
       {
         id: "claude-orden",
-        grupo: "Claude",
-        titulo: "Enviar la última orden a Claude",
+        grupo: "Conversación",
+        titulo: `Enviar la última orden a ${quien}`,
         detalle: "con su salida",
         icono: SquareTerminal,
         hacer: () => {
@@ -84,8 +86,8 @@ export default function Paleta({ config }: { config: ConfigVista }) {
       },
       {
         id: "claude-seleccion",
-        grupo: "Claude",
-        titulo: "Preguntar a Claude por la selección",
+        grupo: "Conversación",
+        titulo: `Preguntar a ${quien} por la selección`,
         detalle: "del terminal o del archivo",
         atajo: "Alt+K",
         icono: TextQuote,

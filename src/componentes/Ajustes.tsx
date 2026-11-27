@@ -62,10 +62,10 @@ const SECCIONES: { id: Seccion; nombre: string; icono: LucideIcon | "claude" }[]
 const ATAJOS: [string, string][] = [
   ["Paleta de órdenes", "Ctrl+Mayús+P"],
   ["Ajustes", "Ctrl+,"],
-  ["Ir a Claude (la última conversación) / volver", "Ctrl+Mayús+C"],
+  ["Ir a la última conversación (Claude o Antigravity) / volver", "Ctrl+Mayús+C"],
   ["Nueva conversación con Claude en este panel", "Ctrl+Mayús+K"],
   ["Maximizar el panel / volver", "Ctrl+Mayús+X"],
-  ["Preguntar a Claude por la selección", "Alt+K"],
+  ["Preguntar por la selección en la última conversación", "Alt+K"],
   ["Nueva pestaña", "Ctrl+Mayús+T"],
   ["Nuevo espacio", "Ctrl+Mayús+N"],
   ["Dividir a la derecha", "Ctrl+Mayús+D"],

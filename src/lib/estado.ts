@@ -18,7 +18,7 @@ export type Item =
       columna: number;
       salto: number;
       /** Enseñar lo que cambió Claude: cómo estaba antes (null = no existía). */
-      diff?: { antes: string | null };
+      diff?: { antes: string | null; /** Quién lo cambió (null = Claude). */ agente?: string | null };
     }
   /** Pestaña «Archivos»: el árbol de la carpeta del terminal con el foco. */
   | { id: string; tipo: "arbol" }
@@ -88,7 +88,7 @@ interface Estado {
   /** Quita la pestaña de su panel (y el panel o el espacio si se quedan vacíos). */
   quitarItem: (item: string) => void;
   moverItem: (item: string, destino: string, zona: Zona) => void;
-  abrirArchivo: (ruta: string, linea: number, columna: number, diff?: { antes: string | null }) => void;
+  abrirArchivo: (ruta: string, linea: number, columna: number, diff?: { antes: string | null; agente?: string | null }) => void;
   /** Quita las marcas de cambios de una pestaña de archivo. */
   quitarDiff: (item: string) => void;
   /** Ctrl+Mayús+B: abre la pestaña «Archivos» en el panel con el foco, la enfoca o la cierra. */

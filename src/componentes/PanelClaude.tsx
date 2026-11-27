@@ -28,6 +28,7 @@ import {
   tomarBorrador,
   useClaude,
   vacia,
+  ponerAgente,
   type Conversacion,
   type EnCola,
   type Entrada,
@@ -183,8 +184,10 @@ export default function PanelClaude({
         <button
           type="button"
           data-boton-contexto
-          title={`Contexto: ${c.tokens.toLocaleString("es-ES")} de ${limite.toLocaleString("es-ES")} tokens · clic para el desglose`}
+          title={`Contexto: ${c.tokens.toLocaleString("es-ES")} de ${limite.toLocaleString("es-ES")} tokens${c.agente ? "" : " · clic para el desglose"}`}
           onClick={() => {
+            // El desglose lo da Claude (get_context_usage); los agentes por ACP solo dicen el total.
+            if (c.agente) return;
             ponerVerContexto(!verContexto);
             if (!verContexto) void refrescarContexto(espacio);
           }}
@@ -200,14 +203,14 @@ export default function PanelClaude({
             <History size={14} strokeWidth={1.8} />
           </BotonCabecera>
         </span>
-        <BotonCabecera titulo="Otra conversación en una pestaña de este panel (Ctrl+Mayús+K)" onClick={() => conversacionEnPanel(espacioReal)}>
+        <BotonCabecera titulo={`Otra conversación con ${nombreAgente(c)} en una pestaña de este panel`} onClick={() => nuevaIgual(espacioReal, c.agente)}>
           <SquarePen size={14} strokeWidth={1.8} />
         </BotonCabecera>
         <MenuMas
           cid={espacio}
           c={c}
           boton={(onClick) => (
-            <BotonCabecera titulo="Más: servidores MCP, permisos, memoria, exportar" onClick={onClick}>
+            <BotonCabecera titulo={c.agente ? "Más: entrar, exportar" : "Más: servidores MCP, permisos, memoria, exportar"} onClick={onClick}>
               <IconoMas />
             </BotonCabecera>
           )}
@@ -226,7 +229,7 @@ export default function PanelClaude({
               </>
             ) : (
               <>
-                <ImageIcon size={15} strokeWidth={1.8} /> Suelta las imágenes para Claude
+                <ImageIcon size={15} strokeWidth={1.8} /> Suelta las imágenes para {nombreAgente(c)}
               </>
             )}
           </span>
@@ -247,7 +250,7 @@ export default function PanelClaude({
         {c.agente === "antigravity" && <SelectorCuentaAntigravity espacio={espacio} c={c} />}
         {!c.agente && <LimiteCuenta c={c} />}
         <PieAgente c={c} />
-        <BarraGasto />
+        {!c.agente && <BarraGasto />}
         {c.coste > 0 && <span title="Coste de la conversación">{dolares(c.coste)}</span>}
       </footer>
     </section>
@@ -255,6 +258,12 @@ export default function PanelClaude({
 }
 
 /** Lo de hoy frente al límite diario (si hay límite): ámbar desde el 80 %, rojo al pasarlo. */
+/** Conversación nueva en este panel con el mismo agente (o Claude) que la que se está viendo. */
+function nuevaIgual(espacio: string, agente: string | null) {
+  const cid = conversacionEnPanel(espacio);
+  if (agente) ponerAgente(cid, agente);
+}
+
 function BarraGasto() {
   const limite = useGasto((s) => s.limite);
   const hoy = useGasto((s) => s.hoy);
@@ -347,13 +356,13 @@ function ListaEntradas({ espacio, c, carpeta, grande }: { espacio: string; c: Co
           <VistaEntrada key={e.id} entrada={e} espacio={espacio} carpeta={c.carpeta} />
         ))}
         {(c.estado === "arrancando" || c.estado === "pensando") && c.entradas[c.entradas.length - 1]?.tipo === "tu" && (
-          <Esperando arrancando={c.claudeId === null} />
+          <Esperando arrancando={c.claudeId === null} quien={nombreAgente(c)} />
         )}
         <ComandoPreparado cid={espacio} />
         <AvisoContexto cid={espacio} c={c} />
         {c.estado === "cerrado" && (
           <p className="text-center text-[11.5px] text-muy">
-            Claude se ha cerrado. Al escribir, sigue esta misma conversación.
+            {nombreAgente(c)} se ha cerrado. Al escribir, sigue esta misma conversación.
           </p>
         )}
       </div>
@@ -392,7 +401,7 @@ function ComandoPreparado({ cid }: { cid: string }) {
 
 // Entre mandar el mensaje y lo primero de Claude pasan uno o dos segundos (ganchos de
 // UserPromptSubmit, la API): sin esto la conversación parece parada.
-function Esperando({ arrancando }: { arrancando: boolean }) {
+function Esperando({ arrancando, quien }: { arrancando: boolean; quien: string }) {
   return (
     <div className="flex items-center gap-2 text-[12px] text-tenue" aria-live="polite">
       <span className="flex gap-1">
@@ -400,7 +409,7 @@ function Esperando({ arrancando }: { arrancando: boolean }) {
           <span key={d} className="size-1.5 animate-pulse rounded-full bg-claude" style={{ animationDelay: `${d}ms` }} />
         ))}
       </span>
-      {arrancando ? "Arrancando Claude…" : "Pensando…"}
+      {arrancando ? `Arrancando ${quien}…` : "Pensando…"}
     </div>
   );
 }
@@ -884,7 +893,7 @@ function CajaEntrada({
             {conAlgo && permiso === null && (
               <button
                 type="button"
-                title="Dejar en cola (Intro): sale al acabar Claude"
+                title={`Dejar en cola (Intro): sale al acabar ${nombreAgente(c)}`}
                 onClick={mandar}
                 className="absolute bottom-1 right-9 grid size-6 place-items-center rounded-lg bg-texto text-fondo"
               >
