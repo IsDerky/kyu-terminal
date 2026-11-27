@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Check, CircleAlert, ClipboardList, Loader2, Monitor, SquarePen, SquareTerminal, Undo2 } from "lucide-react";
+import { Bot, Check, CircleAlert, ClipboardList, Loader2, Monitor, SquareTerminal, Undo2 } from "lucide-react";
 import {
   conversacionEnPanel,
   espacioDe,
@@ -18,6 +18,7 @@ import {
 import { useKyu } from "../lib/estado";
 import { claudeActivas, type SesionActiva } from "../lib/nucleo";
 import { nombreEspacio } from "./BarraTitulo";
+import { IconoMenu } from "./iconos";
 import { avance, BarraTareas, BotonParar, Cronometro, tiempo } from "./Tareas";
 
 type Grupo = "trabajando" | "esperan" | "acabadas" | "vacias";
@@ -135,7 +136,7 @@ export default function CentroClaude() {
         <div className="absolute right-0 top-9 z-50 w-[420px] overflow-hidden rounded-[10px] border border-borde2 bg-tarjeta text-[12.5px] shadow-[0_24px_60px_-16px_#000]">
           <div className="flex gap-1 border-b border-borde p-1.5">
             <Accion
-              icono={<SquarePen size={13} strokeWidth={1.8} />}
+              icono={<IconoMenu agente={null} />}
               texto="Nueva conversación"
               atajo="Ctrl+Mayús+K"
               onClick={() => {

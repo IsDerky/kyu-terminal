@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { abrirCarpeta, abrirEnCarpeta, recientes } from "../lib/carpetas";
-import { BarChart3, Braces, CircleDot, FileSearch, Folder, FolderOpen, ListX, FileDiff, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquarePen, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { BarChart3, Braces, CircleDot, FileSearch, Folder, FolderOpen, ListX, FileDiff, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { preguntarPorSeleccion } from "../lib/seleccion";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
@@ -11,7 +11,7 @@ import { useGit } from "../lib/git";
 import { alternarGrabacion } from "../lib/grabar";
 import type { ConfigVista, Perfil } from "../lib/nucleo";
 import { nombreEspacio } from "./BarraTitulo";
-import { IconoPerfil } from "./iconos";
+import { IconoMenu, IconoPerfil } from "./iconos";
 
 interface Orden {
   id: string;
@@ -20,6 +20,8 @@ interface Orden {
   detalle?: string;
   atajo?: string;
   icono?: LucideIcon;
+  /** Mascota del agente en vez del icono: "claude" o "antigravity". */
+  mascota?: "claude" | "antigravity";
   perfil?: Perfil;
   hacer: () => void;
 }
@@ -68,8 +70,8 @@ export default function Paleta({ config }: { config: ConfigVista }) {
       { id: "visor", grupo: "Paneles", titulo: "Visor de archivos", detalle: "árbol y archivo en la misma pestaña", icono: FileSearch, hacer: () => k.abrirVisor(carpetaDelEspacio(k.activo)) },
       ...(useGit.getState().resumen ? [{ id: "cambios", grupo: "Git", titulo: "Cambios", detalle: "diff y commit del repo", icono: FileDiff, hacer: () => k.abrirCambios(useGit.getState().resumen!.raiz) }] : []),
       ...(useGit.getState().resumen?.github ? [{ id: "issues", grupo: "Git", titulo: "Trabajar en un issue", detalle: "worktree, espacio y conversación", icono: CircleDot, hacer: () => window.dispatchEvent(new Event("kyu-issues")) }] : []),
-      { id: "claude-panel", grupo: "Paneles", titulo: "Nueva conversación con Claude", detalle: "junto a las demás, o a la derecha", atajo: "Ctrl+Mayús+K", icono: SquarePen, hacer: () => nuevaConversacion(k.activo) },
-      { id: "antigravity-panel", grupo: "Paneles", titulo: "Nueva conversación con Antigravity", detalle: "modelos de Google con tu cuenta (agy)", icono: SquarePen, hacer: () => nuevaConversacion(k.activo, "antigravity") },
+      { id: "claude-panel", grupo: "Paneles", titulo: "Nueva conversación con Claude", detalle: "junto a las demás, o a la derecha", atajo: "Ctrl+Mayús+K", mascota: "claude", hacer: () => nuevaConversacion(k.activo) },
+      { id: "antigravity-panel", grupo: "Paneles", titulo: "Nueva conversación con Antigravity", detalle: "modelos de Google con tu cuenta (agy)", mascota: "antigravity", hacer: () => nuevaConversacion(k.activo, "antigravity") },
       { id: "cerrar", grupo: "Paneles", titulo: "Cerrar pestaña", atajo: "Ctrl+Mayús+W", icono: X, hacer: cerrarActual },
       {
         id: "claude-orden",
@@ -186,7 +188,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
                     i === sel ? "bg-hover shadow-[inset_2px_0_0_var(--color-acento)]" : ""
                   }`}
                 >
-                  {o.perfil ? <IconoPerfil perfil={o.perfil} /> : Icono ? <Icono size={14} className="text-tenue" /> : null}
+                  {o.perfil ? <IconoPerfil perfil={o.perfil} /> : o.mascota ? <IconoMenu agente={o.mascota === "claude" ? null : o.mascota} /> : Icono ? <Icono size={14} className="text-tenue" /> : null}
                   <span>
                     {[...o.titulo].map((c, j) => (
                       <span key={j} className={pos.includes(j) ? "font-semibold text-acento2" : ""}>
