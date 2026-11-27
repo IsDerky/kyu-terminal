@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Bot, ChevronDown, Columns2, FileSearch, Maximize2, Minimize2, Plus, Rows2, Sparkles, X } from "lucide-react";
+import { ChevronDown, Columns2, FileSearch, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
+import { IconoMenu } from "./iconos";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import { abrirMenuPestana } from "../lib/menus";
@@ -189,12 +190,12 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
               alCerrar={() => setMenu(false)}
               otras={[
                 {
-                  icono: <Sparkles size={13} strokeWidth={1.8} className="flex-none text-claude2" />,
+                  icono: <IconoMenu agente={null} />,
                   texto: "Conversación con Claude",
                   hacer: () => conversacionEnPanel(espacioDeItem, { panel: panel.id }),
                 },
                 {
-                  icono: <Bot size={13} strokeWidth={1.8} className="flex-none text-tenue" />,
+                  icono: <IconoMenu agente="antigravity" />,
                   texto: "Conversación con Antigravity",
                   hacer: () => ponerAgente(conversacionEnPanel(espacioDeItem, { panel: panel.id }), "antigravity"),
                 },

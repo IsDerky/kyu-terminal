@@ -92,6 +92,18 @@ export function MascotaAntigravity({ alto = 16 }: { alto?: number }) {
   );
 }
 
+/**
+ * La mascota en una lista de menú: en una caja de 13 px como los iconos de
+ * lucide de al lado, para que los textos queden alineados (la mascota es más ancha que alta).
+ */
+export function IconoMenu({ agente }: { agente: string | null }) {
+  return (
+    <span className="flex w-[13px] flex-none items-center justify-center overflow-visible">
+      <IconoAgente agente={agente} alto={9} />
+    </span>
+  );
+}
+
 /** Icono de quien contesta: la mascota de Claude o la del agente ACP. */
 export function IconoAgente({ agente, alto = 16 }: { agente: string | null | undefined; alto?: number }) {
   if (agente === "antigravity") return <MascotaAntigravity alto={alto} />;
