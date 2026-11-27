@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, File, FilePlus, Folder, FolderOpen, RefreshCw } from "lucide-react";
 import { useKyu } from "../lib/estado";
 import { ARRASTRE_RUTA, carpetaDelEspacio, nombreAgente, useClaude } from "../lib/claude";
-import { arbolListar, crearArchivo, gitEstado, remotoListar, renombrarArchivo, type NodoArbol } from "../lib/nucleo";
+import { arbolListar, crearArchivo, gitEstado, remotoListar, renombrarArchivo, vigilarCarpetas, type NodoArbol } from "../lib/nucleo";
 import { abrirMenuArbol, borrarDelArbol, type EditarArbol } from "../lib/menus";
 import { editores } from "../lib/editores";
 
@@ -152,13 +152,23 @@ export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra, ho
     setGit(porClave);
   }, [raiz, abiertas, host]);
 
-  // Al cambiar de carpeta o abrir una y, en local, cada 3 s mientras se ve (lo que va creando Claude o git).
+  // Al cambiar de carpeta o abrir una. En local, además, cada vez que cambia algo en las
+  // carpetas que se ven (vigilante en Rust) y un repaso cada 15 s por lo que solo cambia git
+  // (commit, checkout) o pasa dentro de carpetas cerradas.
+  const vigiladas = useMemo(
+    () => (raiz ? [raiz, ...[...abiertas].filter((a) => clave(a).startsWith(clave(raiz)))] : []),
+    [raiz, abiertas],
+  );
   useEffect(() => {
     void cargar();
-    if (host) return;
-    const t = setInterval(() => void cargar(), 3000);
-    return () => clearInterval(t);
-  }, [cargar, host]);
+    if (host || !vigiladas.length) return;
+    const dejar = vigilarCarpetas(item, vigiladas, () => void cargar());
+    const t = setInterval(() => void cargar(), 15_000);
+    return () => {
+      dejar();
+      clearInterval(t);
+    };
+  }, [cargar, host, item, vigiladas]);
 
   useEffect(() => {
     abiertasDe.set(item, abiertas);

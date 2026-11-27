@@ -24,6 +24,7 @@ mod remoto;
 mod sesiones;
 mod sistema;
 mod uso;
+mod vigilante;
 
 pub fn run() {
     // Portable: WebView2 guarda sesión, historial y caché en datos\webview, no en
@@ -43,6 +44,7 @@ pub fn run() {
         .manage(sistema::Sistema::default())
         .manage(claude::Claudes::default())
         .manage(grabar::Grabadora::default())
+        .manage(vigilante::Vigilantes::default())
         .setup(|app| {
             use tauri::Manager;
             // Servidor MCP para el Claude del panel (None si no se pudo abrir el puerto).
@@ -84,6 +86,8 @@ pub fn run() {
             puertos::proceso_matar,
             arbol::arbol_listar,
             arbol::git_estado,
+            vigilante::arbol_vigilar,
+            vigilante::arbol_dejar,
             remoto::remoto_inicio,
             remoto::remoto_listar,
             remoto::remoto_leer,

@@ -370,6 +370,14 @@ export interface NodoArbol {
 /** Lo que hay en `carpeta` (sin bajar), respetando .gitignore: carpetas primero. */
 export const arbolListar = (carpeta: string) => invoke<NodoArbol[]>("arbol_listar", { carpeta });
 
+/** Avisa (`alCambiar`) cuando cambia algo en `carpetas` del árbol `id`; devuelve cómo dejarlo. */
+export function vigilarCarpetas(id: string, carpetas: string[], alCambiar: () => void): () => void {
+  const avisos = new Channel<null>();
+  avisos.onmessage = alCambiar;
+  void invoke("arbol_vigilar", { id, carpetas, avisos }).catch(() => {});
+  return () => void invoke("arbol_dejar", { id }).catch(() => {});
+}
+
 /** Servidores por ssh (visor de archivos remoto): el ssh del sistema con tus alias. */
 export const remotoInicio = (host: string) => invoke<string>("remoto_inicio", { host });
 export const remotoListar = (host: string, carpeta: string) => invoke<NodoArbol[]>("remoto_listar", { host, carpeta });
