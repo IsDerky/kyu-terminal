@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# Un push nuevo a la misma rama cancela el run anterior (no se gastan minutos en lo viejo).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
@@ -35,15 +40,21 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      # Misma clave en ci y release (por sistema): la etiqueta lee la caché que deja el CI de main.
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: kyu
+          key: ${{ matrix.os }}
 
       - name: Dependencias del frontend
         run: pnpm install --frozen-lockfile
 
       - name: Tipos y build del frontend
         run: pnpm build
+
+      - name: Pruebas del frontend
+        run: pnpm pruebas
 
       - name: Formato
         working-directory: src-tauri
@@ -52,6 +63,10 @@ jobs:
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --locked -- -D warnings
+
+      - name: Pruebas de Rust
+        working-directory: src-tauri
+        run: cargo test --locked
 
       - name: Instaladores
         run: pnpm tauri build
