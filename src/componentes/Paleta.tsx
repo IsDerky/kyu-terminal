@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { abrirCarpeta, abrirEnCarpeta, recientes } from "../lib/carpetas";
-import { BarChart3, Braces, CircleDot, Folder, FolderOpen, ListX, FileDiff, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquarePen, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
+import { BarChart3, Braces, CircleDot, FileSearch, Folder, FolderOpen, ListX, FileDiff, Clapperboard, FolderTree, Columns2, Layers, Search, Rows2, SlidersHorizontal, SquarePen, SquareTerminal, TextQuote, X, ArrowLeftRight, type LucideIcon } from "lucide-react";
 import { preguntarPorSeleccion } from "../lib/seleccion";
 import { focoActual, useKyu } from "../lib/estado";
 import { cerrarActual } from "../lib/acciones";
 import { textoBloque } from "../lib/bloques";
-import { adjuntar, nuevaConversacion } from "../lib/claude";
+import { adjuntar, carpetaDelEspacio, nuevaConversacion } from "../lib/claude";
 import { sesion } from "../lib/terminales";
 import { useGit } from "../lib/git";
 import { alternarGrabacion } from "../lib/grabar";
@@ -61,6 +61,7 @@ export default function Paleta({ config }: { config: ConfigVista }) {
       { id: "div-d", grupo: "Paneles", titulo: "Dividir a la derecha", atajo: "Ctrl+Mayús+D", icono: Columns2, hacer: () => k.dividir("horizontal", perfilFoco) },
       { id: "div-a", grupo: "Paneles", titulo: "Dividir abajo", atajo: "Ctrl+Mayús+E", icono: Rows2, hacer: () => k.dividir("vertical", perfilFoco) },
       { id: "arbol", grupo: "Paneles", titulo: "Archivos", detalle: "árbol de la carpeta del terminal", atajo: "Ctrl+Mayús+B", icono: FolderTree, hacer: () => k.alternarArbol() },
+      { id: "visor", grupo: "Paneles", titulo: "Visor de archivos", detalle: "árbol y archivo en la misma pestaña", icono: FileSearch, hacer: () => k.abrirVisor(carpetaDelEspacio(k.activo)) },
       ...(useGit.getState().resumen ? [{ id: "cambios", grupo: "Git", titulo: "Cambios", detalle: "diff y commit del repo", icono: FileDiff, hacer: () => k.abrirCambios(useGit.getState().resumen!.raiz) }] : []),
       ...(useGit.getState().resumen?.github ? [{ id: "issues", grupo: "Git", titulo: "Trabajar en un issue", detalle: "worktree, espacio y conversación", icono: CircleDot, hacer: () => window.dispatchEvent(new Event("kyu-issues")) }] : []),
       { id: "claude-panel", grupo: "Paneles", titulo: "Nueva conversación con Claude", detalle: "junto a las demás, o a la derecha", atajo: "Ctrl+Mayús+K", icono: SquarePen, hacer: () => nuevaConversacion(k.activo) },

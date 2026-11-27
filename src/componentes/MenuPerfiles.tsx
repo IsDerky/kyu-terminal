@@ -13,10 +13,12 @@ interface Props {
   alinear?: "izquierda" | "derecha";
   /** Lo que va debajo de los perfiles (en el de espacios: abrir carpeta y recientes). */
   pie?: React.ReactNode;
+  /** Pestañas que no son terminales (conversaciones, visor de archivos), debajo de los perfiles. */
+  otras?: { icono: React.ReactNode; texto: string; hacer: () => void }[];
 }
 
 /** Menú desplegable con los perfiles de shell. */
-export default function MenuPerfiles({ perfiles, alElegir, alCerrar, alinear = "izquierda", pie }: Props) {
+export default function MenuPerfiles({ perfiles, alElegir, alCerrar, alinear = "izquierda", pie, otras }: Props) {
   const caja = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const fuera = (e: MouseEvent) => {
@@ -58,6 +60,24 @@ export default function MenuPerfiles({ perfiles, alElegir, alCerrar, alinear = "
         </Fragment>
         );
       })}
+      {otras?.length ? (
+        <div className="mt-1 border-t border-borde pt-1">
+          {otras.map((o) => (
+            <button
+              key={o.texto}
+              type="button"
+              onClick={() => {
+                alCerrar();
+                o.hacer();
+              }}
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[12.5px] text-texto hover:bg-hover"
+            >
+              {o.icono}
+              <span className="flex-1 truncate">{o.texto}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       {pie}
     </div>
   );

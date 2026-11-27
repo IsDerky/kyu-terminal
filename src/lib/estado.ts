@@ -27,7 +27,9 @@ export type Item =
   /** Pestaña «Cambios»: lo que hay sin commit en el repo `raiz`, con su diff y el commit. */
   | { id: string; tipo: "cambios"; raiz: string }
   /** Pestaña «Problemas»: errores y avisos del último build o lint del espacio. */
-  | { id: string; tipo: "problemas" };
+  | { id: string; tipo: "problemas" }
+  /** «Visor de archivos»: árbol de `raiz` a un lado y el archivo elegido (`ruta`) en la misma pestaña. */
+  | { id: string; tipo: "visor"; raiz: string | null; ruta: string | null; sucio: boolean };
 
 export type Direccion = "horizontal" | "vertical";
 
@@ -91,6 +93,10 @@ interface Estado {
   quitarDiff: (item: string) => void;
   /** Ctrl+Mayús+B: abre la pestaña «Archivos» en el panel con el foco, la enfoca o la cierra. */
   alternarArbol: () => void;
+  /** Pestaña «Visor de archivos» con el árbol de `raiz`, en `panel` (o el del foco). */
+  abrirVisor: (raiz: string | null, panel?: string) => void;
+  /** Cambia el archivo que enseña un visor. */
+  verEnVisor: (item: string, ruta: string | null) => void;
   /** Pone la conversación `cid` como pestaña: en el panel `panel` (o el del foco) o, con
    *  `alLado`, en un panel nuevo a la derecha del foco. */
   ponerClaude: (cid: string, opciones?: { panel?: string; alLado?: boolean }) => void;
@@ -394,6 +400,28 @@ export const useKyu = create<Estado>((set, get) => {
       }));
     },
 
+    abrirVisor: (raiz, panel) => {
+      const it: Item = { id: nuevoId("v"), tipo: "visor", raiz, ruta: null, sucio: false };
+      set((s) => ({ items: { ...s.items, [it.id]: it } }));
+      conEspacio((e) => {
+        const destino = panel ?? e.foco;
+        return {
+          ...e,
+          foco: destino,
+          raiz:
+            cambiar(e.raiz, destino, (n) => (n.tipo === "panel" ? { ...n, items: [...n.items, it.id], activo: it.id } : n)) ??
+            e.raiz,
+        };
+      });
+    },
+
+    verEnVisor: (item, ruta) =>
+      set((s) => {
+        const it = s.items[item];
+        if (!it || it.tipo !== "visor") return s;
+        return { items: { ...s.items, [item]: { ...it, ruta, sucio: false } } };
+      }),
+
     ponerClaude: (cid, opciones = {}) => {
       const it: Item = { id: nuevoId("c"), tipo: "claude", cid };
       set((s) => ({ items: { ...s.items, [it.id]: it } }));
@@ -501,7 +529,7 @@ export const useKyu = create<Estado>((set, get) => {
     marcarSucio: (item, sucio) =>
       set((s) => {
         const it = s.items[item];
-        if (!it || it.tipo !== "archivo" || it.sucio === sucio) return s;
+        if (!it || (it.tipo !== "archivo" && it.tipo !== "visor") || it.sucio === sucio) return s;
         return { items: { ...s.items, [item]: { ...it, sucio } } };
       }),
 

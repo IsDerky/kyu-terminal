@@ -95,9 +95,23 @@ function CajaNombre({
   );
 }
 
-export default function VistaArbol({ item }: { item: string }) {
+interface Props {
+  item: string;
+  /** Carpeta fija (visor de archivos); sin ella, la del terminal con el foco del espacio. */
+  raizFija?: string | null;
+  /** Qué hacer al elegir un archivo (por defecto, abrirlo en una pestaña). */
+  alAbrir?: (ruta: string) => void;
+  /** Archivo que se está viendo, para marcarlo. */
+  elegido?: string | null;
+  /** Botones de más en la cabecera (el visor pone el de plegar). */
+  extra?: React.ReactNode;
+}
+
+export default function VistaArbol({ item, raizFija, alAbrir, elegido, extra }: Props) {
   const espacio = useKyu((s) => s.activo);
-  const raiz = useKyu(() => carpetaDelEspacio(espacio));
+  const raizEspacio = useKyu(() => carpetaDelEspacio(espacio));
+  const raiz = raizFija || raizEspacio;
+  const abrir = alAbrir ?? ((ruta: string) => useKyu.getState().abrirArchivo(ruta, 1, 1));
   const cid = useClaude((s) => s.ultimas[espacio] ?? "");
   const antesDe = useClaude((s) => s.conversaciones[cid]?.antesDe ?? SIN_CAMBIOS);
   const enCurso = useClaude((s) => s.conversaciones[cid]?.tocados ?? SIN_CAMBIOS);
@@ -146,7 +160,7 @@ export default function VistaArbol({ item }: { item: string }) {
       const ruta = await crearArchivo(carpeta, nombre);
       setEditando(null);
       await cargar();
-      useKyu.getState().abrirArchivo(ruta, 1, 1);
+      abrir(ruta);
       return null;
     } catch (e) {
       return String(e);
@@ -221,7 +235,7 @@ export default function VistaArbol({ item }: { item: string }) {
             e.dataTransfer.setData("text/plain", n.ruta);
             e.dataTransfer.effectAllowed = "copy";
           }}
-          onClick={() => (n.carpeta ? alternar(n.ruta) : useKyu.getState().abrirArchivo(n.ruta, 1, 1))}
+          onClick={() => (n.carpeta ? alternar(n.ruta) : abrir(n.ruta))}
           onContextMenu={(e) => {
             e.preventDefault();
             if (raiz) abrirMenuArbol(n.ruta, n.carpeta, raiz, claude, e.clientX, e.clientY, editar);
@@ -230,7 +244,9 @@ export default function VistaArbol({ item }: { item: string }) {
             if (e.key === "F2") (e.preventDefault(), editar({ tipo: "renombrar", ruta: n.ruta }));
             if (e.key === "Delete" && !n.carpeta) (e.preventDefault(), void borrarDelArbol(n.ruta));
           }}
-          className="flex h-6 w-full min-w-0 items-center gap-1.5 pr-2.5 text-left text-[12.5px] text-tenue hover:bg-hover hover:text-texto"
+          className={`flex h-6 w-full min-w-0 items-center gap-1.5 pr-2.5 text-left text-[12.5px] hover:bg-hover hover:text-texto ${
+            elegido && clave(elegido) === k ? "bg-hover text-texto" : "text-tenue"
+          }`}
           style={{ paddingLeft: 8 + nivel * 16 }}
         >
           <span className="grid w-3 flex-none place-items-center text-muy">
@@ -294,6 +310,7 @@ export default function VistaArbol({ item }: { item: string }) {
         <button type="button" title="Actualizar" onClick={() => void cargar()} className="grid size-6 place-items-center rounded hover:bg-hover hover:text-texto">
           <RefreshCw size={12} />
         </button>
+        {extra}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {error ? (

@@ -13,6 +13,7 @@ import {
   CopyPlus,
   Diff,
   FilePlus,
+  FileSearch,
   FileText,
   FolderOpen,
   Palette,
@@ -35,7 +36,7 @@ import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useSelectorEstilo } from "./estiloPestana";
 import { cabecera, limpiarSeparadores, opcion, separador, useMenu, type Elemento } from "./menu";
-import { insertarEnCaja, irAClaude, mencionDe, nuevaConversacion, useClaude, verCambios } from "./claude";
+import { carpetaDelEspacio, insertarEnCaja, irAClaude, mencionDe, nuevaConversacion, useClaude, verCambios } from "./claude";
 import { destinoDe, esDeShell, nombreDestino, usarCodigo } from "./comandoClaude";
 import { nuevoId, paneles, useKyu, type Item } from "./estado";
 import { cerrarItem } from "./acciones";
@@ -277,6 +278,7 @@ export function abrirMenuGeneral(x: number, y: number, perfil: string) {
       opcion(Rows2, "Dividir abajo", () => k.dividir("vertical", perfil), { atajo: "Ctrl+Mayús+E" }),
       opcion(Sparkles, "Nueva conversación con Claude", () => nuevaConversacion(k.activo), { atajo: "Ctrl+Mayús+K", estilo: "claude" }),
       opcion(Bot, "Nueva conversación con Antigravity", () => nuevaConversacion(k.activo, "antigravity")),
+      opcion(FileSearch, "Visor de archivos", () => k.abrirVisor(carpetaDelEspacio(k.activo))),
       separador,
       opcion(Command, "Paleta de comandos", () => k.ponerPaleta(true), { atajo: "Ctrl+Mayús+P" }),
       opcion(SlidersHorizontal, "Ajustes", () => k.ponerAjustes(true), { atajo: "Ctrl+," }),

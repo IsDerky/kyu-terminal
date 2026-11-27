@@ -50,7 +50,7 @@ function alternarClaude() {
     k.enfocar(destino.id);
     const it = k.items[destino.activo];
     if (it?.tipo === "terminal") sesion(it.id)?.term.focus();
-    else if (it?.tipo === "archivo") editor(it.id)?.vista.focus();
+    else if (it?.tipo === "archivo" || it?.tipo === "visor") editor(it.id)?.vista.focus();
     return;
   }
   if (f?.panel) volverA = { espacio: f.espacio.id, panel: f.panel.id };

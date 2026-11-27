@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { ChevronDown, Columns2, FolderTree, GitCommitHorizontal, ListX, Maximize2, Minimize2, Plus, Rows2, X } from "lucide-react";
+import { Bot, ChevronDown, Columns2, FileSearch, FolderTree, GitCommitHorizontal, ListX, Maximize2, Minimize2, Plus, Rows2, Sparkles, X } from "lucide-react";
 import { useKyu, type Nodo, type Zona } from "../lib/estado";
 import { cerrarItem } from "../lib/acciones";
 import { abrirMenuPestana } from "../lib/menus";
@@ -12,9 +12,10 @@ import VistaArbol from "./VistaArbol";
 const PanelClaude = lazy(() => import("./PanelClaude"));
 const VistaCambios = lazy(() => import("./VistaCambios"));
 const VistaProblemas = lazy(() => import("./VistaProblemas"));
+const VistaVisor = lazy(() => import("./VistaVisor"));
 import { IconoAgente, IconoArchivo, IconoPerfil, Mascota } from "./iconos";
 import MenuPerfiles from "./MenuPerfiles";
-import { ARRASTRE_RUTA, espacioDe, nombreAgente, useClaude } from "../lib/claude";
+import { ARRASTRE_RUTA, carpetaDelEspacio, conversacionEnPanel, espacioDe, nombreAgente, ponerAgente, useClaude } from "../lib/claude";
 import { useActividad } from "../lib/actividad";
 import { colorDe, iconoDe } from "../lib/estiloPestana";
 import type { Item } from "../lib/estado";
@@ -132,7 +133,9 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                       ? "Cambios"
                       : it.tipo === "problemas"
                         ? "Problemas"
-                        : it.ruta.split(/[\\/]/).pop()!;
+                        : it.tipo === "visor"
+                          ? it.ruta?.split(/[\\/]/).pop() ?? "Visor de archivos"
+                          : it.ruta.split(/[\\/]/).pop()!;
             const esActivo = id === panel.activo;
             return (
               <div
@@ -161,7 +164,9 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                           ? `Cambios sin commit en ${it.raiz}`
                           : it.tipo === "problemas"
                             ? "Errores y avisos del último build o lint"
-                            : it.carpeta ?? it.perfil
+                            : it.tipo === "visor"
+                              ? `Visor de archivos · ${it.ruta ?? it.raiz ?? "carpeta del espacio"}`
+                              : it.carpeta ?? it.perfil
                 }
                 style={it.tipo === "terminal" && it.color ? { boxShadow: `inset 0 -2px 0 ${colorDe(it.color)}` } : undefined}
                 className={`group flex h-[22px] min-w-0 max-w-48 cursor-default items-center gap-1.5 rounded-[5px] pl-2 pr-1 text-[12px] ${
@@ -184,6 +189,8 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                   <GitCommitHorizontal size={12} strokeWidth={1.8} className="flex-none" />
                 ) : it.tipo === "problemas" ? (
                   <ListX size={12} strokeWidth={1.8} className="flex-none" />
+                ) : it.tipo === "visor" ? (
+                  <FileSearch size={12} strokeWidth={1.8} className="flex-none" />
                 ) : (
                   <IconoArchivo size={12} />
                 )}
@@ -209,7 +216,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                   <span className="truncate">{nombre}</span>
                 )}
                 {it.tipo === "terminal" && <MarcaActividad item={id} visible={esActivo} />}
-                {it.tipo === "archivo" && it.sucio ? (
+                {(it.tipo === "archivo" || it.tipo === "visor") && it.sucio ? (
                   <span className="mx-1 size-1.5 flex-none rounded-full bg-tenue group-hover:hidden" title="Sin guardar" />
                 ) : null}
                 <button
@@ -220,7 +227,7 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                     void cerrarItem(id);
                   }}
                   className={`grid size-4 flex-none place-items-center rounded text-muy hover:bg-borde2 hover:text-texto ${
-                    it.tipo === "archivo" && it.sucio ? "hidden group-hover:grid" : esActivo ? "" : "invisible group-hover:visible"
+                    (it.tipo === "archivo" || it.tipo === "visor") && it.sucio ? "hidden group-hover:grid" : esActivo ? "" : "invisible group-hover:visible"
                   }`}
                 >
                   <X size={11} />
@@ -245,6 +252,23 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
                 nuevaPestana(p, panel.id);
               }}
               alCerrar={() => setMenu(false)}
+              otras={[
+                {
+                  icono: <Sparkles size={13} strokeWidth={1.8} className="flex-none text-claude2" />,
+                  texto: "Conversación con Claude",
+                  hacer: () => conversacionEnPanel(espacioDeItem, { panel: panel.id }),
+                },
+                {
+                  icono: <Bot size={13} strokeWidth={1.8} className="flex-none text-tenue" />,
+                  texto: "Conversación con Antigravity",
+                  hacer: () => ponerAgente(conversacionEnPanel(espacioDeItem, { panel: panel.id }), "antigravity"),
+                },
+                {
+                  icono: <FileSearch size={13} strokeWidth={1.8} className="flex-none text-tenue" />,
+                  texto: "Visor de archivos",
+                  hacer: () => useKyu.getState().abrirVisor(carpetaDelEspacio(espacioDeItem), panel.id),
+                },
+              ]}
             />
           )}
         </div>
@@ -309,6 +333,11 @@ export default function Panel({ panel, conFoco, varios, config, maximizado = fal
         {activo?.tipo === "claude" && (
           <Suspense fallback={null}>
             <PanelClaude key={activo.id} espacio={espacioDe(activo.cid)} conversacion={activo.cid} conFoco={conFoco} />
+          </Suspense>
+        )}
+        {activo?.tipo === "visor" && (
+          <Suspense fallback={null}>
+            <VistaVisor key={activo.id} visor={activo} conFoco={conFoco} />
           </Suspense>
         )}
         {zona && <ZonaSoltar zona={zona} />}

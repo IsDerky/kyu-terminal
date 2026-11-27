@@ -11,8 +11,8 @@ import { guardarSesion } from "./restaurar";
 export async function cerrarItem(item: string, preguntar = true) {
   const it = useKyu.getState().items[item];
   if (!it) return;
-  if (it.tipo === "archivo" && it.sucio && preguntar) {
-    const nombre = it.ruta.split(/[\\/]/).pop();
+  if ((it.tipo === "archivo" || it.tipo === "visor") && it.sucio && preguntar) {
+    const nombre = it.ruta?.split(/[\\/]/).pop();
     const seguro = await ask(`${nombre} tiene cambios sin guardar. ¿Cerrarlo y perderlos?`, {
       title: "Kyu",
       kind: "warning",

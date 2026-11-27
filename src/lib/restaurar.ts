@@ -2,7 +2,7 @@
 // qué espacios, paneles y pestañas hay (también las conversaciones de Claude); al
 // abrir Kyu se vuelve a montar todo. Las shells son nuevas (en su carpeta), no las de antes.
 import { nuevoId, paneles, useKyu, type Direccion, type Espacio, type Item, type Nodo } from "./estado";
-import { nuevaDePanel, reanudar, reanudarAgente, useClaude } from "./claude";
+import { nuevaDePanel, ponerAgente, reanudar, reanudarAgente, useClaude } from "./claude";
 import { leerArchivo } from "./nucleo";
 import { tamanos } from "./tamanos";
 
@@ -21,8 +21,9 @@ type ItemGuardado =
   | { tipo: "archivo"; ruta: string; linea: number; columna: number }
   | { tipo: "arbol" }
   /** Conversación en una pestaña de panel (sin `conv`: estaba vacía, vuelve vacía). */
-  | { tipo: "claude"; conv?: ConversacionGuardada }
-  | { tipo: "cambios"; raiz: string };
+  | { tipo: "claude"; conv?: ConversacionGuardada; /** Agente de una conversación vacía (para que no vuelva como Claude). */ agente?: string }
+  | { tipo: "cambios"; raiz: string }
+  | { tipo: "visor"; raiz: string | null; ruta: string | null };
 
 type NodoGuardado =
   | { tipo: "panel"; items: ItemGuardado[]; activo: number; foco?: boolean }
@@ -84,8 +85,13 @@ function guardarNodo(n: Nodo, items: Record<string, Item>, foco: string): NodoGu
     const lista = ids.map((i): ItemGuardado => {
       const it = items[i];
       if (it.tipo === "arbol") return { tipo: "arbol" };
-      if (it.tipo === "claude") return { tipo: "claude", conv: guardarConversacion(it.cid) ?? undefined };
+      if (it.tipo === "claude") {
+        const conv = guardarConversacion(it.cid) ?? undefined;
+        const agente = conv ? undefined : useClaude.getState().conversaciones[it.cid]?.agente ?? undefined;
+        return { tipo: "claude", conv, ...(agente ? { agente } : {}) };
+      }
       if (it.tipo === "cambios") return { tipo: "cambios", raiz: it.raiz };
+      if (it.tipo === "visor") return { tipo: "visor", raiz: it.raiz, ruta: it.ruta };
       if (it.tipo === "terminal") return { tipo: "terminal", perfil: it.perfil, carpeta: it.carpeta, titulo: it.titulo, ...marcasDe(it) };
       if (it.tipo === "archivo") return { tipo: "archivo", ruta: it.ruta, linea: it.linea, columna: it.columna };
       return { tipo: "arbol" }; // no llega: «problemas» se filtra arriba
@@ -176,7 +182,9 @@ function leer(): SesionGuardada | null {
 async function archivosPerdidos(s: SesionGuardada) {
   const rutas = new Set<string>();
   const recorrer = (n: NodoGuardado) =>
-    n.tipo === "panel" ? n.items.forEach((i) => i.tipo === "archivo" && rutas.add(i.ruta)) : n.hijos.forEach(recorrer);
+    n.tipo === "panel"
+      ? n.items.forEach((i) => (i.tipo === "archivo" || (i.tipo === "visor" && i.ruta)) && rutas.add(i.ruta!))
+      : n.hijos.forEach(recorrer);
   s.espacios.forEach((e) => recorrer(e.raiz));
   const perdidos = new Set<string>();
   await Promise.all(
@@ -220,9 +228,14 @@ async function restaurar(perfiles: string[], porDefecto: string): Promise<boolea
           it = { id: nuevoId("r"), tipo: "arbol" };
         } else if (i.tipo === "cambios") {
           it = { id: nuevoId("g"), tipo: "cambios", raiz: i.raiz };
+        } else if (i.tipo === "visor") {
+          // Si el archivo ya no está, vuelve el visor con el árbol y sin nada elegido.
+          const ruta = i.ruta && !perdidos.has(i.ruta) ? i.ruta : null;
+          it = { id: nuevoId("v"), tipo: "visor", raiz: i.raiz, ruta, sucio: false };
         } else if (i.tipo === "claude") {
           const cid = nuevaDePanel(espacio);
           if (i.conv) dePanel.push({ cid, conv: i.conv });
+          else if (i.agente) ponerAgente(cid, i.agente);
           it = { id: nuevoId("c"), tipo: "claude", cid };
         } else if (i.tipo === "terminal") {
           const perfil = perfiles.includes(i.perfil) ? i.perfil : porDefecto;
