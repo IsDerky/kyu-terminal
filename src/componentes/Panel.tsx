@@ -11,7 +11,6 @@ import { ARRASTRE_RUTA, carpetaDelEspacio, conversacionEnPanel, ponerAgente } fr
 import { useActividad } from "../lib/actividad";
 import { colorDe } from "../lib/estiloPestana";
 
-
 /** Punto en la pestaña: ámbar que late mientras corre algo; verde o rojo si acabó sin
  *  estar a la vista, hasta que se abre la pestaña. */
 function MarcaActividad({ item, visible }: { item: string; visible: boolean }) {
